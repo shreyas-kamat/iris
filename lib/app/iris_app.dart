@@ -58,9 +58,9 @@ class IrisApp extends ConsumerWidget {
             child: AnimatedIrisTheme(
               data: theme,
               child: ServerGate(
-                // The gallery stands in for the chat screen until Phase 3
-                // builds it, so the connected path is exercised end to end
-                // rather than being wired up blind later.
+                // The link status screen stands in for the chat screen until
+                // Phase 2 builds it, so the connected path is exercised end to
+                // end rather than being wired up blind later.
                 connected: (context) => const LinkStatusScreen(),
               ),
             ),
