@@ -67,6 +67,32 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _usesAccessTokenMeta = const VerificationMeta(
+    'usesAccessToken',
+  );
+  @override
+  late final GeneratedColumn<bool> usesAccessToken = GeneratedColumn<bool>(
+    'uses_access_token',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("uses_access_token" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _serverVersionMeta = const VerificationMeta(
+    'serverVersion',
+  );
+  @override
+  late final GeneratedColumn<String> serverVersion = GeneratedColumn<String>(
+    'server_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _capabilitiesJsonMeta = const VerificationMeta(
     'capabilitiesJson',
   );
@@ -121,6 +147,8 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
     label,
     requiresPassword,
     allowSelfSigned,
+    usesAccessToken,
+    serverVersion,
     capabilitiesJson,
     probedAt,
     lastConnectedAt,
@@ -174,6 +202,24 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         allowSelfSigned.isAcceptableOrUnknown(
           data['allow_self_signed']!,
           _allowSelfSignedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('uses_access_token')) {
+      context.handle(
+        _usesAccessTokenMeta,
+        usesAccessToken.isAcceptableOrUnknown(
+          data['uses_access_token']!,
+          _usesAccessTokenMeta,
+        ),
+      );
+    }
+    if (data.containsKey('server_version')) {
+      context.handle(
+        _serverVersionMeta,
+        serverVersion.isAcceptableOrUnknown(
+          data['server_version']!,
+          _serverVersionMeta,
         ),
       );
     }
@@ -236,6 +282,14 @@ class $ServersTable extends Servers with TableInfo<$ServersTable, Server> {
         DriftSqlType.bool,
         data['${effectivePrefix}allow_self_signed'],
       )!,
+      usesAccessToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}uses_access_token'],
+      )!,
+      serverVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}server_version'],
+      ),
       capabilitiesJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}capabilities_json'],
@@ -268,6 +322,14 @@ class Server extends DataClass implements Insertable<Server> {
   final bool requiresPassword;
   final bool allowSelfSigned;
 
+  /// Whether a Cloudflare Access service token is stored for this server. The
+  /// token itself is in the keystore; this only drives what the UI shows.
+  final bool usesAccessToken;
+
+  /// What `/api/status` last reported, for display. Never used to gate a
+  /// feature.
+  final String? serverVersion;
+
   /// Probe results, stored as the JSON list of capability names so a new
   /// capability in a later build does not need a schema migration.
   final String capabilitiesJson;
@@ -282,6 +344,8 @@ class Server extends DataClass implements Insertable<Server> {
     required this.label,
     required this.requiresPassword,
     required this.allowSelfSigned,
+    required this.usesAccessToken,
+    this.serverVersion,
     required this.capabilitiesJson,
     this.probedAt,
     this.lastConnectedAt,
@@ -295,6 +359,10 @@ class Server extends DataClass implements Insertable<Server> {
     map['label'] = Variable<String>(label);
     map['requires_password'] = Variable<bool>(requiresPassword);
     map['allow_self_signed'] = Variable<bool>(allowSelfSigned);
+    map['uses_access_token'] = Variable<bool>(usesAccessToken);
+    if (!nullToAbsent || serverVersion != null) {
+      map['server_version'] = Variable<String>(serverVersion);
+    }
     map['capabilities_json'] = Variable<String>(capabilitiesJson);
     if (!nullToAbsent || probedAt != null) {
       map['probed_at'] = Variable<DateTime>(probedAt);
@@ -313,6 +381,10 @@ class Server extends DataClass implements Insertable<Server> {
       label: Value(label),
       requiresPassword: Value(requiresPassword),
       allowSelfSigned: Value(allowSelfSigned),
+      usesAccessToken: Value(usesAccessToken),
+      serverVersion: serverVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverVersion),
       capabilitiesJson: Value(capabilitiesJson),
       probedAt: probedAt == null && nullToAbsent
           ? const Value.absent()
@@ -335,6 +407,8 @@ class Server extends DataClass implements Insertable<Server> {
       label: serializer.fromJson<String>(json['label']),
       requiresPassword: serializer.fromJson<bool>(json['requiresPassword']),
       allowSelfSigned: serializer.fromJson<bool>(json['allowSelfSigned']),
+      usesAccessToken: serializer.fromJson<bool>(json['usesAccessToken']),
+      serverVersion: serializer.fromJson<String?>(json['serverVersion']),
       capabilitiesJson: serializer.fromJson<String>(json['capabilitiesJson']),
       probedAt: serializer.fromJson<DateTime?>(json['probedAt']),
       lastConnectedAt: serializer.fromJson<DateTime?>(json['lastConnectedAt']),
@@ -350,6 +424,8 @@ class Server extends DataClass implements Insertable<Server> {
       'label': serializer.toJson<String>(label),
       'requiresPassword': serializer.toJson<bool>(requiresPassword),
       'allowSelfSigned': serializer.toJson<bool>(allowSelfSigned),
+      'usesAccessToken': serializer.toJson<bool>(usesAccessToken),
+      'serverVersion': serializer.toJson<String?>(serverVersion),
       'capabilitiesJson': serializer.toJson<String>(capabilitiesJson),
       'probedAt': serializer.toJson<DateTime?>(probedAt),
       'lastConnectedAt': serializer.toJson<DateTime?>(lastConnectedAt),
@@ -363,6 +439,8 @@ class Server extends DataClass implements Insertable<Server> {
     String? label,
     bool? requiresPassword,
     bool? allowSelfSigned,
+    bool? usesAccessToken,
+    Value<String?> serverVersion = const Value.absent(),
     String? capabilitiesJson,
     Value<DateTime?> probedAt = const Value.absent(),
     Value<DateTime?> lastConnectedAt = const Value.absent(),
@@ -373,6 +451,10 @@ class Server extends DataClass implements Insertable<Server> {
     label: label ?? this.label,
     requiresPassword: requiresPassword ?? this.requiresPassword,
     allowSelfSigned: allowSelfSigned ?? this.allowSelfSigned,
+    usesAccessToken: usesAccessToken ?? this.usesAccessToken,
+    serverVersion: serverVersion.present
+        ? serverVersion.value
+        : this.serverVersion,
     capabilitiesJson: capabilitiesJson ?? this.capabilitiesJson,
     probedAt: probedAt.present ? probedAt.value : this.probedAt,
     lastConnectedAt: lastConnectedAt.present
@@ -391,6 +473,12 @@ class Server extends DataClass implements Insertable<Server> {
       allowSelfSigned: data.allowSelfSigned.present
           ? data.allowSelfSigned.value
           : this.allowSelfSigned,
+      usesAccessToken: data.usesAccessToken.present
+          ? data.usesAccessToken.value
+          : this.usesAccessToken,
+      serverVersion: data.serverVersion.present
+          ? data.serverVersion.value
+          : this.serverVersion,
       capabilitiesJson: data.capabilitiesJson.present
           ? data.capabilitiesJson.value
           : this.capabilitiesJson,
@@ -410,6 +498,8 @@ class Server extends DataClass implements Insertable<Server> {
           ..write('label: $label, ')
           ..write('requiresPassword: $requiresPassword, ')
           ..write('allowSelfSigned: $allowSelfSigned, ')
+          ..write('usesAccessToken: $usesAccessToken, ')
+          ..write('serverVersion: $serverVersion, ')
           ..write('capabilitiesJson: $capabilitiesJson, ')
           ..write('probedAt: $probedAt, ')
           ..write('lastConnectedAt: $lastConnectedAt, ')
@@ -425,6 +515,8 @@ class Server extends DataClass implements Insertable<Server> {
     label,
     requiresPassword,
     allowSelfSigned,
+    usesAccessToken,
+    serverVersion,
     capabilitiesJson,
     probedAt,
     lastConnectedAt,
@@ -439,6 +531,8 @@ class Server extends DataClass implements Insertable<Server> {
           other.label == this.label &&
           other.requiresPassword == this.requiresPassword &&
           other.allowSelfSigned == this.allowSelfSigned &&
+          other.usesAccessToken == this.usesAccessToken &&
+          other.serverVersion == this.serverVersion &&
           other.capabilitiesJson == this.capabilitiesJson &&
           other.probedAt == this.probedAt &&
           other.lastConnectedAt == this.lastConnectedAt &&
@@ -451,6 +545,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
   final Value<String> label;
   final Value<bool> requiresPassword;
   final Value<bool> allowSelfSigned;
+  final Value<bool> usesAccessToken;
+  final Value<String?> serverVersion;
   final Value<String> capabilitiesJson;
   final Value<DateTime?> probedAt;
   final Value<DateTime?> lastConnectedAt;
@@ -462,6 +558,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     this.label = const Value.absent(),
     this.requiresPassword = const Value.absent(),
     this.allowSelfSigned = const Value.absent(),
+    this.usesAccessToken = const Value.absent(),
+    this.serverVersion = const Value.absent(),
     this.capabilitiesJson = const Value.absent(),
     this.probedAt = const Value.absent(),
     this.lastConnectedAt = const Value.absent(),
@@ -474,6 +572,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     required String label,
     this.requiresPassword = const Value.absent(),
     this.allowSelfSigned = const Value.absent(),
+    this.usesAccessToken = const Value.absent(),
+    this.serverVersion = const Value.absent(),
     this.capabilitiesJson = const Value.absent(),
     this.probedAt = const Value.absent(),
     this.lastConnectedAt = const Value.absent(),
@@ -488,6 +588,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Expression<String>? label,
     Expression<bool>? requiresPassword,
     Expression<bool>? allowSelfSigned,
+    Expression<bool>? usesAccessToken,
+    Expression<String>? serverVersion,
     Expression<String>? capabilitiesJson,
     Expression<DateTime>? probedAt,
     Expression<DateTime>? lastConnectedAt,
@@ -500,6 +602,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
       if (label != null) 'label': label,
       if (requiresPassword != null) 'requires_password': requiresPassword,
       if (allowSelfSigned != null) 'allow_self_signed': allowSelfSigned,
+      if (usesAccessToken != null) 'uses_access_token': usesAccessToken,
+      if (serverVersion != null) 'server_version': serverVersion,
       if (capabilitiesJson != null) 'capabilities_json': capabilitiesJson,
       if (probedAt != null) 'probed_at': probedAt,
       if (lastConnectedAt != null) 'last_connected_at': lastConnectedAt,
@@ -514,6 +618,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
     Value<String>? label,
     Value<bool>? requiresPassword,
     Value<bool>? allowSelfSigned,
+    Value<bool>? usesAccessToken,
+    Value<String?>? serverVersion,
     Value<String>? capabilitiesJson,
     Value<DateTime?>? probedAt,
     Value<DateTime?>? lastConnectedAt,
@@ -526,6 +632,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
       label: label ?? this.label,
       requiresPassword: requiresPassword ?? this.requiresPassword,
       allowSelfSigned: allowSelfSigned ?? this.allowSelfSigned,
+      usesAccessToken: usesAccessToken ?? this.usesAccessToken,
+      serverVersion: serverVersion ?? this.serverVersion,
       capabilitiesJson: capabilitiesJson ?? this.capabilitiesJson,
       probedAt: probedAt ?? this.probedAt,
       lastConnectedAt: lastConnectedAt ?? this.lastConnectedAt,
@@ -551,6 +659,12 @@ class ServersCompanion extends UpdateCompanion<Server> {
     }
     if (allowSelfSigned.present) {
       map['allow_self_signed'] = Variable<bool>(allowSelfSigned.value);
+    }
+    if (usesAccessToken.present) {
+      map['uses_access_token'] = Variable<bool>(usesAccessToken.value);
+    }
+    if (serverVersion.present) {
+      map['server_version'] = Variable<String>(serverVersion.value);
     }
     if (capabilitiesJson.present) {
       map['capabilities_json'] = Variable<String>(capabilitiesJson.value);
@@ -578,6 +692,8 @@ class ServersCompanion extends UpdateCompanion<Server> {
           ..write('label: $label, ')
           ..write('requiresPassword: $requiresPassword, ')
           ..write('allowSelfSigned: $allowSelfSigned, ')
+          ..write('usesAccessToken: $usesAccessToken, ')
+          ..write('serverVersion: $serverVersion, ')
           ..write('capabilitiesJson: $capabilitiesJson, ')
           ..write('probedAt: $probedAt, ')
           ..write('lastConnectedAt: $lastConnectedAt, ')
@@ -3364,6 +3480,8 @@ typedef $$ServersTableCreateCompanionBuilder =
       required String label,
       Value<bool> requiresPassword,
       Value<bool> allowSelfSigned,
+      Value<bool> usesAccessToken,
+      Value<String?> serverVersion,
       Value<String> capabilitiesJson,
       Value<DateTime?> probedAt,
       Value<DateTime?> lastConnectedAt,
@@ -3377,6 +3495,8 @@ typedef $$ServersTableUpdateCompanionBuilder =
       Value<String> label,
       Value<bool> requiresPassword,
       Value<bool> allowSelfSigned,
+      Value<bool> usesAccessToken,
+      Value<String?> serverVersion,
       Value<String> capabilitiesJson,
       Value<DateTime?> probedAt,
       Value<DateTime?> lastConnectedAt,
@@ -3438,6 +3558,16 @@ class $$ServersTableFilterComposer
 
   ColumnFilters<bool> get allowSelfSigned => $composableBuilder(
     column: $table.allowSelfSigned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get usesAccessToken => $composableBuilder(
+    column: $table.usesAccessToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get serverVersion => $composableBuilder(
+    column: $table.serverVersion,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3521,6 +3651,16 @@ class $$ServersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get usesAccessToken => $composableBuilder(
+    column: $table.usesAccessToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get serverVersion => $composableBuilder(
+    column: $table.serverVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get capabilitiesJson => $composableBuilder(
     column: $table.capabilitiesJson,
     builder: (column) => ColumnOrderings(column),
@@ -3567,6 +3707,16 @@ class $$ServersTableAnnotationComposer
 
   GeneratedColumn<bool> get allowSelfSigned => $composableBuilder(
     column: $table.allowSelfSigned,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get usesAccessToken => $composableBuilder(
+    column: $table.usesAccessToken,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get serverVersion => $composableBuilder(
+    column: $table.serverVersion,
     builder: (column) => column,
   );
 
@@ -3645,6 +3795,8 @@ class $$ServersTableTableManager
                 Value<String> label = const Value.absent(),
                 Value<bool> requiresPassword = const Value.absent(),
                 Value<bool> allowSelfSigned = const Value.absent(),
+                Value<bool> usesAccessToken = const Value.absent(),
+                Value<String?> serverVersion = const Value.absent(),
                 Value<String> capabilitiesJson = const Value.absent(),
                 Value<DateTime?> probedAt = const Value.absent(),
                 Value<DateTime?> lastConnectedAt = const Value.absent(),
@@ -3656,6 +3808,8 @@ class $$ServersTableTableManager
                 label: label,
                 requiresPassword: requiresPassword,
                 allowSelfSigned: allowSelfSigned,
+                usesAccessToken: usesAccessToken,
+                serverVersion: serverVersion,
                 capabilitiesJson: capabilitiesJson,
                 probedAt: probedAt,
                 lastConnectedAt: lastConnectedAt,
@@ -3669,6 +3823,8 @@ class $$ServersTableTableManager
                 required String label,
                 Value<bool> requiresPassword = const Value.absent(),
                 Value<bool> allowSelfSigned = const Value.absent(),
+                Value<bool> usesAccessToken = const Value.absent(),
+                Value<String?> serverVersion = const Value.absent(),
                 Value<String> capabilitiesJson = const Value.absent(),
                 Value<DateTime?> probedAt = const Value.absent(),
                 Value<DateTime?> lastConnectedAt = const Value.absent(),
@@ -3680,6 +3836,8 @@ class $$ServersTableTableManager
                 label: label,
                 requiresPassword: requiresPassword,
                 allowSelfSigned: allowSelfSigned,
+                usesAccessToken: usesAccessToken,
+                serverVersion: serverVersion,
                 capabilitiesJson: capabilitiesJson,
                 probedAt: probedAt,
                 lastConnectedAt: lastConnectedAt,

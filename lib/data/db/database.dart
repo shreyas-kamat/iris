@@ -31,6 +31,15 @@ class Servers extends Table {
   BoolColumn get allowSelfSigned =>
       boolean().withDefault(const Constant(false))();
 
+  /// Whether a Cloudflare Access service token is stored for this server. The
+  /// token itself is in the keystore; this only drives what the UI shows.
+  BoolColumn get usesAccessToken =>
+      boolean().withDefault(const Constant(false))();
+
+  /// What `/api/status` last reported, for display. Never used to gate a
+  /// feature.
+  TextColumn get serverVersion => text().nullable()();
+
   /// Probe results, stored as the JSON list of capability names so a new
   /// capability in a later build does not need a schema migration.
   TextColumn get capabilitiesJson => text().withDefault(const Constant('[]'))();
@@ -181,10 +190,21 @@ class IrisDatabase extends _$IrisDatabase {
   IrisDatabase(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.addColumn(servers, servers.usesAccessToken);
+        await migrator.addColumn(servers, servers.serverVersion);
+        // v1 probed hermes-webui endpoints. Those names mean nothing to a
+        // dashboard, so the probe is forgotten and re-run on next connect.
+        await customStatement(
+          "UPDATE servers SET capabilities_json = '[]', probed_at = NULL",
+        );
+      }
+    },
     beforeOpen: (details) async {
       // Cascading deletes keep a removed server from leaving orphaned sessions
       // and messages behind, which would otherwise accumulate silently.

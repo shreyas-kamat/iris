@@ -1,4 +1,4 @@
-/// How to reach one hermes-webui server.
+/// How to reach one Hermes dashboard.
 ///
 /// Iris supports several servers — a laptop at home, a VPS, a work machine —
 /// so the base URL is never a global constant. Credentials live in secure
@@ -15,6 +15,7 @@ final class ServerConfig {
     required this.baseUrl,
     required this.label,
     this.requiresPassword = false,
+    this.usesAccessToken = false,
     this.allowSelfSignedCertificate = false,
   });
 
@@ -23,6 +24,7 @@ final class ServerConfig {
     baseUrl: json['base_url'].string(),
     label: json['label'].string(),
     requiresPassword: json['requires_password'].boolean(),
+    usesAccessToken: json['uses_access_token'].boolean(),
     allowSelfSignedCertificate: json['allow_self_signed'].boolean(),
   );
 
@@ -36,8 +38,11 @@ final class ServerConfig {
   /// What the user calls this server.
   final String label;
 
-  /// Whether the server answered a probe with an auth challenge.
+  /// Whether the dashboard wants a username and password.
   final bool requiresPassword;
+
+  /// Whether requests carry a Cloudflare Access service token.
+  final bool usesAccessToken;
 
   /// Whether to accept a certificate that does not chain to a trusted root.
   ///
@@ -76,6 +81,7 @@ final class ServerConfig {
     'base_url': baseUrl,
     'label': label,
     'requires_password': requiresPassword,
+    'uses_access_token': usesAccessToken,
     'allow_self_signed': allowSelfSignedCertificate,
   };
 
@@ -83,12 +89,14 @@ final class ServerConfig {
     String? baseUrl,
     String? label,
     bool? requiresPassword,
+    bool? usesAccessToken,
     bool? allowSelfSignedCertificate,
   }) => ServerConfig(
     id: id,
     baseUrl: baseUrl ?? this.baseUrl,
     label: label ?? this.label,
     requiresPassword: requiresPassword ?? this.requiresPassword,
+    usesAccessToken: usesAccessToken ?? this.usesAccessToken,
     allowSelfSignedCertificate:
         allowSelfSignedCertificate ?? this.allowSelfSignedCertificate,
   );

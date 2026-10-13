@@ -149,6 +149,7 @@ final class ServerRepository {
     baseUrl: row.baseUrl,
     label: row.label,
     requiresPassword: row.requiresPassword,
+    usesAccessToken: row.usesAccessToken,
     allowSelfSignedCertificate: row.allowSelfSigned,
   );
 
