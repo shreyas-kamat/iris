@@ -153,23 +153,40 @@ final activeServerStateProvider = Provider<AsyncValue<ServerState?>>((ref) {
   };
 });
 
-/// The chat backend for the active server's live link.
+/// The agent profile the conversation list and new chats belong to.
+///
+/// Kept in memory and per server: a different server has different profiles,
+/// so each starts at its default.
+final activeProfileProvider = NotifierProvider<ActiveProfile, String>(
+  ActiveProfile.new,
+);
+
+class ActiveProfile extends Notifier<String> {
+  @override
+  String build() {
+    ref.watch(activeServerIdProvider);
+    return 'default';
+  }
+
+  void select(String profile) => state = profile;
+}
+
+/// The chat backend for the active server's live link, scoped to the active
+/// profile.
 final activeChatProvider = FutureProvider<ChatBackend?>((ref) async {
+  final profile = ref.watch(activeProfileProvider);
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
-  final chat = DashboardChat(session);
+  final chat = DashboardChat(session, profile: profile);
   ref.onDispose(() => unawaited(chat.dispose()));
   return chat;
 });
 
-/// Recent conversations on the active server, newest first.
+/// The first page of the active profile's conversations, newest first.
 ///
-/// Null until the link is live, because `session.list` needs the socket. Read
-/// again each time the link comes back, so a list loaded before a drop
-/// catches up.
-final conversationsProvider = FutureProvider<List<ConversationSummary>?>((
-  ref,
-) async {
+/// Null until the link is live. Read again each time the link comes back, so
+/// a list loaded before a drop catches up.
+final conversationsProvider = FutureProvider<ConversationPage?>((ref) async {
   final live = ref.watch(
     activeLinkProvider.select(
       (link) => link.value?.phase == LinkPhase.live,
@@ -179,7 +196,23 @@ final conversationsProvider = FutureProvider<List<ConversationSummary>?>((
   final chat = await ref.watch(activeChatProvider.future);
   if (chat == null) return null;
   return switch (await chat.conversations(0)) {
-    Ok(:final value) => value.items,
+    Ok(:final value) => value,
+    Err(:final failure) => throw failure,
+  };
+});
+
+/// The active server's agent profiles. Null until the link is live.
+final profilesProvider = FutureProvider<List<AgentProfile>?>((ref) async {
+  final live = ref.watch(
+    activeLinkProvider.select(
+      (link) => link.value?.phase == LinkPhase.live,
+    ),
+  );
+  if (!live) return null;
+  final chat = await ref.watch(activeChatProvider.future);
+  if (chat == null) return null;
+  return switch (await chat.profiles()) {
+    Ok(:final value) => value,
     Err(:final failure) => throw failure,
   };
 });

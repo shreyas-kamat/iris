@@ -107,7 +107,19 @@ void main() {
 
     link.add(const LinkState(LinkPhase.live));
     await Future<void>.delayed(const Duration(milliseconds: 10));
-    final list = await container.read(conversationsProvider.future);
-    expect(list?.single.id, 'a');
+    final page = await container.read(conversationsProvider.future);
+    expect(page?.items.single.id, 'a');
+  });
+
+  test('the profile starts at default and resets with the server', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final listening = container.listen(activeProfileProvider, (_, _) {});
+    addTearDown(listening.close);
+    expect(container.read(activeProfileProvider), 'default');
+    container.read(activeProfileProvider.notifier).select('ananta');
+    expect(container.read(activeProfileProvider), 'ananta');
+    container.read(activeServerIdProvider.notifier).select('another');
+    expect(container.read(activeProfileProvider), 'default');
   });
 }

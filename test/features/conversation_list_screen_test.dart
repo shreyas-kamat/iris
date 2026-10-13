@@ -29,7 +29,10 @@ void main() {
         (ref) => Stream.value(const LinkState(LinkPhase.live)),
       ),
       activeChatProvider.overrideWith((ref) async => backend),
-      conversationsProvider.overrideWith((ref) async => conversations),
+      conversationsProvider.overrideWith(
+        (ref) async =>
+            ConversationPage(items: conversations, total: conversations.length),
+      ),
     ],
     child: themed(const ConversationListScreen()),
   );

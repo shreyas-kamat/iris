@@ -133,7 +133,7 @@ class _ConversationList extends StatelessWidget {
     required this.onRetry,
   });
 
-  final AsyncValue<List<ConversationSummary>?> conversations;
+  final AsyncValue<ConversationPage?> conversations;
   final ValueChanged<ConversationSummary>? onOpen;
   final VoidCallback onRetry;
 
@@ -150,7 +150,7 @@ class _ConversationList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gutter = context.window.gutter;
-    final list = conversations.value;
+    final list = conversations.value?.items;
     if (list == null) {
       if (conversations.error case final error?) {
         return IrisEmptyState(
