@@ -18,6 +18,7 @@ import 'chat_controller.dart';
 import 'chat_state.dart';
 import 'composer.dart';
 import 'decision_cards.dart';
+import 'model_sheet.dart';
 import 'transcript_view.dart';
 
 /// The aperture state for what the agent is doing.
@@ -58,14 +59,29 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    _chat.onPrefill = _prefill;
+    _text.addListener(_watchForSlash);
     unawaited(_chat.open());
   }
 
   @override
   void dispose() {
+    _text.removeListener(_watchForSlash);
     _chat.dispose();
     _text.dispose();
     super.dispose();
+  }
+
+  /// The command catalogue is read the first time the person types a slash.
+  void _watchForSlash() {
+    if (_text.text.startsWith('/')) unawaited(_chat.loadCommands());
+  }
+
+  void _prefill(String text) {
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
   }
 
   void _send() {
@@ -82,6 +98,10 @@ class _ChatScreenState extends State<ChatScreen> {
       header: _ChatHeader(
         title: state.title ?? 'New conversation',
         turn: state.turn,
+        model: state.model,
+        onModel: _chat.isLive
+            ? () => unawaited(showModelPicker(context, _chat))
+            : null,
       ),
       body: _body(context, state),
       footer: Column(
@@ -113,6 +133,7 @@ class _ChatScreenState extends State<ChatScreen> {
             controller: _text,
             running: state.running,
             enabled: state.phase == ChatPhase.ready,
+            commands: state.commands,
             onSend: _send,
             onStop: () => unawaited(_chat.stop()),
           ),
@@ -145,17 +166,29 @@ class _ChatScreenState extends State<ChatScreen> {
             message: 'Ask your agent anything.',
           );
         }
+        final hasEarlier = state.earlier != null;
         // Reversed, so the newest entry sits at the bottom and new output
-        // appears where the eye already is.
+        // appears where the eye already is; the way to earlier messages is
+        // therefore the last item, at the top.
         return ListView.separated(
           reverse: true,
           padding: EdgeInsets.symmetric(
             horizontal: context.window.gutter,
             vertical: IrisSpace.lg,
           ),
-          itemCount: items.length,
+          itemCount: items.length + (hasEarlier ? 1 : 0),
           separatorBuilder: (_, _) => const SizedBox(height: IrisSpace.md),
           itemBuilder: (context, index) {
+            if (index == items.length) {
+              return Center(
+                child: IrisButton(
+                  label: 'Show earlier messages',
+                  tone: IrisButtonTone.ghost,
+                  busy: state.loadingEarlier,
+                  onPressed: () => unawaited(_chat.loadEarlier()),
+                ),
+              );
+            }
             final item = items[items.length - 1 - index];
             // Full readable width, so replies sit at the left edge and the
             // person's bubbles at the right, instead of each entry shrinking
@@ -173,10 +206,19 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _ChatHeader extends StatelessWidget {
-  const _ChatHeader({required this.title, required this.turn});
+  const _ChatHeader({
+    required this.title,
+    required this.turn,
+    this.model,
+    this.onModel,
+  });
 
   final String title;
   final TurnPhase turn;
+  final String? model;
+
+  /// Opens the model picker; null while the conversation is not live.
+  final VoidCallback? onModel;
 
   @override
   Widget build(BuildContext context) {
@@ -206,11 +248,31 @@ class _ChatHeader extends StatelessWidget {
           Aperture(state: agentStateFor(turn)),
           const SizedBox(width: IrisSpace.sm),
           Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.typography.heading,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.typography.heading,
+                ),
+                if (model case final model?)
+                  IrisPressable(
+                    onTap: onModel,
+                    semanticLabel: 'Model: $model',
+                    ensureTapTarget: false,
+                    child: Text(
+                      onModel == null ? model : '$model ▾',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.typography.caption.copyWith(
+                        color: theme.palette.inkMuted,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

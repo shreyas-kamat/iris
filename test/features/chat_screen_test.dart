@@ -151,4 +151,138 @@ void main() {
     expect(tester.getTopLeft(find.text('ok')).dx, lessThan(60));
     expect(tester.getTopRight(find.text('hi')).dx, greaterThan(300));
   });
+
+  testWidgets('earlier messages load above when asked', (tester) async {
+    backend
+      ..historyResult = const Ok([UserTurn(id: '65', text: 'newest')])
+      ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
+      ..earlierResult = const Ok(
+        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+      );
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.tap(find.text('Show earlier messages'));
+    await settle(tester);
+    await settle(tester);
+    expect(backend.calls, contains('earlier stored-1 64'));
+    expect(find.text('oldest'), findsOneWidget);
+    expect(find.text('Show earlier messages'), findsNothing);
+  });
+
+  group('the model', () {
+    void scriptModels() {
+      backend
+        ..resumeResult = const Ok(
+          ResumedConversation(
+            runtimeId: 'run-1',
+            model: 'gpt-6.1-sol',
+            provider: 'openai-codex',
+          ),
+        )
+        ..modelOptionsResult = const Ok(
+          ModelOptions(
+            model: 'gpt-6.1-sol',
+            providers: [
+              ModelProvider(
+                slug: 'openai-codex',
+                name: 'OpenAI Codex',
+                models: ['gpt-6.1-sol', 'gpt-6-luna'],
+              ),
+            ],
+          ),
+        );
+    }
+
+    Future<void> pickLuna(WidgetTester tester) async {
+      await tester.pumpWidget(
+        themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+      );
+      await settle(tester);
+      await settle(tester);
+      await tester.tap(find.text('gpt-6.1-sol ▾'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await settle(tester);
+      // IrisLabel upper-cases its text.
+      expect(find.text('OPENAI CODEX'), findsOneWidget);
+      await tester.tap(find.text('gpt-6-luna'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await settle(tester);
+    }
+
+    testWidgets('the header shows it, and the picker switches it', (tester) async {
+      scriptModels();
+      backend.switchResult = const Ok(ModelSwitch(model: 'gpt-6-luna'));
+      await pickLuna(tester);
+      expect(backend.switches, ['gpt-6-luna@openai-codex']);
+      expect(find.text('gpt-6-luna ▾'), findsOneWidget);
+      expect(find.text('Now using gpt-6-luna.'), findsOneWidget);
+    });
+
+    testWidgets('a switch Hermes wants confirmed asks first', (tester) async {
+      scriptModels();
+      backend.switchResult = const Ok(
+        ModelSwitch(
+          model: 'gpt-6-luna',
+          confirmRequired: true,
+          confirmMessage: 'This model is expensive.',
+        ),
+      );
+      await pickLuna(tester);
+      expect(find.text('This model is expensive.'), findsOneWidget);
+      expect(backend.switches, ['gpt-6-luna@openai-codex']);
+      expect(find.text('gpt-6.1-sol ▾'), findsOneWidget);
+      backend.switchResult = const Ok(ModelSwitch(model: 'gpt-6-luna'));
+      await tester.tap(find.text('Switch'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await settle(tester);
+      expect(backend.switches, [
+        'gpt-6-luna@openai-codex',
+        'gpt-6-luna@openai-codex confirmed',
+      ]);
+      expect(find.text('gpt-6-luna ▾'), findsOneWidget);
+    });
+  });
+
+  testWidgets('a slash command is suggested, runs, and its output shows', (tester) async {
+    backend
+      ..commandsResult = const Ok([
+        SlashCommand(name: '/usage', description: 'Token usage'),
+      ])
+      ..slashResult = const Ok(
+        SlashOutcome(kind: SlashKind.exec, text: 'Tokens: 12k'),
+      );
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+    );
+    await settle(tester);
+    await tester.enterText(find.byType(EditableText), '/us');
+    await settle(tester);
+    expect(backend.calls, contains('commands'));
+    expect(find.text('Token usage'), findsOneWidget);
+    await tester.tap(find.text('/usage'));
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    await settle(tester);
+    expect(backend.slashes, ['/usage']);
+    expect(find.text('Tokens: 12k'), findsOneWidget);
+    expect(find.text('Send'), findsOneWidget);
+  });
+
+  testWidgets('a prefill puts its text in the composer', (tester) async {
+    backend.slashResult = const Ok(
+      SlashOutcome(kind: SlashKind.prefill, text: 'Write a plan for '),
+    );
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+    );
+    await settle(tester);
+    await tester.enterText(find.byType(EditableText), '/plan');
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    await settle(tester);
+    expect(find.text('Write a plan for '), findsOneWidget);
+  });
 }

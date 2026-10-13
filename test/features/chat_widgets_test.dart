@@ -132,4 +132,31 @@ void main() {
     await tester.tap(find.text('Stop'));
     expect(stopped, 1);
   });
+
+  testWidgets('typing a slash suggests commands, and a pick fills the composer', (tester) async {
+    final text = TextEditingController();
+    addTearDown(text.dispose);
+    await tester.pumpWidget(
+      themed(
+        Composer(
+          controller: text,
+          running: false,
+          onSend: () {},
+          onStop: () {},
+          commands: const [
+            SlashCommand(name: '/model', description: 'Switch model'),
+            SlashCommand(name: '/new', description: 'Start a new session'),
+          ],
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(EditableText), '/mo');
+    await tester.pump();
+    expect(find.text('/model'), findsOneWidget);
+    expect(find.text('/new'), findsNothing);
+    await tester.tap(find.text('/model'));
+    await tester.pump();
+    expect(text.text, '/model ');
+    expect(find.text('Switch model'), findsNothing);
+  });
 }
