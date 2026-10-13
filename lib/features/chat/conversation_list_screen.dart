@@ -20,7 +20,6 @@ import '../../data/rpc/dashboard_session.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
-import '../../design/components/sheet.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
 import '../../design/platform/platform_feel.dart';
@@ -28,7 +27,9 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
 import '../home/link_status_screen.dart';
+import '../settings/settings_screen.dart';
 import 'chat_screen.dart';
+import 'profile_picker.dart';
 import 'relative_time.dart';
 
 class ConversationListScreen extends ConsumerStatefulWidget {
@@ -74,29 +75,6 @@ class _ConversationListScreenState
     });
   }
 
-  Future<void> _pickProfile(List<AgentProfile> profiles, String current) async {
-    final picked = await showIrisSheet<String>(
-      context: context,
-      builder: (sheetContext) => IrisSheet(
-        title: 'Profile',
-        subtitle: 'Each profile has its own conversations, memory and model.',
-        child: Column(
-          children: [
-            for (final profile in profiles)
-              IrisListRow(
-                title: profile.name,
-                subtitle: profile.model,
-                selected: profile.name == current,
-                onTap: () => Navigator.of(sheetContext).pop(profile.name),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    ref.read(activeProfileProvider.notifier).select(picked);
-  }
-
   @override
   Widget build(BuildContext context) {
     // A refreshed first page starts the list over.
@@ -128,13 +106,19 @@ class _ConversationListScreenState
               name: profile,
               // The pill only opens something when there is a choice to make.
               onTap: profiles.length > 1
-                  ? () => unawaited(_pickProfile(profiles, profile))
+                  ? () => unawaited(showProfilePicker(context, ref))
                   : null,
             ),
             const Spacer(),
-            // Opens the settings screen. Wired in the settings task; until
-            // then it is visibly present but inert.
-            const IrisCircleButton(icon: Icons.tune, semanticLabel: 'Settings'),
+            IrisCircleButton(
+              icon: Icons.tune,
+              semanticLabel: 'Settings',
+              onPressed: () => unawaited(
+                Navigator.of(context).push(
+                  IrisPageRoute<void>(builder: (_) => const SettingsScreen()),
+                ),
+              ),
+            ),
           ],
         ),
       ),
