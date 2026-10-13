@@ -127,4 +127,57 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 60)),
   );
+
+  test(
+    'profiles, paging, models and commands read cleanly',
+    () async {
+      final connection = ServerConnection.create(config, secrets: secrets);
+      final session = DashboardSession(http: connection);
+      final chat = DashboardChat(session);
+      final ananta = DashboardChat(session, profile: 'ananta');
+      addTearDown(() async {
+        await chat.dispose();
+        await ananta.dispose();
+        await session.dispose();
+        connection.close();
+      });
+      await session.start();
+
+      final profiles = (await chat.profiles()).valueOrNull!;
+      stdout.writeln('profiles: ${profiles.map((p) => p.name).toList()}');
+      expect(profiles.map((p) => p.name), contains('default'));
+
+      final anantaPage = (await ananta.conversations(0)).valueOrNull!;
+      stdout.writeln('ananta: ${anantaPage.items.length} of ${anantaPage.total}');
+
+      // A conversation longer than one page must open on its newest row.
+      final page = (await chat.conversations(0)).valueOrNull!;
+      final long = page.items.firstWhere((c) => c.messageCount > 130);
+      final history = (await chat.history(long.id)).valueOrNull!;
+      final last = await connection.client.get(
+        '/api/sessions/${long.id}/messages',
+        query: {'limit': 1, 'offset': long.messageCount - 1},
+      );
+      final newestId = last.valueOrNull?['messages'].at(0)['id'].stringOrNull;
+      stdout.writeln(
+        'long conversation: ${long.messageCount} messages, page of '
+        '${history.items.length}, earlier=${history.earlier?.offset}, '
+        'newest row $newestId',
+      );
+      expect(history.earlier, isNotNull);
+      expect(newestId, isNotNull);
+
+      final options = (await chat.modelOptions()).valueOrNull!;
+      stdout.writeln(
+        'models: now ${options.model}; usable providers '
+        '${options.usable.map((p) => '${p.slug}(${p.models.length})').toList()}',
+      );
+      expect(options.usable, isNotEmpty);
+
+      final commands = (await chat.commands()).valueOrNull!;
+      stdout.writeln('commands: ${commands.length}');
+      expect(commands.length, greaterThan(100));
+    },
+    timeout: const Timeout(Duration(seconds: 90)),
+  );
 }

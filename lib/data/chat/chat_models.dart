@@ -274,10 +274,14 @@ final class ModelOptions {
   final String? provider;
   final List<ModelProvider> providers;
 
-  /// Providers worth offering: signed in, with at least one model.
+  /// Providers worth offering: signed in, or the one in use, with at least
+  /// one model. Hermes 0.18.2 reports the configured provider in use as
+  /// unauthenticated, yet it is the one running the conversation.
   List<ModelProvider> get usable => [
     for (final provider in providers)
-      if (provider.authenticated && provider.models.isNotEmpty) provider,
+      if ((provider.authenticated || provider.isCurrent) &&
+          provider.models.isNotEmpty)
+        provider,
   ];
 }
 

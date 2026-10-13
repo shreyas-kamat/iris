@@ -85,6 +85,25 @@ void main() {
     expect(options.usable.last.models, ['m-1']);
   });
 
+  test('the current provider is usable even when it reports unauthenticated', () {
+    // Hermes 0.18.2 reports openai-codex, the configured provider in use, as
+    // authenticated: false (source: configured-current).
+    final options = CatalogParser.modelOptions(
+      Json.of({
+        'providers': [
+          {
+            'slug': 'openai-codex',
+            'is_current': true,
+            'authenticated': false,
+            'models': ['gpt-6.1-sol'],
+          },
+          {'slug': 'other', 'authenticated': false, 'models': ['x']},
+        ],
+      }),
+    );
+    expect(options.usable.map((p) => p.slug), ['openai-codex']);
+  });
+
   test('a model switch strips echoed flags and reads confirmation', () {
     final echoed = CatalogParser.modelSwitch(
       Json.of({'value': 'gpt-6-luna --provider openai-codex --session'}),
