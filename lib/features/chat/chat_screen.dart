@@ -157,8 +157,14 @@ class _ChatScreenState extends State<ChatScreen> {
           separatorBuilder: (_, _) => const SizedBox(height: IrisSpace.md),
           itemBuilder: (context, index) {
             final item = items[items.length - 1 - index];
+            // Full readable width, so replies sit at the left edge and the
+            // person's bubbles at the right, instead of each entry shrinking
+            // to its own width inside the centred column.
             return ReadableColumn(
-              child: TranscriptEntry(item, key: ValueKey(item.id)),
+              child: SizedBox(
+                width: double.infinity,
+                child: TranscriptEntry(item, key: ValueKey(item.id)),
+              ),
             );
           },
         );

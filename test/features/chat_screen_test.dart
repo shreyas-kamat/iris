@@ -130,4 +130,25 @@ void main() {
     expect(backend.calls, contains('create'));
     expect(backend.submitted.single, ('run-new', 'hi'));
   });
+
+  testWidgets('replies sit at the left edge and the person at the right', (tester) async {
+    // On the emulator, short replies were centred: each entry shrank to its
+    // own width inside the centred readable column.
+    // A phone-sized surface; the default test surface is 800 wide.
+    tester.view
+      ..physicalSize = const Size(390 * 3, 844 * 3)
+      ..devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    backend.historyResult = const Ok([
+      UserTurn(id: '1', text: 'hi'),
+      AssistantTurn(id: '2', text: 'ok'),
+    ]);
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+    );
+    await settle(tester);
+    await settle(tester);
+    expect(tester.getTopLeft(find.text('ok')).dx, lessThan(60));
+    expect(tester.getTopRight(find.text('hi')).dx, greaterThan(300));
+  });
 }
