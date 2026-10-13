@@ -22,6 +22,7 @@ import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
+import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../home/link_status_screen.dart';
@@ -47,7 +48,7 @@ class _ConversationListScreenState
     ConversationSummary? conversation,
   }) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      IrisPageRoute<void>(
         builder: (_) => ChatScreen(
           backend: chat,
           conversationId: conversation?.id,
@@ -118,7 +119,7 @@ class _ConversationListScreenState
             child: IrisPressable(
               onTap: () => unawaited(
                 Navigator.of(context).push(
-                  MaterialPageRoute<void>(
+                  IrisPageRoute<void>(
                     builder: (_) => const LinkStatusScreen(),
                   ),
                 ),

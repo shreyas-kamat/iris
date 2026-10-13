@@ -428,3 +428,127 @@ class IrisGauge extends StatelessWidget {
     );
   }
 }
+
+/// The design's on/off toggle: a pill track with a white knob that springs
+/// across.
+///
+/// The track takes the thinking hue when on, so a switch that is on reads as
+/// the agent being engaged rather than as a generic blue control. Off, it is the
+/// quiet structural line, so an off switch never competes for attention.
+class IrisSwitch extends StatelessWidget {
+  const IrisSwitch({
+    required this.value,
+    this.onChanged,
+    this.semanticLabel,
+    super.key,
+  });
+
+  final bool value;
+
+  /// Null disables the switch, which keeps its state but ignores taps.
+  final ValueChanged<bool>? onChanged;
+
+  /// Read by screen readers alongside the toggled state, so the switch says
+  /// what it controls and not only that it is on.
+  final String? semanticLabel;
+
+  static const double _width = 50;
+  static const double _height = 30;
+  static const double _padding = 3;
+  static const double _knob = 24;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final reduced = context.reduceMotion;
+    final track = value
+        ? palette.colorFor(AgentState.thinking)
+        : palette.lineStrong;
+    return Semantics(
+      toggled: value,
+      enabled: onChanged != null,
+      label: semanticLabel,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onChanged == null ? null : () => onChanged!(!value),
+        child: AnimatedContainer(
+          duration: reduced ? Duration.zero : IrisDurations.normal,
+          curve: IrisCurves.standard,
+          width: _width,
+          height: _height,
+          padding: const EdgeInsets.all(_padding),
+          decoration: BoxDecoration(
+            color: track,
+            borderRadius: BorderRadius.all(IrisRadius.full),
+          ),
+          child: AnimatedAlign(
+            // The overshoot in this curve is the point: the knob lands with a
+            // small bounce, which is what makes the switch feel physical.
+            duration: reduced ? Duration.zero : const Duration(milliseconds: 350),
+            curve: const Cubic(0.34, 1.56, 0.64, 1),
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: _knob,
+              height: _knob,
+              decoration: BoxDecoration(
+                // Always white, in every skin and both brightnesses: the knob
+                // is a physical object on the track, not a text colour.
+                color: const Color(0xFFFFFFFF),
+                shape: BoxShape.circle,
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x59000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A round, bordered icon button for the header actions: back, settings.
+///
+/// It is 40 across, filled one step above the surface so it reads as a control
+/// on a card, and scales to 0.92 when pressed. It takes a required
+/// [semanticLabel] because an icon alone says nothing to a screen reader.
+class IrisCircleButton extends StatelessWidget {
+  const IrisCircleButton({
+    required this.icon,
+    required this.semanticLabel,
+    this.onPressed,
+    super.key,
+  });
+
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback? onPressed;
+
+  static const double _diameter = 40;
+  static const double _iconSize = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return IrisPressable(
+      onTap: onPressed,
+      scale: 0.92,
+      semanticLabel: semanticLabel,
+      child: Container(
+        width: _diameter,
+        height: _diameter,
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          shape: BoxShape.circle,
+          border: Border.all(color: palette.line, width: IrisStroke.hairline),
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, size: _iconSize, color: palette.ink),
+      ),
+    );
+  }
+}
