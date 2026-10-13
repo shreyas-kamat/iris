@@ -116,12 +116,6 @@ class _ChatScreenState extends State<ChatScreen> {
         title: state.title ?? 'New conversation',
         turn: state.turn,
         connecting: state.phase == ChatPhase.loading,
-        // The model still lives here until the composer takes it over, so
-        // the header keeps offering the picker in the meantime.
-        model: state.model,
-        onModel: _chat.isLive
-            ? () => unawaited(showModelPicker(context, _chat))
-            : null,
       ),
       body: _body(context, state),
       footer: Column(
@@ -154,6 +148,11 @@ class _ChatScreenState extends State<ChatScreen> {
             running: state.running,
             enabled: state.phase == ChatPhase.ready,
             commands: state.commands,
+            model: state.model,
+            onModel: _chat.isLive
+                ? () => unawaited(showModelPicker(context, _chat))
+                : null,
+            state: agentStateFor(state.turn),
             onSend: _send,
             onStop: () => unawaited(_chat.stop()),
           ),
@@ -236,8 +235,6 @@ class _ChatHeader extends StatelessWidget {
     required this.title,
     required this.turn,
     required this.connecting,
-    this.model,
-    this.onModel,
   });
 
   final String title;
@@ -246,10 +243,6 @@ class _ChatHeader extends StatelessWidget {
   /// True while the conversation is being opened, before any turn exists.
   final bool connecting;
 
-  final String? model;
-
-  /// Opens the model picker; null while the conversation is not live.
-  final VoidCallback? onModel;
 
   @override
   Widget build(BuildContext context) {
@@ -303,21 +296,6 @@ class _ChatHeader extends StatelessWidget {
                   ),
                   child: Text(connecting ? 'Connecting' : state.label),
                 ),
-                if (model case final model?)
-                  IrisPressable(
-                    onTap: onModel,
-                    semanticLabel: 'Model: $model',
-                    ensureTapTarget: false,
-                    child: Text(
-                      onModel == null ? model : '$model ▾',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: type.caption.copyWith(
-                        fontSize: 11.5,
-                        color: palette.inkMuted,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),

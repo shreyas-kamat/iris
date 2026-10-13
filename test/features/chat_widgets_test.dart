@@ -125,6 +125,7 @@ void main() {
   testWidgets('the composer sends only with text, and stops while running', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     final text = TextEditingController();
     addTearDown(text.dispose);
     var sent = 0;
@@ -138,15 +139,16 @@ void main() {
       ),
     );
     await tester.pumpWidget(composer(running: false));
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.bySemanticsLabel('Send'));
     expect(sent, 0);
     await tester.enterText(find.byType(EditableText), 'hi');
     await tester.pump();
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.bySemanticsLabel('Send'));
     expect(sent, 1);
     await tester.pumpWidget(composer(running: true));
-    await tester.tap(find.text('Stop'));
+    await tester.tap(find.bySemanticsLabel('Stop'));
     expect(stopped, 1);
+    semantics.dispose();
   });
 
   testWidgets(
