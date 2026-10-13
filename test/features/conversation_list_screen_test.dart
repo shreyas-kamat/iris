@@ -1,4 +1,5 @@
-/// Home: the server's conversations, and the way into one.
+/// Home: the profile's conversations, the way into one, more of them, and
+/// which profile.
 library;
 
 import 'package:flutter/material.dart';
@@ -20,7 +21,11 @@ void main() {
   setUp(() => backend = FakeChatBackend());
   tearDown(() => backend.close());
 
-  Widget home(List<ConversationSummary> conversations) => ProviderScope(
+  Widget home(
+    List<ConversationSummary> conversations, {
+    int? total,
+    List<AgentProfile> profiles = const [],
+  }) => ProviderScope(
     overrides: [
       activeServerProvider.overrideWithValue(
         const ServerConfig(id: 's', baseUrl: 'https://h.example', label: 'Home'),
@@ -30,9 +35,12 @@ void main() {
       ),
       activeChatProvider.overrideWith((ref) async => backend),
       conversationsProvider.overrideWith(
-        (ref) async =>
-            ConversationPage(items: conversations, total: conversations.length),
+        (ref) async => ConversationPage(
+          items: conversations,
+          total: total ?? conversations.length,
+        ),
       ),
+      profilesProvider.overrideWith((ref) async => profiles),
     ],
     child: themed(const ConversationListScreen()),
   );
@@ -64,7 +72,7 @@ void main() {
     expect(find.text('3h ago · telegram · 12 messages'), findsOneWidget);
   });
 
-  testWidgets('an empty server invites a first conversation', (tester) async {
+  testWidgets('an empty profile invites a first conversation', (tester) async {
     await tester.pumpWidget(home(const []));
     await settle(tester);
     expect(find.text('No conversations yet'), findsOneWidget);
@@ -83,5 +91,57 @@ void main() {
     await settle(tester);
     expect(backend.calls, contains('history a'));
     expect(find.text('earlier'), findsOneWidget);
+  });
+
+  testWidgets('more conversations load at the end of the list', (tester) async {
+    backend.conversationsResult = const Ok([
+      ConversationSummary(id: 'b', title: 'Second'),
+    ]);
+    await tester.pumpWidget(
+      home(const [ConversationSummary(id: 'a', title: 'First')], total: 2),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Show more'));
+    await settle(tester);
+    await settle(tester);
+    expect(backend.calls, contains('conversations 1'));
+    expect(find.text('Second'), findsOneWidget);
+    expect(find.text('Show more'), findsNothing);
+  });
+
+  testWidgets('with several profiles, the chip switches profile', (tester) async {
+    await tester.pumpWidget(
+      home(
+        const [],
+        profiles: const [
+          AgentProfile(name: 'default', isDefault: true),
+          AgentProfile(name: 'ananta', model: 'gpt-6-luna'),
+        ],
+      ),
+    );
+    await settle(tester);
+    // IrisChip upper-cases its label.
+    await tester.tap(find.text('DEFAULT'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await settle(tester);
+    await tester.tap(find.text('ananta'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await settle(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ConversationListScreen)),
+    );
+    expect(container.read(activeProfileProvider), 'ananta');
+    expect(find.text('ANANTA'), findsOneWidget);
+  });
+
+  testWidgets('a single profile shows no chip', (tester) async {
+    await tester.pumpWidget(
+      home(
+        const [],
+        profiles: const [AgentProfile(name: 'default', isDefault: true)],
+      ),
+    );
+    await settle(tester);
+    expect(find.text('DEFAULT'), findsNothing);
   });
 }
