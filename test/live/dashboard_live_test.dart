@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/json.dart';
+import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/net/credentials.dart';
 import 'package:iris/data/net/dashboard_auth.dart';
 import 'package:iris/data/net/server_config.dart';
@@ -87,6 +88,42 @@ void main() {
 
       await Future<void>.delayed(const Duration(seconds: 3));
       stdout.writeln('event types seen: $types');
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+
+  test(
+    'conversations and a stored transcript read cleanly',
+    () async {
+      final connection = ServerConnection.create(config, secrets: secrets);
+      final session = DashboardSession(http: connection);
+      final chat = DashboardChat(session);
+      addTearDown(() async {
+        await chat.dispose();
+        await session.dispose();
+        connection.close();
+      });
+      await session.start();
+      final conversations = await chat.conversations();
+      expect(
+        conversations.isOk,
+        isTrue,
+        reason: '${conversations.failureOrNull}',
+      );
+      final list = conversations.valueOrNull!;
+      stdout.writeln('conversations: ${list.length}');
+      if (list.isEmpty) return;
+      final history = await chat.history(list.first.id);
+      expect(history.isOk, isTrue, reason: '${history.failureOrNull}');
+      final counts = <String, int>{};
+      for (final item in history.valueOrNull!) {
+        counts.update(
+          item.runtimeType.toString(),
+          (n) => n + 1,
+          ifAbsent: () => 1,
+        );
+      }
+      stdout.writeln('newest transcript, by kind: $counts');
     },
     timeout: const Timeout(Duration(seconds: 60)),
   );
