@@ -40,6 +40,12 @@ Future<void> loadIrisFonts() async {
     'GeistMono-Regular.ttf',
     'GeistMono-Medium.ttf',
   ]);
+  // Both faces go into one family, because FontLoader cannot declare a style.
+  // The italic face is what the serif role actually draws with.
+  await load('InstrumentSerif', [
+    'InstrumentSerif-Regular.ttf',
+    'InstrumentSerif-Italic.ttf',
+  ]);
 }
 
 /// Wraps the gallery with the theme it is being captured in.

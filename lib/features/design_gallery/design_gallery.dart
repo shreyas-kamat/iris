@@ -286,6 +286,7 @@ class _TypeShowcase extends StatelessWidget {
       'code': 'grep -rn stream_end api/streaming.py',
       'codeSmall': '0 */6 * * *',
       'numeric': '14,208 tokens · \$0.0412',
+      'serif': 'Good evening.',
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
