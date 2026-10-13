@@ -16,6 +16,7 @@ final class ConversationSummary {
     this.startedAt,
     this.messageCount = 0,
     this.source,
+    this.profile,
   });
 
   /// The stored session id: what history and resume are addressed by.
@@ -26,6 +27,9 @@ final class ConversationSummary {
 
   /// Where the conversation began — `telegram`, `cli`, `desktop` — or null.
   final String? source;
+
+  /// The agent profile it belongs to, when the server says.
+  final String? profile;
 }
 
 /// One entry in a transcript.
@@ -206,4 +210,139 @@ final class ClarifyRequest {
         if (question.id != questionId) question,
     ],
   );
+}
+
+/// One page of the conversation list.
+@immutable
+final class ConversationPage {
+  const ConversationPage({required this.items, required this.total});
+
+  final List<ConversationSummary> items;
+
+  /// How many conversations the profile has in all, for "Show more".
+  final int total;
+}
+
+/// An agent profile on the dashboard: its own conversations, memory and
+/// model.
+@immutable
+final class AgentProfile {
+  const AgentProfile({
+    required this.name,
+    this.isDefault = false,
+    this.model,
+    this.provider,
+    this.running = false,
+  });
+
+  final String name;
+  final bool isDefault;
+  final String? model;
+  final String? provider;
+
+  /// Its messaging gateway (Telegram and the like) is running.
+  final bool running;
+}
+
+/// One provider in the model picker.
+@immutable
+final class ModelProvider {
+  const ModelProvider({
+    required this.slug,
+    required this.name,
+    required this.models,
+    this.isCurrent = false,
+    this.authenticated = true,
+  });
+
+  /// What `config.set` names it by.
+  final String slug;
+  final String name;
+  final List<String> models;
+  final bool isCurrent;
+
+  /// Signed in, so its models can actually run.
+  final bool authenticated;
+}
+
+/// What the model picker offers.
+@immutable
+final class ModelOptions {
+  const ModelOptions({this.model, this.provider, this.providers = const []});
+
+  final String? model;
+  final String? provider;
+  final List<ModelProvider> providers;
+
+  /// Providers worth offering: signed in, with at least one model.
+  List<ModelProvider> get usable => [
+    for (final provider in providers)
+      if (provider.authenticated && provider.models.isNotEmpty) provider,
+  ];
+}
+
+/// The gateway's answer to a model switch.
+@immutable
+final class ModelSwitch {
+  const ModelSwitch({
+    required this.model,
+    this.confirmRequired = false,
+    this.confirmMessage = '',
+    this.deferred = false,
+  });
+
+  final String model;
+
+  /// Nothing changed yet: the person must confirm [confirmMessage] first.
+  final bool confirmRequired;
+  final String confirmMessage;
+
+  /// The conversation is mid-turn; the switch applies when the turn ends.
+  final bool deferred;
+}
+
+/// A slash command and what it does.
+@immutable
+final class SlashCommand {
+  const SlashCommand({required this.name, required this.description});
+
+  /// With its leading slash, such as `/model`.
+  final String name;
+  final String description;
+}
+
+enum SlashKind {
+  /// Ran on the server; show its output.
+  exec,
+
+  /// Expands to a prompt to send.
+  send,
+
+  /// Puts text in the composer for the person to finish.
+  prefill,
+
+  /// Stands for another command.
+  alias,
+}
+
+/// What running a slash command asks Iris to do next.
+@immutable
+final class SlashOutcome {
+  const SlashOutcome({
+    required this.kind,
+    this.text = '',
+    this.notice = '',
+    this.target = '',
+  });
+
+  final SlashKind kind;
+
+  /// The output to show, the prompt to send, or the text to prefill.
+  final String text;
+
+  /// A note to show alongside a prefill.
+  final String notice;
+
+  /// The command an alias stands for.
+  final String target;
 }

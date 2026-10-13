@@ -31,6 +31,7 @@ abstract final class HistoryParser {
           .dateTimeOrNull,
       messageCount: row['message_count'].integer(),
       source: firstText(row, const ['source']),
+      profile: firstText(row, const ['profile']),
     );
   }
 
