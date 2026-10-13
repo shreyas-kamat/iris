@@ -11,6 +11,7 @@ import 'package:iris/data/chat/chat_models.dart';
 
 final class FakeChatBackend implements ChatBackend {
   final _events = StreamController<ChatEvent>.broadcast();
+  final _reconnects = StreamController<void>.broadcast();
 
   Result<List<ConversationSummary>> conversationsResult = const Ok([]);
   Result<List<TranscriptItem>> historyResult = const Ok([]);
@@ -33,10 +34,19 @@ final class FakeChatBackend implements ChatBackend {
   /// Delivers [event] as if the gateway had sent it.
   void emit(ChatEvent event) => _events.add(event);
 
-  Future<void> close() => _events.close();
+  /// Announces that the live link came back after a drop.
+  void reconnect() => _reconnects.add(null);
+
+  Future<void> close() async {
+    await _events.close();
+    await _reconnects.close();
+  }
 
   @override
   Stream<ChatEvent> get events => _events.stream;
+
+  @override
+  Stream<void> get reconnected => _reconnects.stream;
 
   @override
   Future<Result<List<ConversationSummary>>> conversations() async {

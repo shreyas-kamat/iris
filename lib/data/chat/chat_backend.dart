@@ -51,6 +51,11 @@ abstract interface class ChatBackend {
   /// for their own session.
   Stream<ChatEvent> get events;
 
+  /// Fires each time the live link comes back after a drop. A runtime
+  /// session belongs to the socket that created or resumed it, so an open
+  /// conversation has to resume again or its events go nowhere.
+  Stream<void> get reconnected;
+
   Future<Result<List<ConversationSummary>>> conversations();
 
   /// The newest page of [storedId]'s transcript, oldest first.
@@ -74,7 +79,10 @@ abstract interface class ChatBackend {
 }
 
 final class DashboardChat implements ChatBackend {
-  DashboardChat(this._session) {
+  DashboardChat(this._session)
+    : _live = _session.state.phase == LinkPhase.live,
+      _everLive = _session.state.phase == LinkPhase.live {
+    _linkSubscription = _session.states.listen(_onLink);
     _eventSubscription = _session.events.listen((event) {
       if (ChatEvent.fromEvent(event) case final parsed?) _events.add(parsed);
     });
@@ -96,9 +104,23 @@ final class DashboardChat implements ChatBackend {
   final _events = StreamController<ChatEvent>.broadcast();
   late final StreamSubscription<RpcEvent> _eventSubscription;
   late final StreamSubscription<RpcServerRequest> _requestSubscription;
+  late final StreamSubscription<LinkState> _linkSubscription;
+  final _reconnected = StreamController<void>.broadcast();
+  bool _live;
+  bool _everLive;
 
   @override
   Stream<ChatEvent> get events => _events.stream;
+
+  @override
+  Stream<void> get reconnected => _reconnected.stream;
+
+  void _onLink(LinkState state) {
+    final live = state.phase == LinkPhase.live;
+    if (live && !_live && _everLive) _reconnected.add(null);
+    if (live) _everLive = true;
+    _live = live;
+  }
 
   @override
   Future<Result<List<ConversationSummary>>> conversations() async =>
@@ -145,8 +167,10 @@ final class DashboardChat implements ChatBackend {
         }
       }
       return ResumedConversation(
-        runtimeId: HistoryParser.firstText(json, const ['session_id']) ?? storedId,
-        running: json['running'].boolOrNull ?? json['info']['running'].boolean(),
+        runtimeId:
+            HistoryParser.firstText(json, const ['session_id']) ?? storedId,
+        running:
+            json['running'].boolOrNull ?? json['info']['running'].boolean(),
         pending: pending,
       );
     });
@@ -191,8 +215,11 @@ final class DashboardChat implements ChatBackend {
       )).map((_) {});
 
   @override
-  Future<Result<void>> interrupt(String runtimeId) async => (await _session
-      .call('session.interrupt', params: {'session_id': runtimeId})).map((_) {});
+  Future<Result<void>> interrupt(String runtimeId) async =>
+      (await _session.call(
+        'session.interrupt',
+        params: {'session_id': runtimeId},
+      )).map((_) {});
 
   @override
   Future<Result<void>> answerApproval(
@@ -238,12 +265,16 @@ final class DashboardChat implements ChatBackend {
     // A single question is answered with the response frame itself.
     return _session.replyToServerRequest(request.requestId, {'answer': answer})
         ? const Ok(null)
-        : const Err(IrisFailure.offline(message: 'Not connected to the dashboard.'));
+        : const Err(
+            IrisFailure.offline(message: 'Not connected to the dashboard.'),
+          );
   }
 
   Future<void> dispose() async {
     await _eventSubscription.cancel();
     await _requestSubscription.cancel();
+    await _linkSubscription.cancel();
     await _events.close();
+    await _reconnected.close();
   }
 }

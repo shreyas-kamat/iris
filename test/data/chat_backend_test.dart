@@ -21,7 +21,11 @@ void main() {
 
   setUp(() async {
     http = FakeHttp()
-      ..on('POST', '/api/auth/ws-ticket', (_) => FakeReply.json({'ticket': 't'}));
+      ..on(
+        'POST',
+        '/api/auth/ws-ticket',
+        (_) => FakeReply.json({'ticket': 't'}),
+      );
     final connection = ServerConnection.create(
       const ServerConfig(id: 's', baseUrl: 'https://h.example', label: 'H'),
       adapter: http,
@@ -77,32 +81,35 @@ void main() {
     expect(query, containsPair('include_compacted', 'true'));
   });
 
-  test('resume returns the runtime id and the decisions still waiting', () async {
-    final future = chat.resume('abc');
-    final sent = await answer({
-      'session_id': 'run-1',
-      'running': true,
-      'open_requests': [
-        {
-          'id': 'srq-1',
-          'method': 'clarify',
-          'params': {'session_id': 'run-1', 'question': 'Which?'},
-        },
-        {
-          'id': 'srq-2',
-          'method': 'secret',
-          'params': {'session_id': 'run-1'},
-        },
-      ],
-    });
-    expect(sent['method'].stringOrNull, 'session.resume');
-    expect(sent['params']['session_id'].stringOrNull, 'abc');
-    expect(sent['params']['omit_messages'].boolOrNull, isTrue);
-    final resumed = (await future).valueOrNull!;
-    expect(resumed.runtimeId, 'run-1');
-    expect(resumed.running, isTrue);
-    expect(resumed.pending.single, isA<ClarifyAsked>());
-  });
+  test(
+    'resume returns the runtime id and the decisions still waiting',
+    () async {
+      final future = chat.resume('abc');
+      final sent = await answer({
+        'session_id': 'run-1',
+        'running': true,
+        'open_requests': [
+          {
+            'id': 'srq-1',
+            'method': 'clarify',
+            'params': {'session_id': 'run-1', 'question': 'Which?'},
+          },
+          {
+            'id': 'srq-2',
+            'method': 'secret',
+            'params': {'session_id': 'run-1'},
+          },
+        ],
+      });
+      expect(sent['method'].stringOrNull, 'session.resume');
+      expect(sent['params']['session_id'].stringOrNull, 'abc');
+      expect(sent['params']['omit_messages'].boolOrNull, isTrue);
+      final resumed = (await future).valueOrNull!;
+      expect(resumed.runtimeId, 'run-1');
+      expect(resumed.running, isTrue);
+      expect(resumed.pending.single, isA<ClarifyAsked>());
+    },
+  );
 
   test('create returns both ids', () async {
     final future = chat.create();
@@ -158,18 +165,25 @@ void main() {
     expect((await future).isOk, isTrue);
   });
 
-  test('a single server-request question is answered with a result frame', () async {
-    const request = ClarifyRequest(
-      requestId: 'srq-4',
-      sessionId: 'run-1',
-      questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
-    );
-    final result = await chat.answerClarify(request, request.questions.single, 'main');
-    expect(result.isOk, isTrue);
-    expect(socket.lastSent['id'].stringOrNull, 'srq-4');
-    expect(socket.lastSent['result']['answer'].stringOrNull, 'main');
-    expect(socket.lastSent['method'].exists, isFalse);
-  });
+  test(
+    'a single server-request question is answered with a result frame',
+    () async {
+      const request = ClarifyRequest(
+        requestId: 'srq-4',
+        sessionId: 'run-1',
+        questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+      );
+      final result = await chat.answerClarify(
+        request,
+        request.questions.single,
+        'main',
+      );
+      expect(result.isOk, isTrue);
+      expect(socket.lastSent['id'].stringOrNull, 'srq-4');
+      expect(socket.lastSent['result']['answer'].stringOrNull, 'main');
+      expect(socket.lastSent['method'].exists, isFalse);
+    },
+  );
 
   test('a batch question is locked by its qid', () async {
     const request = ClarifyRequest(
@@ -192,20 +206,27 @@ void main() {
     expect((await future).isOk, isTrue);
   });
 
-  test('a legacy clarify uses clarify.respond without a made-up question id', () async {
-    const request = ClarifyRequest(
-      requestId: 'c-1',
-      sessionId: 'run-1',
-      questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
-    );
-    final future = chat.answerClarify(request, request.questions.single, 'main');
-    final sent = await answer({'status': 'ok'});
-    expect(sent['method'].stringOrNull, 'clarify.respond');
-    expect(sent['params']['request_id'].stringOrNull, 'c-1');
-    expect(sent['params']['answer'].stringOrNull, 'main');
-    expect(sent['params']['question_id'].exists, isFalse);
-    expect((await future).isOk, isTrue);
-  });
+  test(
+    'a legacy clarify uses clarify.respond without a made-up question id',
+    () async {
+      const request = ClarifyRequest(
+        requestId: 'c-1',
+        sessionId: 'run-1',
+        questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+      );
+      final future = chat.answerClarify(
+        request,
+        request.questions.single,
+        'main',
+      );
+      final sent = await answer({'status': 'ok'});
+      expect(sent['method'].stringOrNull, 'clarify.respond');
+      expect(sent['params']['request_id'].stringOrNull, 'c-1');
+      expect(sent['params']['answer'].stringOrNull, 'main');
+      expect(sent['params']['question_id'].exists, isFalse);
+      expect((await future).isOk, isTrue);
+    },
+  );
 
   test('stream events and server requests arrive as chat events', () async {
     final events = <ChatEvent>[];
@@ -229,5 +250,18 @@ void main() {
       });
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(events.map((e) => e.runtimeType), [TextDelta, ApprovalAsked]);
+  });
+
+  test('a reconnect is announced once the link is live again', () async {
+    var reconnects = 0;
+    final subscription = chat.reconnected.listen((_) => reconnects++);
+    addTearDown(subscription.cancel);
+    final first = socket;
+    await first.serverCloses();
+    for (var i = 0; i < 100 && reconnects == 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(reconnects, 1);
+    expect(identical(socket, first), isFalse);
   });
 }

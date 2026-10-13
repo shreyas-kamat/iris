@@ -30,6 +30,7 @@ final class ChatController extends ValueNotifier<ChatState> {
   String? _storedId;
   String? _runtimeId;
   StreamSubscription<ChatEvent>? _subscription;
+  StreamSubscription<void>? _reconnects;
   bool _disposed = false;
 
   /// The stored id: given when opened, or set by a new chat's first send.
@@ -38,6 +39,7 @@ final class ChatController extends ValueNotifier<ChatState> {
   /// Starts following events, then reads the transcript and attaches to it.
   Future<void> open() async {
     _subscription ??= _backend.events.listen(_onEvent);
+    _reconnects ??= _backend.reconnected.listen((_) => unawaited(_reattach()));
     final storedId = _storedId;
     if (storedId == null) return;
     _update(ChatState(title: value.title));
@@ -60,6 +62,40 @@ final class ChatController extends ValueNotifier<ChatState> {
           turn: resumed.running ? TurnPhase.thinking : null,
         );
         for (final event in resumed.pending) {
+          next = next.apply(event);
+        }
+        _update(next);
+    }
+  }
+
+  /// After a reconnect. The old runtime session went with the old socket, so
+  /// its events and any Stop would go nowhere: read what was said while away,
+  /// then attach again. The old runtime id is kept until the new one arrives,
+  /// so a send in between does not start a second conversation.
+  Future<void> _reattach() async {
+    final storedId = _storedId;
+    if (storedId == null || _disposed) return;
+    final history = await _backend.history(storedId);
+    if (_disposed) return;
+    if (history case Ok(value: final items)) {
+      _update(value.copyWith(phase: ChatPhase.ready, items: items));
+    }
+    final resumed = await _backend.resume(storedId);
+    if (_disposed) return;
+    switch (resumed) {
+      case Err(:final failure):
+        _update(value.withError(describe(failure)));
+      case Ok(value: final again):
+        _runtimeId = again.runtimeId;
+        // Decisions are re-announced by the resume, so stale cards go.
+        var next = value.copyWith(
+          turn: again.running
+              ? (value.running ? value.turn : TurnPhase.thinking)
+              : TurnPhase.idle,
+          approvals: const [],
+          questions: const [],
+        );
+        for (final event in again.pending) {
           next = next.apply(event);
         }
         _update(next);
@@ -159,6 +195,7 @@ final class ChatController extends ValueNotifier<ChatState> {
   void dispose() {
     _disposed = true;
     unawaited(_subscription?.cancel());
+    unawaited(_reconnects?.cancel());
     super.dispose();
   }
 }

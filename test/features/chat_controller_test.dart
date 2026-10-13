@@ -80,17 +80,20 @@ void main() {
     expect(controller.value.turn, TurnPhase.waiting);
   });
 
-  test('sending shows the message and submits it to the runtime session', () async {
-    final controller = controllerFor();
-    await controller.open();
-    await controller.send('  hello  ');
-    expect(backend.submitted.single, ('run-1', 'hello'));
-    expect(
-      controller.value.items.last,
-      isA<UserTurn>().having((t) => t.text, 'text', 'hello'),
-    );
-    expect(controller.value.turn, TurnPhase.thinking);
-  });
+  test(
+    'sending shows the message and submits it to the runtime session',
+    () async {
+      final controller = controllerFor();
+      await controller.open();
+      await controller.send('  hello  ');
+      expect(backend.submitted.single, ('run-1', 'hello'));
+      expect(
+        controller.value.items.last,
+        isA<UserTurn>().having((t) => t.text, 'text', 'hello'),
+      );
+      expect(controller.value.turn, TurnPhase.thinking);
+    },
+  );
 
   test('a new chat is created on the first send', () async {
     final controller = controllerFor(id: null);
@@ -134,7 +137,10 @@ void main() {
 
   test('approving removes the card and answers', () async {
     backend.resumeResult = Ok(
-      ResumedConversation(runtimeId: 'run-1', pending: [ApprovalAsked(approval)]),
+      ResumedConversation(
+        runtimeId: 'run-1',
+        pending: [ApprovalAsked(approval)],
+      ),
     );
     final controller = controllerFor();
     await controller.open();
@@ -146,7 +152,10 @@ void main() {
   test('a failed answer puts the card back', () async {
     backend
       ..resumeResult = Ok(
-        ResumedConversation(runtimeId: 'run-1', pending: [ApprovalAsked(approval)]),
+        ResumedConversation(
+          runtimeId: 'run-1',
+          pending: [ApprovalAsked(approval)],
+        ),
       )
       ..answerResult = const Err(IrisFailure.offline());
     final controller = controllerFor();
@@ -171,5 +180,36 @@ void main() {
     await controller.answer(clarify, clarify.questions.single, ' main ');
     expect(backend.answers, ['q0=main']);
     expect(controller.value.questions, isEmpty);
+  });
+
+  test('a reconnect attaches again and catches up on the reply', () async {
+    // Seen on the emulator: the socket dropped mid-turn, the reply went to the
+    // old socket, and Stop then failed with "session not found".
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send('hi');
+    backend
+      ..historyResult = const Ok([
+        UserTurn(id: '1', text: 'hi'),
+        AssistantTurn(id: '2', text: 'pong'),
+      ])
+      ..resumeResult = const Ok(ResumedConversation(runtimeId: 'run-2'))
+      ..reconnect();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(
+      backend.calls.where((call) => call == 'resume stored-1'),
+      hasLength(2),
+    );
+    expect(
+      controller.value.items.last,
+      isA<AssistantTurn>().having((t) => t.text, 'text', 'pong'),
+    );
+    expect(controller.value.turn, TurnPhase.idle);
+    backend.emit(const TextDelta('run-2', 'more'));
+    await settle();
+    expect(
+      controller.value.items.last,
+      isA<AssistantTurn>().having((t) => t.text, 'text', 'more'),
+    );
   });
 }
