@@ -4,3 +4,5 @@
 tags:
   live:
     skip: "live: run explicitly with --tags live"
+  live_write:
+    skip: "live_write: sends a real prompt; run explicitly with --tags live_write"

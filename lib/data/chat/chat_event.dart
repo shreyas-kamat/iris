@@ -28,36 +28,58 @@ sealed class ChatEvent {
         return MessageStarted(session);
       case 'message.delta':
         final delta =
-            payload['text'].stringOrNull ?? event.raw['text'].stringOrNull ?? '';
+            payload['text'].stringOrNull ??
+            event.raw['text'].stringOrNull ??
+            '';
         return delta.isEmpty ? null : TextDelta(session, delta);
-      case 'reasoning.delta' || 'message.reasoning' || 'message.reasoning.delta':
+      case 'thinking.delta' ||
+          'reasoning.delta' ||
+          'message.reasoning' ||
+          'message.reasoning.delta':
         final thought =
-            payload
-                .any(const ['reasoning', 'reasoning_content', 'text', 'content'])
-                .stringOrNull ??
+            payload.any(const [
+              'reasoning',
+              'reasoning_content',
+              'text',
+              'content',
+            ]).stringOrNull ??
             event.raw.any(const ['reasoning', 'text']).stringOrNull ??
             '';
         return thought.isEmpty ? null : ReasoningDelta(session, thought);
       case 'message.complete':
         return MessageCompleted(
           session,
-          content: payload.any(const ['content', 'text', 'rendered']).stringOrNull,
+          content: payload.any(const [
+            'content',
+            'text',
+            'rendered',
+          ]).stringOrNull,
           reasoning: payload['reasoning'].stringOrNull,
         );
       case 'tool.start' || 'tool_call':
         return ToolStarted(
           session,
           toolId: HistoryParser.firstText(payload, _toolIdKeys),
-          name: HistoryParser.firstText(payload, const ['name', 'tool_name']) ?? 'tool',
+          name:
+              HistoryParser.firstText(payload, const ['name', 'tool_name']) ??
+              'tool',
           input: _text(
-            payload.any(const ['args_text', 'context', 'input', 'arguments', 'args']),
+            payload.any(const [
+              'args_text',
+              'context',
+              'input',
+              'arguments',
+              'args',
+            ]),
           ),
         );
       case 'tool.complete' || 'tool_result':
         return ToolCompleted(
           session,
           toolId: HistoryParser.firstText(payload, _toolIdKeys),
-          name: HistoryParser.firstText(payload, const ['name', 'tool_name']) ?? 'tool',
+          name:
+              HistoryParser.firstText(payload, const ['name', 'tool_name']) ??
+              'tool',
           output: _text(payload.any(const ['output', 'result'])),
           failed: payload['is_error'].boolean() || payload['error'].hasValue,
         );
@@ -80,10 +102,16 @@ sealed class ChatEvent {
         final clarify = parseClarify(payload, session);
         return clarify == null ? null : ClarifyAsked(clarify);
       case 'clarify.expire':
-        final expired = HistoryParser.firstText(payload, const ['request_id', 'requestId']);
+        final expired = HistoryParser.firstText(payload, const [
+          'request_id',
+          'requestId',
+        ]);
         return expired == null ? null : RequestWithdrawn(session, expired);
       case 'request.cancel':
-        final cancelled = HistoryParser.firstText(payload, const ['id', 'request_id']);
+        final cancelled = HistoryParser.firstText(payload, const [
+          'id',
+          'request_id',
+        ]);
         return cancelled == null ? null : RequestWithdrawn(session, cancelled);
       default:
         return null;
@@ -131,14 +159,23 @@ sealed class ChatEvent {
     final permanent = payload['allow_permanent'].boolOrNull ?? true;
     return ApprovalRequest(
       sessionId: sessionId,
-      command: HistoryParser.firstText(payload, const ['command', 'code', 'text']) ?? '',
+      command:
+          HistoryParser.firstText(payload, const ['command', 'code', 'text']) ??
+          '',
       description:
-          HistoryParser.firstText(payload, const ['description', 'message', 'prompt']) ??
+          HistoryParser.firstText(payload, const [
+            'description',
+            'message',
+            'prompt',
+          ]) ??
           'Approval required',
       choices: offered.isNotEmpty
           ? offered
           : ['once', 'session', if (permanent) 'always', 'deny'],
-      queueId: HistoryParser.firstText(payload, const ['request_id', 'requestId']),
+      queueId: HistoryParser.firstText(payload, const [
+        'request_id',
+        'requestId',
+      ]),
       serverRequestId: serverRequestId,
     );
   }
@@ -152,19 +189,37 @@ sealed class ChatEvent {
   }) {
     final id =
         requestId ??
-        HistoryParser.firstText(payload, const ['request_id', 'requestId', 'id']);
+        HistoryParser.firstText(payload, const [
+          'request_id',
+          'requestId',
+          'id',
+        ]);
     if (id == null || id.isEmpty) return null;
     final questions = <ClarifyQuestion>[];
     for (final entry in payload['questions'].list) {
-      final text = HistoryParser.firstText(entry, const ['question', 'prompt', 'text']);
-      final qid = HistoryParser.firstText(entry, const ['qid', 'question_id', 'id']);
+      final text = HistoryParser.firstText(entry, const [
+        'question',
+        'prompt',
+        'text',
+      ]);
+      final qid = HistoryParser.firstText(entry, const [
+        'qid',
+        'question_id',
+        'id',
+      ]);
       if (text == null || qid == null || questions.any((q) => q.id == qid)) {
         continue;
       }
-      questions.add(ClarifyQuestion(id: qid, text: text, choices: _choices(entry)));
+      questions.add(
+        ClarifyQuestion(id: qid, text: text, choices: _choices(entry)),
+      );
     }
     if (questions.isEmpty) {
-      final text = HistoryParser.firstText(payload, const ['question', 'prompt', 'text']);
+      final text = HistoryParser.firstText(payload, const [
+        'question',
+        'prompt',
+        'text',
+      ]);
       if (text == null) return null;
       questions.add(
         ClarifyQuestion(
@@ -175,7 +230,11 @@ sealed class ChatEvent {
         ),
       );
     }
-    return ClarifyRequest(requestId: id, sessionId: sessionId, questions: questions);
+    return ClarifyRequest(
+      requestId: id,
+      sessionId: sessionId,
+      questions: questions,
+    );
   }
 
   /// Offered answers: plain strings, or `{label, value}` objects.
@@ -185,7 +244,13 @@ sealed class ChatEvent {
     for (final entry in raw.list) {
       final label =
           entry.stringOrNull?.trim() ??
-          HistoryParser.firstText(entry, const ['label', 'title', 'text', 'name', 'value']);
+          HistoryParser.firstText(entry, const [
+            'label',
+            'title',
+            'text',
+            'name',
+            'value',
+          ]);
       if (label == null || label.isEmpty) continue;
       final value =
           entry.stringOrNull?.trim() ??

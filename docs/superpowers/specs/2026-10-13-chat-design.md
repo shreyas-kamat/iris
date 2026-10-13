@@ -41,7 +41,7 @@ the **runtime** id:
 |---|---|
 | `message.start` | (none) |
 | `message.delta` | `text` |
-| `reasoning.delta` (also `message.reasoning`, `message.reasoning.delta`) | `reasoning`, `reasoning_content`, `text` or `content` |
+| `thinking.delta` (what 0.18.2 actually sends; also `reasoning.delta`, `message.reasoning`, `message.reasoning.delta`) | `reasoning`, `reasoning_content`, `text` or `content` |
 | `message.complete` | `content` / `text` / `rendered`, and `reasoning` |
 | `tool.start` (also `tool_call`) | `tool_id` / `tool_call_id` / `call_id`, `name`, `args_text` / `context` / `input` / `arguments` / `args` |
 | `tool.complete` (also `tool_result`) | the same ids, plus `name` and `output` / `result` |
@@ -73,6 +73,11 @@ clarifying questions as server requests (string id `srq-…`):
 - `prompt.submit {session_id: <runtime>, text}` (180 s timeout) answers `{"status": "streaming"}`. The reply
   arrives as events.
 - `session.interrupt {session_id: <runtime>}` stops a turn.
+
+**Observed on a real turn (2026-10-13).** The order was `session.info`, `message.start`, `thinking.delta`…, `message.delta`,
+`reasoning.available` (ignored), `message.complete {text, usage, status}`, `session.info`, `session.title`. No `session.busy`
+was sent. This agent took 158 s to answer "pong" and streamed nothing until near the end, so the UI must hold a
+"thinking" state for minutes.
 
 ## Architecture
 
