@@ -10,43 +10,22 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
-import 'package:iris/core/result.dart';
 import 'package:iris/data/db/database.dart';
 import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/credentials.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/repositories/server_repository.dart';
 
-/// An in-memory credential store, so tests never touch the real keystore.
-final class FakeSecureStorage implements CredentialStore {
-  final Map<String, String> entries = {};
-
-  @override
-  Future<Result<String?>> read(String serverId) async => Ok(entries[serverId]);
-
-  @override
-  Future<Result<void>> write(String serverId, String password) async {
-    entries[serverId] = password;
-    return const Ok(null);
-  }
-
-  @override
-  Future<void> delete(String serverId) async {
-    entries.remove(serverId);
-  }
-
-  @override
-  Future<void> deleteAll() async => entries.clear();
-}
+import '../support/fakes.dart';
 
 void main() {
   late IrisDatabase db;
-  late FakeSecureStorage credentials;
+  late FakeCredentialStore credentials;
   late ServerRepository repository;
 
   setUp(() {
     db = IrisDatabase(NativeDatabase.memory());
-    credentials = FakeSecureStorage();
+    credentials = FakeCredentialStore();
     repository = ServerRepository(database: db, credentials: credentials);
   });
 
@@ -73,7 +52,7 @@ void main() {
             requiresPassword: Value(requiresPassword),
           ),
         );
-    if (password != null) await credentials.write(id, password);
+    if (password != null) await credentials.write(id, ServerSecrets(password: password));
     return id;
   }
 

@@ -249,7 +249,10 @@ final class ServerRepository {
         connection.close();
         return Err(failure);
       }
-      final stored = await _credentials.write(config.id, password);
+      final stored = await _credentials.write(
+        config.id,
+        ServerSecrets(password: password),
+      );
       if (stored case Err(:final failure)) {
         connection.close();
         return Err(failure);
@@ -285,16 +288,16 @@ final class ServerRepository {
     final stored = await _credentials.read(config.id);
     return switch (stored) {
       Err(:final failure) => Err(failure),
-      Ok(value: final password) when password == null || password.isEmpty =>
+      Ok(:final value) when value.password == null || value.password!.isEmpty =>
         const Err(
           IrisFailure(
             FailureKind.unauthorized,
             message: 'Sign in to this server again.',
           ),
         ),
-      Ok(value: final password) => await connectionFor(
+      Ok(:final value) => await connectionFor(
         config,
-      ).auth.signIn(password!),
+      ).auth.signIn(value.password!),
     };
   }
 
