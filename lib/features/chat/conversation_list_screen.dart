@@ -90,6 +90,7 @@ class _ConversationListScreenState
     final profile = ref.watch(activeProfileProvider);
     final (linkState, headline, _) = describeLink(link);
     final live = link.phase == LinkPhase.live;
+    final now = ref.read(clockProvider)();
     final gutter = context.window.gutter;
 
     return IrisScaffold(
@@ -134,6 +135,7 @@ class _ConversationListScreenState
                 headline: headline,
                 host: server == null ? '' : _hostOf(server.baseUrl),
                 total: conversations.value?.total,
+                now: now,
                 onGateway: () => unawaited(
                   Navigator.of(context).push(
                     IrisPageRoute<void>(
@@ -155,6 +157,7 @@ class _ConversationListScreenState
                       ? null
                       : (offset) => unawaited(_loadMore(chat, offset)),
                   onRetry: () => ref.invalidate(conversationsProvider),
+                  now: now,
                 ),
               ),
             ],
@@ -267,6 +270,7 @@ class _ProfilePill extends StatelessWidget {
 /// The greeting, the orb and the gateway line.
 class _Hero extends StatelessWidget {
   const _Hero({
+    required this.now,
     required this.orbState,
     required this.linkState,
     required this.headline,
@@ -286,6 +290,9 @@ class _Hero extends StatelessWidget {
   /// Conversations in all, when the first page has loaded.
   final int? total;
   final VoidCallback onGateway;
+
+  /// The moment the screen is drawn at, for the greeting.
+  final DateTime now;
 
   /// The design's time-of-day greeting. Read on each build, which is what the
   /// screen needs: it is rebuilt on every link change, and that is often enough.
@@ -316,7 +323,7 @@ class _Hero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_greeting(DateTime.now()), style: type.serif),
+                Text(_greeting(now), style: type.serif),
                 const SizedBox(height: IrisSpace.xs),
                 Text.rich(
                   TextSpan(
@@ -465,6 +472,7 @@ class _NewChatBar extends StatelessWidget {
 
 class _ConversationList extends StatelessWidget {
   const _ConversationList({
+    required this.now,
     required this.conversations,
     required this.more,
     required this.loadingMore,
@@ -481,6 +489,9 @@ class _ConversationList extends StatelessWidget {
   /// Loads the next page from an offset; null when none can load.
   final ValueChanged<int>? onMore;
   final VoidCallback onRetry;
+
+  /// The moment the list is drawn at, for relative times.
+  final DateTime now;
 
   static String? _subtitle(ConversationSummary conversation, DateTime now) {
     final parts = [
@@ -532,7 +543,7 @@ class _ConversationList extends StatelessWidget {
       );
     }
     final hasMore = list.length < page.total;
-    final now = DateTime.now();
+    final now = this.now;
     final open = onOpen;
     final next = onMore;
     // Index 0 is the section label. The bottom padding is the height of the

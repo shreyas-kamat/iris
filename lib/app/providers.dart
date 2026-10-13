@@ -216,3 +216,8 @@ final profilesProvider = FutureProvider<List<AgentProfile>?>((ref) async {
     Err(:final failure) => throw failure,
   };
 });
+
+/// The wall clock, as a provider so the time-of-day greeting and the relative
+/// times on screen can be fixed under test. Without this, a golden of the home
+/// screen would depend on what hour it was rendered.
+final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
