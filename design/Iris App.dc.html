@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&amp;family=Geist+Mono:wght@400;500&amp;family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet">
+<script src="./iris.js"></script>
+<style>body{margin:0;background:#07070A;color:#ECEBF2;font-family:Geist,system-ui,sans-serif;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#B9AFFF}a:hover{color:#fff}button{font-family:inherit;color:inherit}textarea::placeholder,input::placeholder{color:#6E6C7E}::-webkit-scrollbar{display:none}@keyframes irisIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@keyframes caret{50%{opacity:0}}</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-wrap:wrap;gap:56px;align-items:center;justify-content:center;padding:48px 24px;background:radial-gradient(ellipse 60% 50% at 62% 40%, rgba(155,123,255,.10), transparent 70%), #07070A">
+
+  <div style="flex:1 1 300px;max-width:360px;display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="font:500 11px 'Geist Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#8C8A9B">Hermes agent · mobile</div>
+      <div style="font:400 64px/0.95 'Instrument Serif',serif;letter-spacing:-.01em">Iris</div>
+      <div style="font:400 15px/1.5 Geist,sans-serif;color:#A9A7B8;text-wrap:pretty">One living mark carries the agent's state everywhere — the home hero, every session row, the chat header, the send button and voice mode. Tap a state to preview it.</div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;height:180px;border-radius:24px;background:#0E0E14;border:1px solid rgba(255,255,255,.06)">
+      <iris-orb state="{{ heroState }}" size="150" glow="{{ glow }}"></iris-orb>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+      <sc-for list="{{ legend }}" as="l" hint-placeholder-count="9">
+        <button onClick="{{ l.pick }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px 10px;border-radius:16px;cursor:pointer;background:{{ l.bg }};border:1px solid {{ l.border }};transition:background .25s,border-color .25s">
+          <iris-orb state="{{ l.id }}" size="40" glow="{{ glow }}"></iris-orb>
+          <span style="font:500 12px Geist,sans-serif">{{ l.name }}</span>
+          <span style="font:400 10.5px/1.3 Geist,sans-serif;color:#8C8A9B;text-align:center">{{ l.desc }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="font:400 12px/1.6 'Geist Mono',monospace;color:#6E6C7E">Try: open a session · send a message · type "fail" to see recovery · tap the mic for voice.</div>
+  </div>
+
+  <div style="flex:none;width:414px;height:868px;padding:12px;border-radius:64px;background:linear-gradient(160deg,#2B2A33,#121217 40%,#1C1B22);box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 40px 120px rgba(0,0,0,.7),0 0 140px rgba(155,123,255,.08)">
+    <div style="position:relative;width:390px;height:844px;border-radius:52px;overflow:hidden;background:#0B0B10">
+      <div style="position:absolute;top:11px;left:50%;transform:translateX(-50%);width:124px;height:36px;border-radius:20px;background:#000;z-index:60"></div>
+      <div style="position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;justify-content:space-between;padding:6px 34px 0 40px;z-index:55;pointer-events:none">
+        <span style="font:600 16px Geist,sans-serif">9:41</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:flex-end;gap:2px;height:11px"><div style="width:3px;height:4px;background:#fff;border-radius:1px"></div><div style="width:3px;height:6px;background:#fff;border-radius:1px"></div><div style="width:3px;height:8px;background:#fff;border-radius:1px"></div><div style="width:3px;height:11px;background:#fff;border-radius:1px"></div></div>
+          <div style="width:24px;height:12px;border-radius:4px;border:1px solid rgba(255,255,255,.5);padding:1.5px"><div style="width:75%;height:100%;background:#fff;border-radius:2px"></div></div>
+        </div>
+      </div>
+
+      <!-- HOME -->
+      <div style="position:absolute;inset:0;padding-top:54px;display:flex;flex-direction:column;transition:transform .6s cubic-bezier(.32,.72,0,1),opacity .5s,filter .5s;transform:{{ homeT }};opacity:{{ homeO }};z-index:1">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 20px">
+          <button style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;border-radius:999px;background:#15151C;border:1px solid rgba(255,255,255,.06);cursor:pointer">
+            <div style="width:28px;height:28px;border-radius:50%;background:#221F33;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">H</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.1"><span style="font:400 10px Geist;color:#8C8A9B">Workspace</span><span style="font:500 13px Geist">Hermes Ops</span></div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8C8A9B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l5 5 5-5"></path></svg>
+          </button>
+          <button onClick="{{ openSettings }}" style="width:40px;height:40px;border-radius:50%;background:#15151C;border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(.92)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg>
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:16px;padding:18px 24px 22px">
+          <iris-orb state="{{ heroState }}" size="84" glow="{{ glow }}"></iris-orb>
+          <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+            <div style="font:italic 400 32px/1 'Instrument Serif',serif">Good evening.</div>
+            <div style="font:400 13.5px/1.35 Geist;color:#A9A7B8">Iris is <span style="color:{{ heroColor }};transition:color .4s">{{ heroLabelLower }}</span> · 2 sessions running</div>
+            <div style="display:flex;align-items:center;gap:6px;font:400 11px 'Geist Mono',monospace;color:#6E6C7E"><span style="width:6px;height:6px;border-radius:50%;background:#6EE787"></span>gateway · 127.0.0.1:8765 · 12ms</div>
+          </div>
+        </div>
+
+        <div style="margin:0 20px;position:relative;display:grid;grid-template-columns:repeat(3,1fr);padding:4px;border-radius:14px;background:#13131A;border:1px solid rgba(255,255,255,.05)">
+          <div style="position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px)/3);border-radius:10px;background:#22212D;box-shadow:0 1px 0 rgba(255,255,255,.06) inset;transition:transform .45s cubic-bezier(.32,.72,0,1);transform:{{ tabT }}"></div>
+          <button onClick="{{ tabSessions }}" style="position:relative;height:34px;border:0;background:none;font:500 13px Geist;cursor:pointer;color:{{ tabC0 }};transition:color .3s">Sessions</button>
+          <button onClick="{{ tabScheduled }}" style="position:relative;height:34px;border:0;background:none;font:500 13px Geist;cursor:pointer;color:{{ tabC1 }};transition:color .3s">Scheduled</button>
+          <button onClick="{{ tabTasks }}" style="position:relative;height:34px;border:0;background:none;font:500 13px Geist;cursor:pointer;color:{{ tabC2 }};transition:color .3s">Tasks</button>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:18px 20px 130px">
+          <sc-if value="{{ isSessions }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:6px;animation:irisIn .4s ease both">
+              <div style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#6E6C7E;padding:0 4px 6px">Live</div>
+              <sc-for list="{{ liveSessions }}" as="s" hint-placeholder-count="3">
+                <button onClick="{{ s.open }}" style="display:flex;align-items:center;gap:12px;padding:10px 12px 10px 10px;border-radius:18px;background:#13131A;border:1px solid rgba(255,255,255,.05);text-align:left;cursor:pointer;transition:transform .2s,background .2s" style-hover="background:#181820" style-active="transform:scale(.98)">
+                  <div style="width:44px;height:44px;border-radius:14px;background:#0B0B10;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="{{ s.state }}" size="36" glow="{{ glow }}"></iris-orb></div>
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                    <span style="font:500 14px/1.25 Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.title }}</span>
+                    <span style="font:400 11px 'Geist Mono',monospace;color:#6E6C7E">{{ s.meta }}</span>
+                  </div>
+                  <span style="font:500 11px Geist;padding:4px 8px;border-radius:999px;color:{{ s.color }};background:{{ s.tint }};flex:none">{{ s.live }}</span>
+                </button>
+              </sc-for>
+              <div style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#6E6C7E;padding:18px 4px 6px">Earlier</div>
+              <sc-for list="{{ pastSessions }}" as="s" hint-placeholder-count="4">
+                <button onClick="{{ s.open }}" style="display:flex;align-items:center;gap:12px;padding:10px 12px 10px 10px;border-radius:18px;background:transparent;border:1px solid transparent;text-align:left;cursor:pointer;transition:background .2s,transform .2s" style-hover="background:#13131A" style-active="transform:scale(.98)">
+                  <div style="width:44px;height:44px;border-radius:14px;background:#111117;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="rest" size="30" glow="off"></iris-orb></div>
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                    <span style="font:400 14px/1.25 Geist;color:#D6D4E0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.title }}</span>
+                    <span style="font:400 11px 'Geist Mono',monospace;color:#6E6C7E">{{ s.meta }}</span>
+                  </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A4958" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isScheduled }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px;animation:irisIn .4s ease both">
+              <sc-for list="{{ crons }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:14px;padding:14px 14px 14px 16px;border-radius:18px;background:#13131A;border:1px solid rgba(255,255,255,.05)">
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+                    <span style="font:500 14px Geist">{{ c.title }}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <span style="font:400 11px 'Geist Mono',monospace;padding:3px 7px;border-radius:6px;background:#0B0B10;color:#A9A7B8">{{ c.cron }}</span>
+                      <span style="font:400 11.5px Geist;color:{{ c.nextColor }}">{{ c.next }}</span>
+                    </div>
+                  </div>
+                  <button onClick="{{ c.toggle }}" style="width:50px;height:30px;border-radius:999px;border:0;padding:3px;cursor:pointer;background:{{ c.trackBg }};transition:background .3s;flex:none">
+                    <div style="width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35);transition:transform .35s cubic-bezier(.34,1.56,.64,1);transform:{{ c.knobT }}"></div>
+                  </button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:12px;animation:irisIn .4s ease both">
+              <div style="display:flex;gap:6px;overflow-x:auto;margin:0 -20px;padding:0 20px">
+                <sc-for list="{{ taskFilters }}" as="f" hint-placeholder-count="4">
+                  <button onClick="{{ f.pick }}" style="flex:none;display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;cursor:pointer;font:500 12.5px Geist;background:{{ f.bg }};color:{{ f.color }};border:1px solid {{ f.border }};transition:all .25s">{{ f.name }}<span style="font:400 11px 'Geist Mono',monospace;opacity:.7">{{ f.count }}</span></button>
+                </sc-for>
+              </div>
+              <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:12px;padding:14px 16px;border-radius:18px;background:#13131A;border:1px solid rgba(255,255,255,.05);animation:irisIn .35s ease both">
+                  <div style="display:flex;align-items:flex-start;gap:10px">
+                    <sc-if value="{{ t.running }}"><iris-orb state="tool" size="22" glow="{{ glow }}"></iris-orb></sc-if>
+                    <span style="flex:1;font:500 14.5px/1.35 Geist;text-wrap:pretty">{{ t.title }}</span>
+                  </div>
+                  <sc-if value="{{ t.running }}">
+                    <div style="height:4px;border-radius:2px;background:#22212D;overflow:hidden"><div style="height:100%;border-radius:2px;background:#FFB547;width:{{ t.progress }}"></div></div>
+                  </sc-if>
+                  <div style="display:flex;justify-content:space-between;font:400 11px 'Geist Mono',monospace;color:#6E6C7E"><span>{{ t.meta }}</span><span>{{ t.id }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:24px 16px 34px;background:linear-gradient(to top,#0B0B10 55%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid rgba(255,255,255,.08);box-shadow:0 12px 40px rgba(0,0,0,.5)">
+            <button onClick="{{ newChat }}" style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;border:0;background:none;cursor:pointer;font:400 15px Geist;color:#8C8A9B;text-align:left">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…
+            </button>
+            <button onClick="{{ openVoice }}" style="width:44px;height:44px;border-radius:18px;border:0;background:#221F33;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s" style-active="transform:scale(.9)">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHAT -->
+      <div style="position:absolute;inset:0;padding-top:54px;display:flex;flex-direction:column;background:#0B0B10;box-shadow:-30px 0 60px rgba(0,0,0,.5);transition:transform .6s cubic-bezier(.32,.72,0,1);transform:{{ chatT }};z-index:2">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 12px;border-bottom:1px solid rgba(255,255,255,.05)">
+          <button onClick="{{ goHome }}" style="width:40px;height:40px;border-radius:50%;background:#15151C;border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(.92)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+          </button>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px">
+            <iris-orb state="{{ agentState }}" size="34" glow="{{ glow }}"></iris-orb>
+            <div style="min-width:0;display:flex;flex-direction:column;gap:1px">
+              <span style="font:500 14px Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ chatTitle }}</span>
+              <span style="font:500 11.5px Geist;color:{{ agentColor }};transition:color .4s">{{ agentLabel }}</span>
+            </div>
+          </div>
+          <button style="width:40px;height:40px;border-radius:50%;background:#15151C;border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;cursor:pointer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+          </button>
+        </div>
+
+        <div ref="{{ scrollRef }}" style="flex:1;overflow-y:auto;padding:20px 18px 24px;display:flex;flex-direction:column;gap:22px">
+          <sc-if value="{{ chatEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:40px 0;animation:irisIn .5s ease both">
+              <iris-orb state="idle" size="110" glow="{{ glow }}"></iris-orb>
+              <div style="font:italic 400 30px/1.1 'Instrument Serif',serif;text-align:center">What should we<br>work on?</div>
+              <div style="display:flex;flex-direction:column;gap:8px;width:100%;padding-top:8px">
+                <sc-for list="{{ suggestions }}" as="q" hint-placeholder-count="3">
+                  <button onClick="{{ q.send }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;border-radius:16px;background:#13131A;border:1px solid rgba(255,255,255,.05);font:400 14px Geist;text-align:left;cursor:pointer;transition:background .2s,transform .2s" style-hover="background:#1A1922" style-active="transform:scale(.98)">{{ q.text }}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"></path></svg></button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-for list="{{ messages }}" as="m" hint-placeholder-count="0">
+            <div style="display:flex;flex-direction:column;gap:10px;animation:irisIn .45s cubic-bezier(.2,.8,.2,1) both">
+              <sc-if value="{{ m.isUser }}">
+                <div style="align-self:flex-end;max-width:82%;padding:11px 15px;border-radius:20px 20px 6px 20px;background:#25223A;font:400 15px/1.45 Geist;white-space:pre-wrap">{{ m.text }}</div>
+              </sc-if>
+              <sc-if value="{{ m.isAgent }}">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <iris-orb state="{{ m.orb }}" size="20" glow="{{ glow }}"></iris-orb>
+                    <span style="font:500 13px Geist">Iris</span>
+                    <span style="font:400 11px 'Geist Mono',monospace;color:#6E6C7E">{{ m.meta }}</span>
+                  </div>
+                  <sc-if value="{{ m.hasThoughts }}">
+                    <div style="border-radius:16px;background:#111118;border:1px solid rgba(155,123,255,.14);overflow:hidden">
+                      <button onClick="{{ m.toggleThoughts }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:10px 12px;border:0;background:none;cursor:pointer;font:500 12.5px Geist;color:#B9AFFF;text-align:left">
+                        <span style="flex:1">{{ m.thoughtsTitle }}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transition:transform .35s;transform:{{ m.chevT }}"><path d="M7 10l5 5 5-5"></path></svg>
+                      </button>
+                      <div style="max-height:{{ m.thoughtsMax }};overflow:hidden;transition:max-height .45s cubic-bezier(.32,.72,0,1)">
+                        <div style="padding:0 12px 12px;font:italic 400 13px/1.55 Geist;color:#8C8A9B">{{ m.thoughts }}</div>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.hasTool }}">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#111118;border:1px solid rgba(255,255,255,.05)">
+                      <div style="width:28px;height:28px;border-radius:9px;background:#1A1922;display:flex;align-items:center;justify-content:center;flex:none">
+                        <sc-if value="{{ m.toolRunning }}"><iris-orb state="tool" size="24" glow="{{ glow }}"></iris-orb></sc-if>
+                        <sc-if value="{{ m.toolDone }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6EE787" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg></sc-if>
+                        <sc-if value="{{ m.toolFailed }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></sc-if>
+                      </div>
+                      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                        <span style="font:500 12.5px 'Geist Mono',monospace;color:#ECEBF2">{{ m.toolName }}</span>
+                        <span style="font:400 11px 'Geist Mono',monospace;color:#6E6C7E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.toolArg }}</span>
+                      </div>
+                      <span style="font:400 11px Geist;color:{{ m.toolColor }};flex:none">{{ m.toolStatus }}</span>
+                    </div>
+                  </sc-if>
+                  <div style="font:400 15px/1.6 Geist;color:#E2E0EA;white-space:pre-wrap;text-wrap:pretty">{{ m.text }}<sc-if value="{{ m.streaming }}"><span style="display:inline-block;width:8px;height:16px;margin-left:2px;vertical-align:-2px;border-radius:2px;background:#4FE3C1;animation:caret 1s steps(1) infinite"></span></sc-if></div>
+                  <sc-if value="{{ m.hasCode }}">
+                    <div style="border-radius:14px;background:#0F0F15;border:1px solid rgba(255,255,255,.06);overflow:hidden">
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05)">
+                        <span style="font:400 11px 'Geist Mono',monospace;color:#6E6C7E">{{ m.codeLang }}</span>
+                        <button onClick="{{ m.copy }}" style="display:flex;align-items:center;gap:5px;border:0;background:none;cursor:pointer;font:500 11px Geist;color:#B9AFFF">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a1 1 0 0 1 1-1h9"></path></svg>{{ m.copyLabel }}
+                        </button>
+                      </div>
+                      <pre style="margin:0;padding:12px;font:400 12.5px/1.6 'Geist Mono',monospace;color:#C9C3FF;overflow-x:auto">{{ m.code }}</pre>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ m.failed }}">
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border-radius:16px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.22)">
+                      <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+                        <span style="font:500 13px Geist;color:#FF8F8F">Gateway timed out</span>
+                        <span style="font:400 11px 'Geist Mono',monospace;color:#B98A8A">502 · after 30s on read_logs</span>
+                      </div>
+                      <button onClick="{{ m.retry }}" style="height:34px;padding:0 14px;border-radius:999px;border:0;background:#FF6B6B;color:#1A0B0B;font:600 12.5px Geist;cursor:pointer" style-active="transform:scale(.95)">Retry</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="padding:8px 12px 34px">
+          <div style="display:flex;flex-direction:column;gap:6px;padding:10px 8px 8px 14px;border-radius:24px;background:#15141C;border:1px solid {{ composerBorder }};transition:border-color .4s">
+            <textarea value="{{ input }}" onChange="{{ onInput }}" onKeyDown="{{ onKey }}" placeholder="Message Iris…" rows="1" style="width:100%;resize:none;border:0;outline:0;background:none;color:#ECEBF2;font:400 15px/1.45 Geist;padding:2px 0;max-height:100px"></textarea>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button style="width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.08);background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#A9A7B8"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></button>
+              <button style="height:32px;display:flex;align-items:center;gap:6px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:none;cursor:pointer;font:400 12px 'Geist Mono',monospace;color:#A9A7B8">opus-4.5 · high<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 10l5 5 5-5"></path></svg></button>
+              <div style="flex:1"></div>
+              <sc-if value="{{ showMic }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ openVoice }}" style="width:40px;height:40px;border-radius:50%;border:0;background:#221F33;display:flex;align-items:center;justify-content:center;cursor:pointer" style-active="transform:scale(.9)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+              </sc-if>
+              <sc-if value="{{ showSend }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ sendInput }}" style="width:40px;height:40px;border-radius:50%;border:0;background:#C9C3FF;display:flex;align-items:center;justify-content:center;cursor:pointer;animation:irisIn .25s ease both" style-active="transform:scale(.9)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#14121F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+              </sc-if>
+              <sc-if value="{{ showStop }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ stop }}" style="position:relative;width:40px;height:40px;border-radius:50%;border:0;background:#1E1D27;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0" style-active="transform:scale(.9)">
+                  <iris-orb state="{{ agentState }}" size="40" glow="off" style="position:absolute;inset:0"></iris-orb>
+                  <div style="position:relative;width:10px;height:10px;border-radius:2px;background:#ECEBF2"></div>
+                </button>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div style="position:absolute;inset:0;padding-top:54px;display:flex;flex-direction:column;background:#0B0B10;box-shadow:-30px 0 60px rgba(0,0,0,.5);transition:transform .6s cubic-bezier(.32,.72,0,1);transform:{{ setT }};z-index:3">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 14px 8px">
+          <button onClick="{{ goHome }}" style="width:40px;height:40px;border-radius:50%;background:#15151C;border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:4px 20px 40px;display:flex;flex-direction:column;gap:22px">
+          <div style="font:italic 400 38px/1 'Instrument Serif',serif;padding:0 4px">Settings</div>
+          <div style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:22px;background:#13131A;border:1px solid rgba(255,255,255,.05)">
+            <iris-orb state="success" size="48" glow="{{ glow }}"></iris-orb>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font:500 15px Geist">Gateway connected</span><span style="font:400 11.5px 'Geist Mono',monospace;color:#6E6C7E">127.0.0.1:8765 · hermes 2.4.1</span></div>
+          </div>
+          <sc-for list="{{ settingGroups }}" as="g" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#6E6C7E;padding:0 6px">{{ g.name }}</div>
+              <div style="border-radius:20px;background:#13131A;border:1px solid rgba(255,255,255,.05);overflow:hidden">
+                <sc-for list="{{ g.rows }}" as="r">
+                  <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid {{ r.line }}">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:400 14.5px Geist">{{ r.label }}</span><span style="font:400 12px Geist;color:#6E6C7E">{{ r.sub }}</span></div>
+                    <span style="font:400 12px 'Geist Mono',monospace;color:#A9A7B8">{{ r.value }}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4A4958" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- VOICE -->
+      <div style="position:absolute;inset:0;padding:54px 24px 40px;display:flex;flex-direction:column;align-items:center;background:radial-gradient(ellipse 80% 50% at 50% 42%,{{ voiceTint }},#06060A 70%);transition:opacity .5s,transform .6s cubic-bezier(.32,.72,0,1);opacity:{{ voiceO }};transform:{{ voiceT }};pointer-events:{{ voicePE }};z-index:4">
+        <div style="padding-top:24px;font:500 11px 'Geist Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:{{ voiceColor }};transition:color .5s">{{ voiceLabel }}</div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center">
+          <button onClick="{{ voiceTap }}" style="border:0;background:none;padding:0;cursor:pointer;border-radius:50%" style-active="transform:scale(.96)">
+            <iris-orb state="{{ voiceState }}" size="260" glow="{{ glow }}"></iris-orb>
+          </button>
+        </div>
+        <div style="min-height:96px;font:italic 400 26px/1.25 'Instrument Serif',serif;text-align:center;text-wrap:pretty;color:#ECEBF2;padding:0 8px">{{ voiceText }}</div>
+        <div style="display:flex;align-items:center;gap:28px;padding-top:28px">
+          <button onClick="{{ voiceToChat }}" style="width:56px;height:56px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2.5"></rect><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"></path></svg></button>
+          <button onClick="{{ closeVoice }}" style="width:72px;height:72px;border-radius:50%;border:0;background:#FF6B6B;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 10px 30px rgba(255,107,107,.3)" style-active="transform:scale(.92)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A0B0B" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          <button onClick="{{ toggleMute }}" style="width:56px;height:56px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:{{ muteBg }};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .3s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+        </div>
+      </div>
+
+      <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:rgba(255,255,255,.55);z-index:60"></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;failNext&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.5,&quot;max&quot;:2.5,&quot;step&quot;:0.1,&quot;unit&quot;:&quot;×&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;glow&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Iris&quot;}}">
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const META = {
+  idle: ['Ready', '#C9C3FF', 'Waiting for you'], rest: ['Done', '#8E89AE', 'Session at rest'],
+  thinking: ['Thinking', '#9B7BFF', 'Reasoning first'], loading: ['Connecting', '#5CC8FF', 'Reaching gateway'],
+  tool: ['Using tools', '#FFB547', 'Running a command'], streaming: ['Writing', '#4FE3C1', 'Streaming reply'],
+  listening: ['Listening', '#FF8AD8', 'Hearing you'], success: ['Done', '#6EE787', 'Task finished'],
+  failed: ['Failed', '#FF6B6B', 'Needs attention'], offline: ['Offline', '#6B6A78', 'Gateway unreachable']
+};
+const LEGEND = ['idle', 'thinking', 'loading', 'tool', 'streaming', 'listening', 'success', 'failed', 'offline'];
+const SESSIONS = [
+  { id: 1, title: 'Investigate worker heartbeat gaps', meta: 'opus-4.5 · now', state: 'thinking', live: 'Thinking' },
+  { id: 2, title: 'Refactor billing to usage-based pricing', meta: 'sonnet-4.5 · 2m', state: 'tool', live: 'Running tests' },
+  { id: 3, title: 'Nightly backup to cold storage', meta: 'cron · 02:00', state: 'failed', live: 'Failed' },
+  { id: 4, title: 'Design review: onboarding flow', meta: 'gemini-3-pro · 1h ago' },
+  { id: 5, title: 'Add passkey support to auth service', meta: 'gpt-5.2 · yesterday' },
+  { id: 6, title: 'Local embeddings vs API cost', meta: 'hermes · Aug 21' },
+  { id: 7, title: 'Draft Q3 roadmap summary for the board', meta: 'opus-4.5 · Aug 20' }
+];
+const TASKS = {
+  Triage: [{ title: 'Nightly backup failing with 502 from gateway', meta: 'from cron', id: 'task-31' }, { title: 'Flaky iOS UI tests on CI', meta: 'from session', id: 'task-29' }],
+  'To do': [{ title: 'Draft Q3 roadmap summary for the board', meta: 'due Fri', id: 'task-27' }, { title: 'Rotate gateway API keys', meta: 'due Mon', id: 'task-24' }, { title: 'Write passkey migration notes', meta: 'no date', id: 'task-22' }],
+  Running: [{ title: 'Investigate worker heartbeat gaps overnight', meta: 'opus-4.5 · 4m', id: 'task-30', running: true, progress: '64%' }, { title: 'Refactor billing to usage-based pricing', meta: 'sonnet-4.5 · 11m', id: 'task-28', running: true, progress: '32%' }],
+  Review: [{ title: 'Local embeddings vs API cost — report', meta: 'ready', id: 'task-25' }]
+};
+const SEED = () => [
+  { id: 'u1', role: 'user', text: 'Why did the worker heartbeat miss three checks overnight?' },
+  { id: 'a1', role: 'agent', orb: 'rest', meta: 'opus-4.5 · 6.2s', thoughts: 'Pull heartbeat logs between 01:00 and 05:00, line the gaps up against deploys, cron runs and node restarts.', thoughtsOpen: false,
+    tool: { name: 'read_logs', arg: 'worker-*.log --since 01:00 --until 05:00', status: 'done', result: '3 gaps · 1.4s' },
+    text: 'The gaps line up with the 02:00 backup job. It saturates the disk on node-3, the worker blocks on fsync, and the heartbeat thread misses its 30s window.\n\nTwo fixes:\n1. Give the heartbeat its own non-blocking writer.\n2. Move the backup to 04:30, when the queue is empty.',
+    code: 'heartbeat:\n  interval: 30s\n  writer: async   # was: sync\n  grace: 2', codeLang: 'worker.yaml' }
+];
+const THOUGHT = 'Reading the request. Pulling the session index and the last 24h of cron results, then grouping by status so the summary leads with what needs attention.';
+const REPLY = 'Here’s where things stand. Two sessions are still running and the nightly backup failed at 02:04 with a gateway timeout.\n\n1. Heartbeat gaps — root cause found, fix proposed.\n2. Billing refactor — tests running on usage-pricing.\n3. Backup — retry queued for 04:30.\n\nWant me to open a task for the backup failure?';
+const VOICE = { listening: 'What’s left on my plate for today?', thinking: '…', streaming: 'Three things: the board summary, the key rotation, and one failed backup I’ve already queued a retry for.' };
+
+class Component extends DCLogic {
+  state = { screen: 'home', tab: 'sessions', heroState: 'idle', messages: [], chatTitle: 'New chat', agentState: 'idle', input: '', crons: [true, true, true, false], taskFilter: 'Running', voiceState: 'listening', muted: false, copied: null };
+  scrollRef = React.createRef();
+  componentDidMount() { this.alive = true; }
+  componentWillUnmount() { this.alive = false; this.tok = null; this.vtok = null; }
+  componentDidUpdate(pp, ps) {
+    if (ps.messages !== this.state.messages && this.scrollRef.current) { const el = this.scrollRef.current; el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); }
+  }
+  upd(id, patch) { this.setState(s => ({ messages: s.messages.map(m => m.id === id ? { ...m, ...(typeof patch === 'function' ? patch(m) : patch) } : m) })); }
+  open(title, seed) { this.tok = null; this.running = false; this.setState({ screen: 'chat', chatTitle: title, messages: seed ? SEED() : [], agentState: 'idle', input: '' }); }
+  send(text) {
+    text = (text ?? this.state.input).trim(); if (!text || this.running) return;
+    const id = 'a' + Date.now();
+    const fail = !!this.props.failNext || /fail/i.test(text);
+    this.setState(s => ({ input: '', chatTitle: s.messages.length ? s.chatTitle : text.slice(0, 40), messages: [...s.messages, { id: 'u' + Date.now(), role: 'user', text }, { id, role: 'agent', orb: 'loading', meta: 'connecting…', text: '' }] }));
+    this.run(id, fail);
+  }
+  async run(id, fail) {
+    this.running = true; const tok = this.tok = {}; const ok = () => this.alive && this.tok === tok;
+    const sp = this.props.speed ?? 1, t0 = Date.now();
+    this.setState({ agentState: 'loading' }); await wait(600 / sp); if (!ok()) return;
+    this.setState({ agentState: 'thinking' }); this.upd(id, { orb: 'thinking', meta: 'thinking', thoughts: '', thoughtsOpen: true });
+    const tw = THOUGHT.split(' ');
+    for (let i = 0; i < tw.length; i++) { await wait(55 / sp); if (!ok()) return; this.upd(id, m => ({ thoughts: (m.thoughts ? m.thoughts + ' ' : '') + tw[i] })); }
+    await wait(350 / sp); if (!ok()) return;
+    this.setState({ agentState: 'tool' }); this.upd(id, { orb: 'tool', meta: 'using tools', thoughtsOpen: false, tool: { name: 'read_logs', arg: 'sessions.index · cron --since 24h', status: 'running', result: 'running' } });
+    await wait(1600 / sp); if (!ok()) return;
+    if (fail) {
+      this.running = false;
+      this.setState({ agentState: 'failed' }); this.upd(id, m => ({ orb: 'failed', meta: 'failed', failed: true, tool: { ...m.tool, status: 'failed', result: '502' } }));
+      return;
+    }
+    this.upd(id, m => ({ tool: { ...m.tool, status: 'done', result: '14 rows · 1.6s' } }));
+    this.setState({ agentState: 'streaming' }); this.upd(id, { orb: 'streaming', meta: 'writing', streaming: true });
+    const words = REPLY.split(/(\s+)/);
+    for (let i = 0; i < words.length; i += 2) { await wait(38 / sp); if (!ok()) return; this.upd(id, m => ({ text: m.text + words[i] + (words[i + 1] || '') })); }
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    this.running = false;
+    this.setState({ agentState: 'success' }); this.upd(id, { orb: 'success', meta: 'opus-4.5 · ' + secs + 's', streaming: false });
+    await wait(1400); if (!ok()) return;
+    this.setState({ agentState: 'idle' }); this.upd(id, { orb: 'rest' });
+  }
+  stop() {
+    this.tok = null; this.running = false;
+    const last = [...this.state.messages].reverse().find(m => m.role === 'agent');
+    this.setState({ agentState: 'idle' });
+    if (last) this.upd(last.id, m => ({ orb: 'rest', meta: 'stopped', streaming: false, thoughtsOpen: false, text: m.text || 'Stopped.', tool: m.tool && m.tool.status === 'running' ? { ...m.tool, status: 'failed', result: 'cancelled' } : m.tool }));
+  }
+  retry(id) {
+    this.upd(id, m => ({ failed: false, text: '', thoughts: '', tool: null, orb: 'loading', meta: 'retrying…' }));
+    this.run(id, false);
+  }
+  async voiceLoop() {
+    const tok = this.vtok = {}; const ok = () => this.alive && this.vtok === tok;
+    const seq = [['listening', 2600], ['thinking', 1500], ['streaming', 3600]];
+    while (ok()) { for (const [s, d] of seq) { if (!ok()) return; if (!this.state.muted || s !== 'listening') this.setState({ voiceState: s }); await wait(d); } }
+  }
+  renderVals() {
+    const S = this.state, m = k => META[k] || META.idle, glow = this.props.glow === false ? 'off' : 'on';
+    const scr = S.screen, tabI = ['sessions', 'scheduled', 'tasks'].indexOf(S.tab);
+    const tint = c => c + '1F';
+    const lastIdx = S.messages.length - 1;
+    return {
+      glow,
+      heroState: S.heroState, heroColor: m(S.heroState)[1], heroLabelLower: m(S.heroState)[0].toLowerCase(),
+      legend: LEGEND.map(id => ({ id, name: m(id)[0], desc: m(id)[2], pick: () => this.setState({ heroState: id }), bg: S.heroState === id ? '#17161F' : 'transparent', border: S.heroState === id ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.04)' })),
+      homeT: scr === 'home' ? 'translateX(0) scale(1)' : scr === 'voice' ? 'scale(.94)' : 'translateX(-28%)', homeO: scr === 'home' ? 1 : .4,
+      chatT: scr === 'chat' || (scr === 'voice' && this.voiceFrom === 'chat') ? 'translateX(0)' : 'translateX(105%)',
+      setT: scr === 'settings' ? 'translateX(0)' : 'translateX(105%)',
+      voiceO: scr === 'voice' ? 1 : 0, voiceT: scr === 'voice' ? 'scale(1)' : 'scale(1.08)', voicePE: scr === 'voice' ? 'auto' : 'none',
+      tabT: `translateX(${tabI * 100}%)`, tabC0: tabI === 0 ? '#ECEBF2' : '#8C8A9B', tabC1: tabI === 1 ? '#ECEBF2' : '#8C8A9B', tabC2: tabI === 2 ? '#ECEBF2' : '#8C8A9B',
+      tabSessions: () => this.setState({ tab: 'sessions' }), tabScheduled: () => this.setState({ tab: 'scheduled' }), tabTasks: () => this.setState({ tab: 'tasks' }),
+      isSessions: S.tab === 'sessions', isScheduled: S.tab === 'scheduled', isTasks: S.tab === 'tasks',
+      liveSessions: SESSIONS.filter(s => s.state).map(s => ({ ...s, color: m(s.state)[1], tint: tint(m(s.state)[1]), open: () => this.open(s.title, true) })),
+      pastSessions: SESSIONS.filter(s => !s.state).map(s => ({ ...s, open: () => this.open(s.title, true) })),
+      crons: [
+        { title: 'Morning inbox digest', cron: '0 7 * * *', next: 'next in 9h 12m' },
+        { title: 'Nightly backup to cold storage', cron: '0 2 * * *', next: 'failed 2h ago · retry 04:30', bad: true },
+        { title: 'Weekly dependency audit', cron: '0 9 * * MON', next: 'next Mon 09:00' },
+        { title: 'Sync Linear → Tasks', cron: '*/15 * * * *', next: 'paused' }
+      ].map((c, i) => ({ ...c, nextColor: c.bad ? '#FF8F8F' : '#8C8A9B', trackBg: S.crons[i] ? '#9B7BFF' : '#2A2935', knobT: S.crons[i] ? 'translateX(20px)' : 'translateX(0)', toggle: () => this.setState(s => ({ crons: s.crons.map((v, j) => j === i ? !v : v) })) })),
+      taskFilters: Object.keys(TASKS).map(name => ({ name, count: TASKS[name].length, pick: () => this.setState({ taskFilter: name }), bg: S.taskFilter === name ? '#ECEBF2' : '#13131A', color: S.taskFilter === name ? '#0B0B10' : '#A9A7B8', border: S.taskFilter === name ? '#ECEBF2' : 'rgba(255,255,255,.06)' })),
+      tasks: TASKS[S.taskFilter],
+      newChat: () => this.open('New chat', false), openSettings: () => this.setState({ screen: 'settings' }),
+      goHome: () => { this.stop(); this.setState({ screen: 'home' }); },
+      chatTitle: S.chatTitle, agentState: S.agentState, agentLabel: m(S.agentState)[0], agentColor: m(S.agentState)[1],
+      chatEmpty: S.messages.length === 0,
+      suggestions: ['Summarize what happened overnight', 'Draft a cron for a weekly audit', 'Why did the backup fail?'].map(text => ({ text, send: () => this.send(text) })),
+      messages: S.messages.map((x, i) => {
+        const ts = x.tool && x.tool.status;
+        return { ...x, isUser: x.role === 'user', isAgent: x.role === 'agent', hasThoughts: !!x.thoughts, hasTool: !!x.tool, hasCode: !!x.code,
+          thoughtsTitle: x.orb === 'thinking' ? 'Thinking…' : 'Thought process', chevT: x.thoughtsOpen ? 'rotate(180deg)' : 'none', thoughtsMax: x.thoughtsOpen ? '200px' : '0px',
+          toggleThoughts: () => this.upd(x.id, mm => ({ thoughtsOpen: !mm.thoughtsOpen })),
+          toolName: x.tool && x.tool.name, toolArg: x.tool && x.tool.arg, toolStatus: x.tool && x.tool.result,
+          toolRunning: ts === 'running', toolDone: ts === 'done', toolFailed: ts === 'failed', toolColor: ts === 'running' ? '#FFB547' : ts === 'failed' ? '#FF8F8F' : '#6E6C7E',
+          streaming: !!x.streaming && i === lastIdx, failed: !!x.failed, retry: () => this.retry(x.id),
+          copyLabel: S.copied === x.id ? 'Copied' : 'Copy', copy: () => { try { navigator.clipboard.writeText(x.code); } catch (e) {} this.setState({ copied: x.id }); setTimeout(() => this.alive && this.setState({ copied: null }), 1400); } };
+      }),
+      input: S.input, onInput: e => this.setState({ input: e.target.value }),
+      onKey: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); } },
+      showMic: !this.running && !S.input.trim(), showSend: !this.running && !!S.input.trim(), showStop: !!this.running,
+      sendInput: () => this.send(), stop: () => this.stop(),
+      composerBorder: this.running ? m(S.agentState)[1] + '55' : 'rgba(255,255,255,.08)',
+      settingGroups: [
+        { name: 'Hermes', rows: [{ label: 'Model', sub: 'Default model and reasoning', value: 'opus-4.5' }, { label: 'Tools', sub: 'Shell, files, browser, MCP', value: '23 on' }, { label: 'Approvals', sub: 'When Iris asks before acting', value: 'Writes' }] },
+        { name: 'Voice', rows: [{ label: 'Voice', sub: 'How Iris sounds', value: 'Calm' }, { label: 'Wake on lift', sub: 'Start listening when raised', value: 'Off' }] },
+        { name: 'This device', rows: [{ label: 'Appearance', sub: 'Theme and orb glow', value: 'Dark' }, { label: 'Notifications', sub: 'Finished, failed, needs input', value: 'All' }, { label: 'Haptics', sub: 'Feel state changes', value: 'On' }] }
+      ].map(g => ({ ...g, rows: g.rows.map((r, j) => ({ ...r, line: j ? 'rgba(255,255,255,.05)' : 'transparent' })) })),
+      openVoice: () => { this.voiceFrom = scr; this.setState({ screen: 'voice', voiceState: 'listening' }); this.voiceLoop(); },
+      closeVoice: () => { this.vtok = null; this.setState({ screen: this.voiceFrom === 'chat' ? 'chat' : 'home' }); },
+      voiceToChat: () => { this.vtok = null; if (this.voiceFrom !== 'chat') this.open('New chat', false); else this.setState({ screen: 'chat' }); this.voiceFrom = 'chat'; },
+      voiceTap: () => { this.vtok = null; const order = ['listening', 'thinking', 'streaming']; this.setState(s => ({ voiceState: order[(order.indexOf(s.voiceState) + 1) % 3] })); },
+      toggleMute: () => this.setState(s => ({ muted: !s.muted, voiceState: !s.muted ? 'rest' : 'listening' })),
+      muteBg: S.muted ? 'rgba(255,107,107,.25)' : 'rgba(255,255,255,.04)',
+      voiceState: S.voiceState, voiceLabel: S.muted ? 'Muted' : S.voiceState === 'streaming' ? 'Speaking' : m(S.voiceState)[0],
+      voiceColor: m(S.voiceState)[1], voiceTint: m(S.voiceState)[1] + '22', voiceText: S.muted ? 'Tap the mic to keep talking.' : VOICE[S.voiceState] || ''
+    };
+  }
+}
+</script>
+</body>
+</html>
