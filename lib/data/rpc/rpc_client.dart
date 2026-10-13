@@ -1,9 +1,9 @@
 /// JSON-RPC over one open socket.
 ///
 /// Deliberately thin: it correlates requests with responses, forwards events,
-/// and declines requests the gateway makes that Iris has no screen for. It
-/// does not reconnect — one client lives exactly as long as one socket, and
-/// `DashboardSession` replaces it when the socket dies.
+/// hands the server requests Iris can show to whoever presents them, and
+/// declines the rest. It does not reconnect — one client lives exactly as long
+/// as one socket, and `DashboardSession` replaces it when the socket dies.
 library;
 
 import 'dart:async';
@@ -19,6 +19,7 @@ final class RpcClient {
   RpcClient(
     this._socket, {
     this.defaultTimeout = const Duration(seconds: 30),
+    this.presented = const {},
   }) {
     _subscription = _socket.frames.listen(
       _onFrame,
@@ -32,14 +33,23 @@ final class RpcClient {
 
   final WireSocket _socket;
   final Duration defaultTimeout;
+
+  /// Server request methods Iris shows to a person, such as `approval` and
+  /// `clarify`. Every other server request is declined at once.
+  final Set<String> presented;
   late final StreamSubscription<String> _subscription;
   final Map<int, _Pending> _pending = {};
   final _events = StreamController<RpcEvent>.broadcast();
+  final _serverRequests = StreamController<RpcServerRequest>.broadcast();
   final _closed = Completer<void>();
   int _nextId = 0;
 
   /// Stream events, in arrival order. Closes with the socket.
   Stream<RpcEvent> get events => _events.stream;
+
+  /// Requests the gateway makes of Iris whose method is in [presented].
+  /// Closes with the socket.
+  Stream<RpcServerRequest> get serverRequests => _serverRequests.stream;
 
   /// Completes when the socket has closed, for whatever reason.
   Future<void> get done => _closed.future;
@@ -89,6 +99,18 @@ final class RpcClient {
     return completer.future;
   }
 
+  /// Answers server request [id] with [result]. False when the socket is
+  /// already gone; the gateway then withdraws the request itself.
+  bool reply(String id, Map<String, Object?> result) {
+    if (!isOpen) return false;
+    try {
+      _socket.send(RpcEncode.resultReply(id, result));
+      return true;
+    } on Object {
+      return false;
+    }
+  }
+
   /// Proves the socket is alive.
   ///
   /// A gateway without `ping` answers "method not found" — and that answer
@@ -128,9 +150,12 @@ final class RpcClient {
         );
       case final RpcEvent event:
         _events.add(event);
+      case final RpcServerRequest request
+          when presented.contains(request.method):
+        _serverRequests.add(request);
       case RpcServerRequest(:final id, :final method):
-        // Phase 1 has no approval or clarify cards. Declining at once makes the
-        // tool fail fast instead of waiting out its deadline.
+        // Nothing in Iris can show this one. Declining at once makes the tool
+        // fail fast instead of waiting out its deadline.
         _log.info('declined server request $method');
         _trySend(
           RpcEncode.errorReply(
@@ -161,6 +186,7 @@ final class RpcClient {
     }
     _pending.clear();
     unawaited(_events.close());
+    unawaited(_serverRequests.close());
   }
 
   static IrisFailure _closedFailure(String method) => IrisFailure(

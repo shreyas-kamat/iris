@@ -113,4 +113,58 @@ void main() {
     final ping = client.ping(timeout: const Duration(milliseconds: 20));
     expect((await ping).failureOrNull?.kind, FailureKind.timeout);
   });
+
+  group('presented server requests', () {
+    late FakeWireSocket presentedSocket;
+    late RpcClient presenting;
+
+    setUp(() {
+      presentedSocket = FakeWireSocket();
+      presenting = RpcClient(presentedSocket, presented: const {'approval'});
+    });
+
+    tearDown(() => presenting.close());
+
+    test('are handed over instead of declined', () async {
+      final next = presenting.serverRequests.first;
+      presentedSocket.serverSends({
+        'jsonrpc': '2.0',
+        'id': 'srq-9',
+        'method': 'approval',
+        'params': {'session_id': 's1', 'command': 'rm -rf build'},
+      });
+      final request = await next;
+      expect(request.id, 'srq-9');
+      expect(request.params['command'].stringOrNull, 'rm -rf build');
+      expect(presentedSocket.sent, isEmpty);
+    });
+
+    test('others are still declined', () async {
+      presentedSocket.serverSends({
+        'jsonrpc': '2.0',
+        'id': 'srq-2',
+        'method': 'secret',
+        'params': {'session_id': 's1'},
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        presentedSocket.lastSent['error']['code'].intOrNull,
+        RpcCodes.methodNotFound,
+      );
+    });
+
+    test('reply answers with a result frame echoing the id', () {
+      expect(presenting.reply('srq-9', {'answer': 'yes'}), isTrue);
+      final frame = presentedSocket.lastSent;
+      expect(frame['id'].stringOrNull, 'srq-9');
+      expect(frame['result']['answer'].stringOrNull, 'yes');
+      expect(frame['error'].exists, isFalse);
+    });
+
+    test('reply after the socket closed reports false', () async {
+      await presentedSocket.serverCloses();
+      await presenting.done;
+      expect(presenting.reply('srq-9', {'answer': 'yes'}), isFalse);
+    });
+  });
 }

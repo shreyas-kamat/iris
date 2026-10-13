@@ -95,6 +95,9 @@ final class DashboardSession {
     milliseconds: (math.min(5, math.pow(2, attempt)) * 1000).round(),
   );
 
+  /// The server requests Iris shows to a person; the rest are declined.
+  static const presentedServerRequests = {'approval', 'clarify'};
+
   static WireConnector _ioConnector(ServerConnection http) =>
       (uri, headers) => IoWireSocket.connect(
         uri,
@@ -119,10 +122,12 @@ final class DashboardSession {
   final Duration Function(int attempt) _backoff;
   final _states = StreamController<LinkState>.broadcast();
   final _events = StreamController<RpcEvent>.broadcast();
+  final _serverRequests = StreamController<RpcServerRequest>.broadcast();
 
   LinkState _state = const LinkState(LinkPhase.idle);
   RpcClient? _client;
   StreamSubscription<RpcEvent>? _eventSubscription;
+  StreamSubscription<RpcServerRequest>? _requestSubscription;
   Timer? _retry;
   int _attempt = 0;
   int _generation = 0;
@@ -135,6 +140,12 @@ final class DashboardSession {
 
   /// Events from whichever socket is current, across reconnects.
   Stream<RpcEvent> get events => _events.stream;
+
+  /// Approvals and clarifying questions the gateway asks, across reconnects.
+  Stream<RpcServerRequest> get serverRequests => _serverRequests.stream;
+
+  /// The HTTP side of this server: cookies, Access headers, REST.
+  ServerConnection get connection => _http;
 
   bool get isLive => _state.phase == LinkPhase.live && (_client?.isOpen ?? false);
 
@@ -169,6 +180,11 @@ final class DashboardSession {
     }
     return client.call(method, params: params, timeout: timeout);
   }
+
+  /// Answers server request [id] on the live socket. False when there is no
+  /// live socket, in which case the gateway withdraws the request itself.
+  bool replyToServerRequest(String id, Map<String, Object?> result) =>
+      _client?.reply(id, result) ?? false;
 
   Future<void> _run() async {
     if (_disposed || _connecting) return;
@@ -213,7 +229,7 @@ final class DashboardSession {
         final uri = socketUri(_http.config.uri, value);
         try {
           final socket = await _connector(uri, _http.accessHeadersFor(uri));
-          return Ok(RpcClient(socket));
+          return Ok(RpcClient(socket, presented: presentedServerRequests));
         } on Object catch (error, stackTrace) {
           return Err(_socketFailure(error, stackTrace));
         }
@@ -245,7 +261,22 @@ final class DashboardSession {
     final generation = ++_generation;
     _client = client;
     _attempt = 0;
-    _eventSubscription = client.events.listen(_events.add);
+    _eventSubscription = client.events.listen((event) {
+      _events.add(event);
+      // Hermes sends approvals and clarifying questions as server requests
+      // only to a client that says it can answer them. Said once per socket,
+      // when the gateway announces it is ready.
+      if (event.type == 'gateway.ready') {
+        unawaited(
+          client.call(
+            'client.capabilities',
+            params: const {'server_requests': true},
+            timeout: const Duration(seconds: 10),
+          ),
+        );
+      }
+    });
+    _requestSubscription = client.serverRequests.listen(_serverRequests.add);
     unawaited(client.done.then((_) => _onDropped(generation)));
     _set(const LinkState(LinkPhase.live));
     _log.info('live');
@@ -256,6 +287,8 @@ final class DashboardSession {
     _client = null;
     unawaited(_eventSubscription?.cancel());
     _eventSubscription = null;
+    unawaited(_requestSubscription?.cancel());
+    _requestSubscription = null;
     _scheduleRetry(
       const IrisFailure(
         FailureKind.offline,
@@ -300,10 +333,12 @@ final class DashboardSession {
     _generation++;
     _retry?.cancel();
     await _eventSubscription?.cancel();
+    await _requestSubscription?.cancel();
     await _client?.close();
     _client = null;
     _set(const LinkState(LinkPhase.idle));
     await _states.close();
     await _events.close();
+    await _serverRequests.close();
   }
 }

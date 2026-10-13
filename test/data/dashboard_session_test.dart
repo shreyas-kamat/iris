@@ -199,4 +199,35 @@ void main() {
     expect(DashboardSession.defaultBackoff(2), const Duration(seconds: 4));
     expect(DashboardSession.defaultBackoff(9), const Duration(seconds: 5));
   });
+
+  test('announces it can answer server requests once the gateway is ready', () async {
+    ticketsInOrder(['t1']);
+    final session = sessionFor();
+    await session.start();
+    sockets.single.serverSends({
+      'jsonrpc': '2.0',
+      'method': 'event',
+      'params': {'type': 'gateway.ready'},
+    });
+    await eventually(() => sockets.single.sent.isNotEmpty);
+    final frame = sockets.single.lastSent;
+    expect(frame['method'].stringOrNull, 'client.capabilities');
+    expect(frame['params']['server_requests'].boolOrNull, isTrue);
+  });
+
+  test('a clarify request reaches the session and can be answered', () async {
+    ticketsInOrder(['t1']);
+    final session = sessionFor();
+    await session.start();
+    final next = session.serverRequests.first;
+    sockets.single.serverSends({
+      'jsonrpc': '2.0',
+      'id': 'srq-1',
+      'method': 'clarify',
+      'params': {'session_id': 'r1', 'question': 'Which?'},
+    });
+    expect((await next).method, 'clarify');
+    expect(session.replyToServerRequest('srq-1', {'answer': 'A'}), isTrue);
+    expect(sockets.single.lastSent['result']['answer'].stringOrNull, 'A');
+  });
 }

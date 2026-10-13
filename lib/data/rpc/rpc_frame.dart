@@ -180,4 +180,8 @@ abstract final class RpcEncode {
     'id': id,
     'error': {'code': code, 'message': message},
   });
+
+  /// Answers a server request with [result].
+  static String resultReply(String id, Map<String, Object?> result) =>
+      jsonEncode({'jsonrpc': '2.0', 'id': id, 'result': result});
 }
