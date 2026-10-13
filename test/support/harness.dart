@@ -11,9 +11,12 @@ Widget themed(Widget child) {
     data: const MediaQueryData(size: Size(390, 844), disableAnimations: true),
     child: MaterialApp(
       theme: theme.materialTheme,
+      // Above the Navigator, so pushed routes see the theme too.
+      builder: (context, navigator) =>
+          IrisTheme(data: theme, child: navigator!),
       home: Material(
         type: MaterialType.transparency,
-        child: IrisTheme(data: theme, child: child),
+        child: child,
       ),
     ),
   );

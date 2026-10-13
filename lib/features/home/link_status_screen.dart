@@ -37,8 +37,7 @@ import '../servers/server_switcher.dart';
     LinkPhase.live => (
       AgentState.done,
       'Connected',
-      'Iris holds a live connection to your agent. Conversations arrive in the '
-          'next update.',
+      'Iris holds a live connection to your agent.',
     ),
     LinkPhase.retrying => (
       AgentState.waiting,

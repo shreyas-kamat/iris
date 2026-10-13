@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../design/platform/platform_feel.dart';
 import '../design/theme/iris_theme.dart';
-import '../features/home/link_status_screen.dart';
+import '../features/chat/conversation_list_screen.dart';
 import '../features/servers/server_gate.dart';
 import 'theme_controller.dart';
 
@@ -53,16 +53,18 @@ class IrisApp extends ConsumerWidget {
           // ancestor for text to render normally — without one every Text gets
           // the yellow "missing material" underline. Transparent, so it
           // contributes nothing but that.
+          // Above the Navigator, so pushed routes (the chat screen, the link
+          // status screen) see the theme too, not only the home route.
+          builder: (context, navigator) => AnimatedIrisTheme(
+            data: theme,
+            child: navigator!,
+          ),
           home: Material(
             type: MaterialType.transparency,
-            child: AnimatedIrisTheme(
-              data: theme,
-              child: ServerGate(
-                // The link status screen stands in for the chat screen until
-                // Phase 2 builds it, so the connected path is exercised end to
-                // end rather than being wired up blind later.
-                connected: (context) => const LinkStatusScreen(),
-              ),
+            child: ServerGate(
+              // Conversations are home; the link status screen opens from
+              // the list's header.
+              connected: (context) => const ConversationListScreen(),
             ),
           ),
         );
