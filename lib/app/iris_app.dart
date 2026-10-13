@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../design/platform/platform_feel.dart';
 import '../design/theme/iris_theme.dart';
-import '../features/design_gallery/design_gallery.dart';
+import '../features/home/link_status_screen.dart';
 import '../features/servers/server_gate.dart';
 import 'theme_controller.dart';
 
@@ -61,7 +61,7 @@ class IrisApp extends ConsumerWidget {
                 // The gallery stands in for the chat screen until Phase 3
                 // builds it, so the connected path is exercised end to end
                 // rather than being wired up blind later.
-                connected: (context) => const DesignGallery(),
+                connected: (context) => const LinkStatusScreen(),
               ),
             ),
           ),

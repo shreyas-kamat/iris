@@ -1,14 +1,15 @@
-/// Connecting to a server.
+/// Connecting to a Hermes dashboard.
 ///
 /// This is the first screen anyone sees, and the one most likely to fail: the
-/// person is typing an address for a machine on their own network, over a
-/// tunnel they set up themselves, possibly with a certificate they signed
-/// themselves. Every one of those has a distinct failure, and a single "could
-/// not connect" would leave them guessing which.
+/// person is typing an address for a machine on their own network or behind
+/// Cloudflare Access, possibly with a certificate they signed themselves. Every
+/// one of those has a distinct failure, and a single "could not connect" would
+/// leave them guessing which.
 ///
 /// So the flow probes before it commits: find out whether the address answers,
-/// whether it wants a password, and whether its certificate is trusted, then
-/// ask for exactly what is missing. Nothing is saved until it is known to work.
+/// whether an access proxy stands in front, and whether the dashboard wants a
+/// login, then ask for exactly what is missing. Nothing is saved until the
+/// dashboard has issued a live-connection ticket.
 library;
 
 import 'dart:async';
@@ -31,7 +32,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
 
-/// Where the wizard is.
+/// Where the flow is.
 enum _Step {
   /// Typing an address.
   address,
@@ -39,10 +40,13 @@ enum _Step {
   /// Contacting it.
   probing,
 
-  /// It wants a password.
-  password,
+  /// Cloudflare Access is in front; asking for a service token.
+  accessToken,
 
-  /// Saving and signing in.
+  /// The dashboard wants a username and password.
+  login,
+
+  /// Signing in, proving a ticket, saving.
   joining,
 }
 
@@ -58,23 +62,47 @@ class ConnectScreen extends ConsumerStatefulWidget {
 
 class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   final _address = TextEditingController();
+  final _clientId = TextEditingController();
+  final _clientSecret = TextEditingController();
+  final _username = TextEditingController();
   final _password = TextEditingController();
   final _label = TextEditingController();
 
   _Step _step = _Step.address;
   IrisFailure? _failure;
-  String? _serverVersion;
+  String? _version;
   bool _allowSelfSigned = false;
 
   @override
   void dispose() {
-    _address.dispose();
-    _password.dispose();
-    _label.dispose();
+    for (final controller in [
+      _address,
+      _clientId,
+      _clientSecret,
+      _username,
+      _password,
+      _label,
+    ]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   bool get _busy => _step == _Step.probing || _step == _Step.joining;
+
+  static String? _text(TextEditingController controller) {
+    final value = controller.text.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  /// What has been typed so far. The password is not trimmed: a leading or
+  /// trailing space can be part of it.
+  ServerSecrets get _secrets => ServerSecrets(
+    username: _text(_username),
+    password: _password.text.isEmpty ? null : _password.text,
+    accessClientId: _text(_clientId),
+    accessClientSecret: _text(_clientSecret),
+  );
 
   Future<void> _probe() async {
     setState(() {
@@ -82,29 +110,56 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       _failure = null;
     });
 
-    final attempt = await ref
+    final probe = await ref
         .read(serverRepositoryProvider)
-        .testConnection(_address.text, allowSelfSigned: _allowSelfSigned);
+        .testConnection(
+          _address.text,
+          allowSelfSigned: _allowSelfSigned,
+          secrets: _secrets,
+        );
     if (!mounted) return;
 
-    switch (attempt.access) {
+    switch (probe.access) {
+      case DashboardAccess.accessGate:
+        setState(() {
+          _step = _Step.accessToken;
+          // A token was entered and still bounced: say it was rejected, not
+          // that one is needed.
+          _failure = _secrets.hasAccessToken
+              ? const IrisFailure(
+                  FailureKind.accessGate,
+                  message: 'Cloudflare did not accept this service token.',
+                )
+              : null;
+        });
       case DashboardAccess.password:
         setState(() {
-          _serverVersion = attempt.version;
-          _step = _Step.password;
+          _version = probe.version;
+          _step = _Step.login;
         });
       case DashboardAccess.open:
-        setState(() => _serverVersion = attempt.version);
+        setState(() => _version = probe.version);
         await _join();
-      case _:
+      case DashboardAccess.browserOnly:
         setState(() {
           _step = _Step.address;
-          _failure =
-              attempt.failure ??
-              const IrisFailure(
-                FailureKind.rejected,
-                message: 'Iris cannot connect to this dashboard yet.',
-              );
+          _failure = const IrisFailure(
+            FailureKind.rejected,
+            message:
+                'This dashboard only offers browser sign-in, which Iris does '
+                'not support yet. Turn on password login for the dashboard to '
+                'connect.',
+          );
+        });
+      case DashboardAccess.notHermes:
+        setState(() {
+          _step = _Step.address;
+          _failure = const IrisFailure(FailureKind.notFound);
+        });
+      case DashboardAccess.unreachable:
+        setState(() {
+          _step = _Step.address;
+          _failure = probe.failure;
         });
     }
   }
@@ -120,9 +175,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         .addServer(
           baseUrl: _address.text,
           label: _label.text,
-          secrets: ServerSecrets(
-            password: _password.text.isEmpty ? null : _password.text,
-          ),
+          secrets: _secrets,
           allowSelfSigned: _allowSelfSigned,
         );
     if (!mounted) return;
@@ -133,12 +186,12 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         widget.onConnected?.call(value);
       case Err(:final failure):
         setState(() {
-          // Back to whichever step can actually fix this. A rejected password
-          // returns to the password field; anything else returns to the
-          // address, because that is what was probably wrong.
-          _step = failure.kind == FailureKind.unauthorized
-              ? _Step.password
-              : _Step.address;
+          // Back to whichever step can actually fix this.
+          _step = switch (failure.kind) {
+            FailureKind.unauthorized => _Step.login,
+            FailureKind.accessGate => _Step.accessToken,
+            _ => _Step.address,
+          };
           _failure = failure;
         });
     }
@@ -162,7 +215,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                 state: switch (_step) {
                   _Step.address => AgentState.idle,
                   _Step.probing => AgentState.thinking,
-                  _Step.password => AgentState.waiting,
+                  _Step.accessToken || _Step.login => AgentState.waiting,
                   _Step.joining => AgentState.working,
                 },
                 size: 40,
@@ -171,7 +224,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
               Text('Connect to your agent', style: theme.typography.display),
               const SizedBox(height: IrisSpace.sm),
               Text(
-                'Iris talks directly to a hermes-webui server on your own '
+                'Iris talks directly to the Hermes dashboard on your own '
                 'hardware. Nothing goes through anyone else.',
                 style: theme.typography.body.copyWith(
                   color: theme.palette.inkMuted,
@@ -201,36 +254,75 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     );
   }
 
+  Widget _addressField({bool autofocus = false}) => IrisField(
+    label: 'Server address',
+    controller: _address,
+    mono: true,
+    hint: 'https://hermes.example.com',
+    keyboardType: TextInputType.url,
+    autofocus: autofocus,
+    onSubmitted: autofocus ? (_) => _probe() : null,
+  );
+
   List<Widget> _fields(BuildContext context) => switch (_step) {
-    // The address stays visible and editable once a password is being asked
-    // for, because "wrong password" and "right password, wrong server" look
-    // identical from here and the user may need to correct either.
-    _Step.password || _Step.joining => [
-      IrisField(
-        label: 'Server address',
-        controller: _address,
-        mono: true,
-        hint: 'https://hermes.example.com',
-        keyboardType: TextInputType.url,
+    _Step.address || _Step.probing => [
+      _addressField(autofocus: true),
+      const SizedBox(height: IrisSpace.md),
+      _AddressHint(allowSelfSigned: _allowSelfSigned),
+    ],
+    // The address stays visible and editable on later steps, because "wrong
+    // token" and "right token, wrong server" look identical from here.
+    _Step.accessToken => [
+      _addressField(),
+      const SizedBox(height: IrisSpace.md),
+      Text(
+        'Cloudflare Access protects this address. Iris needs a service token '
+        'to pass it: in Cloudflare Zero Trust, create one under Access → '
+        'Service credentials, then add a Service Auth policy for it on this '
+        'application.',
+        style: context.type.caption.copyWith(color: context.palette.inkMuted),
       ),
+      const SizedBox(height: IrisSpace.lg),
+      IrisField(
+        label: 'Client ID',
+        controller: _clientId,
+        mono: true,
+        hint: '….access',
+        autofocus: true,
+      ),
+      const SizedBox(height: IrisSpace.lg),
+      IrisField(
+        label: 'Client secret',
+        controller: _clientSecret,
+        mono: true,
+        obscure: true,
+        onSubmitted: (_) => _probe(),
+      ),
+    ],
+    _Step.login || _Step.joining => [
+      _addressField(),
       const SizedBox(height: IrisSpace.sm),
-      // Confirmation that the address reached a real Hermes server before the
+      // Confirmation that the address reached a real dashboard before the
       // password is typed. Without it, a wrong address and a wrong password
       // produce the same dead end.
       IrisChip.state(
-        _serverVersion == null
-            ? 'Server found'
-            : 'Server found, version $_serverVersion',
+        _version == null
+            ? 'Hermes dashboard found'
+            : 'Hermes dashboard found, version $_version',
         AgentState.done,
         context.palette,
+      ),
+      const SizedBox(height: IrisSpace.lg),
+      IrisField(
+        label: 'Username',
+        controller: _username,
+        autofocus: _step == _Step.login,
       ),
       const SizedBox(height: IrisSpace.lg),
       IrisField(
         label: 'Password',
         controller: _password,
         obscure: true,
-        hint: 'Required by this server',
-        autofocus: true,
         onSubmitted: (_) => _join(),
       ),
       const SizedBox(height: IrisSpace.lg),
@@ -240,26 +332,13 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         hint: 'Home server',
       ),
     ],
-    _ => [
-      IrisField(
-        label: 'Server address',
-        controller: _address,
-        mono: true,
-        hint: 'https://hermes.example.com',
-        keyboardType: TextInputType.url,
-        autofocus: true,
-        onSubmitted: (_) => _probe(),
-      ),
-      const SizedBox(height: IrisSpace.md),
-      _AddressHint(allowSelfSigned: _allowSelfSigned),
-    ],
   };
 
   Widget _primaryAction() => IrisButton(
     label: switch (_step) {
-      _Step.address => 'Continue',
+      _Step.address || _Step.accessToken => 'Continue',
       _Step.probing => 'Contacting the server',
-      _Step.password => 'Sign in',
+      _Step.login => 'Sign in',
       _Step.joining => 'Connecting',
     },
     tone: IrisButtonTone.primary,
@@ -268,8 +347,8 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     onPressed: _busy
         ? null
         : switch (_step) {
-            _Step.address => _probe,
-            _Step.password => _join,
+            _Step.address || _Step.accessToken => _probe,
+            _Step.login => _join,
             _ => null,
           },
   );
@@ -291,9 +370,9 @@ class _AddressHint extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Use the same address you open in a browser. A tunnel or Tailscale '
-          'address works; so does a plain local address if your phone is on '
-          'the same network.',
+          'Use the address of the Hermes dashboard: the one you open in a '
+          'browser, usually on port 9119. A tunnel, Tailscale or a local '
+          'address on the same network all work.',
           style: theme.typography.caption.copyWith(
             color: theme.palette.inkMuted,
           ),
@@ -338,9 +417,19 @@ class _FailureNote extends StatelessWidget {
       'It may be waking up, or the tunnel may be slow. Try again.',
     ),
     FailureKind.unauthorized => (
-      'That password was not accepted',
-      'Check the password set on the server. Some servers rate-limit repeated '
-          'attempts for a minute.',
+      'That login was not accepted',
+      'Use the username and password set for the Hermes dashboard. Some '
+          'servers rate-limit repeated attempts for a minute.',
+    ),
+    FailureKind.accessGate => (
+      'Cloudflare Access is in the way',
+      'Check the service token’s Client ID and secret, and that this '
+          'application has a Service Auth policy that includes the token.',
+    ),
+    FailureKind.notFound => (
+      'Not a Hermes dashboard',
+      'Check the address and port. Iris connects to the Hermes dashboard '
+          '(usually port 9119), not to hermes-webui.',
     ),
     _ => (
       'Could not connect',
@@ -363,7 +452,7 @@ class _FailureNote extends StatelessWidget {
           const SizedBox(height: IrisSpace.sm),
           Text(detail, style: theme.typography.body),
           if (failure.message case final message?
-              when failure.kind != FailureKind.unknown) ...[
+              when failure.kind != FailureKind.unknown && message != detail) ...[
             const SizedBox(height: IrisSpace.sm),
             Text(
               message,
