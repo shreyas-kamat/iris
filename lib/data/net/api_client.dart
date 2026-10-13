@@ -1,4 +1,4 @@
-/// The HTTP boundary between Iris and a hermes-webui server.
+/// The HTTP boundary between Iris and a Hermes dashboard.
 ///
 /// Everything network-facing funnels through here so three guarantees hold in
 /// exactly one place: nothing throws past this layer (every transport error
@@ -14,13 +14,17 @@ import '../../core/failure.dart';
 import '../../core/json.dart';
 import '../../core/logging.dart';
 import '../../core/result.dart';
+import 'credentials.dart';
 import 'server_config.dart';
 
 /// A configured client for one server.
 final class ApiClient {
-  ApiClient({required ServerConfig server, Dio? dio})
-    : _server = server,
-      _dio = dio ?? Dio() {
+  ApiClient({
+    required ServerConfig server,
+    Dio? dio,
+    ServerSecrets secrets = ServerSecrets.none,
+  }) : _server = server,
+       _dio = dio ?? Dio() {
     _dio.options = _dio.options.copyWith(
       baseUrl: server.baseUrl,
       connectTimeout: const Duration(seconds: 12),
@@ -29,8 +33,26 @@ final class ApiClient {
       // Iris inspects the status itself so it can build a precise failure;
       // letting Dio throw would lose the response body that explains why.
       validateStatus: (_) => true,
+      // A redirect is an answer, not a detour: Cloudflare Access answers an
+      // unauthenticated request with a 302 to its login page, and following it
+      // would turn "you need a token" into a confusing 200 of HTML.
+      followRedirects: false,
       headers: const {'Accept': 'application/json'},
     );
+    if (secrets.hasAccessToken) {
+      final headers = secrets.accessHeaders;
+      _dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            // Over cleartext the long-lived Access secret would be readable by
+            // anyone on the path, so it is withheld; a LAN dashboard does not
+            // need it anyway.
+            if (options.uri.scheme == 'https') options.headers.addAll(headers);
+            handler.next(options);
+          },
+        ),
+      );
+    }
   }
 
   static const _log = IrisLog('net');
@@ -93,7 +115,7 @@ final class ApiClient {
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 300) {
-        return Err(_failureForStatus(status, path, null));
+        return Err(_failureForStatus(status, path, null, response.headers));
       }
       return Ok(response.data ?? const []);
     } on Object catch (error, stackTrace) {
@@ -131,7 +153,7 @@ final class ApiClient {
       final body = Json.decode(response.data ?? '');
 
       if (status < 200 || status >= 300) {
-        return Err(_failureForStatus(status, path, body));
+        return Err(_failureForStatus(status, path, body, response.headers));
       }
 
       // A 200 carrying an `error` field is how several endpoints report a
@@ -152,12 +174,35 @@ final class ApiClient {
     }
   }
 
-  IrisFailure _failureForStatus(int status, String path, Json? body) {
+  IrisFailure _failureForStatus(
+    int status,
+    String path,
+    Json? body,
+    Headers headers,
+  ) {
+    if (isAccessGate(
+      status,
+      location: headers['location']?.first,
+      challenge: headers['www-authenticate']?.first,
+    )) {
+      _log.warn('$path → stopped by an access proxy');
+      return IrisFailure(
+        FailureKind.accessGate,
+        message: 'An access proxy in front of the server stopped the request.',
+        statusCode: status,
+        endpoint: path,
+      );
+    }
+    // FastAPI reports errors as `detail`; older endpoints use `error` or
+    // `message`.
     final message =
-        body?['error'].stringOrNull ?? body?['message'].stringOrNull;
+        body?['error'].stringOrNull ??
+        body?['message'].stringOrNull ??
+        body?['detail'].stringOrNull;
     final kind = switch (status) {
       401 || 403 => FailureKind.unauthorized,
       404 => FailureKind.notFound,
+      >= 300 && < 400 => FailureKind.rejected,
       >= 400 && < 500 => FailureKind.rejected,
       >= 500 => FailureKind.server,
       _ => FailureKind.unknown,
@@ -169,6 +214,24 @@ final class ApiClient {
       statusCode: status,
       endpoint: path,
     );
+  }
+
+  /// Whether a response is an access proxy turning the request away before it
+  /// reached Hermes.
+  ///
+  /// Cloudflare Access marks its challenge with a `Www-Authenticate:
+  /// Cloudflare-Access` header and redirects to `*.cloudflareaccess.com` or, on
+  /// a custom team domain, to a `/cdn-cgi/access/` path. Any one is enough.
+  static bool isAccessGate(int status, {String? location, String? challenge}) {
+    if (challenge != null &&
+        challenge.toLowerCase().startsWith('cloudflare-access')) {
+      return true;
+    }
+    if (status < 300 || status >= 400 || location == null) return false;
+    final target = Uri.tryParse(location);
+    if (target == null) return false;
+    return target.host.endsWith('.cloudflareaccess.com') ||
+        target.path.contains('/cdn-cgi/access/');
   }
 
   /// Turns any transport error into a failure the UI can act on.
