@@ -153,6 +153,7 @@ class IrisField extends StatefulWidget {
     this.obscure = false,
     this.mono = false,
     this.maxLines = 1,
+    this.minLines,
     this.keyboardType,
     this.onSubmitted,
     this.autofocus = false,
@@ -170,6 +171,10 @@ class IrisField extends StatefulWidget {
   final bool mono;
 
   final int maxLines;
+
+  /// The height it starts at, growing to [maxLines] as text is added. Null
+  /// keeps it [maxLines] tall from the start.
+  final int? minLines;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
@@ -315,6 +320,7 @@ class _IrisFieldState extends State<IrisField> {
                   autofocus: widget.autofocus,
                   obscureText: widget.obscure,
                   maxLines: widget.maxLines,
+                  minLines: widget.minLines,
                   keyboardType: widget.keyboardType,
                   onSubmitted: widget.onSubmitted,
                   style: textStyle,

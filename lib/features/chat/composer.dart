@@ -48,6 +48,9 @@ class Composer extends StatelessWidget {
               child: IrisField(
                 controller: controller,
                 hint: 'Message your agent',
+                // Starts one line tall and grows, so an empty composer does
+                // not take a fifth of the screen.
+                minLines: 1,
                 maxLines: 5,
                 keyboardType: TextInputType.multiline,
               ),
