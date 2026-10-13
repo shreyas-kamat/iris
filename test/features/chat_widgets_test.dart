@@ -1,0 +1,135 @@
+/// The pieces of a chat screen, one at a time.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/features/chat/composer.dart';
+import 'package:iris/features/chat/decision_cards.dart';
+import 'package:iris/features/chat/transcript_view.dart';
+
+import '../support/harness.dart';
+
+void main() {
+  testWidgets('a tool card shows its name, state and output', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const ToolCard(
+          ToolCall(
+            id: 't',
+            name: 'terminal',
+            arguments: '{"command":"ls"}',
+            output: 'a.txt',
+          ),
+        ),
+      ),
+    );
+    expect(find.text('terminal'), findsOneWidget);
+    // IrisChip upper-cases its label.
+    expect(find.text('DONE'), findsOneWidget);
+    expect(find.text('a.txt'), findsOneWidget);
+  });
+
+  testWidgets('a live reply with no text yet says it is thinking', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const TranscriptEntry(
+          AssistantTurn(id: 'a', text: '', streaming: true),
+        ),
+      ),
+    );
+    expect(find.text('Thinking…'), findsOneWidget);
+  });
+
+  testWidgets('user and assistant text both render', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const Column(
+          children: [
+            TranscriptEntry(UserTurn(id: 'u', text: 'Run the tests')),
+            TranscriptEntry(AssistantTurn(id: 'a', text: 'All green.')),
+            TranscriptEntry(Notice(id: 'n', text: 'Stopped.')),
+          ],
+        ),
+      ),
+    );
+    expect(find.text('Run the tests'), findsOneWidget);
+    expect(find.text('All green.'), findsOneWidget);
+    expect(find.text('Stopped.'), findsOneWidget);
+  });
+
+  testWidgets('an approval card offers each choice and reports the pick', (tester) async {
+    String? picked;
+    await tester.pumpWidget(
+      themed(
+        ApprovalCard(
+          request: const ApprovalRequest(
+            sessionId: 'r',
+            command: 'rm -rf build',
+            description: 'Delete the build folder',
+            choices: ['once', 'session', 'deny'],
+          ),
+          onChoose: (choice) => picked = choice,
+        ),
+      ),
+    );
+    expect(find.text('rm -rf build'), findsOneWidget);
+    expect(find.text('Delete the build folder'), findsOneWidget);
+    expect(find.text('Allow for this chat'), findsOneWidget);
+    await tester.tap(find.text('Deny'));
+    expect(picked, 'deny');
+  });
+
+  testWidgets('a clarify card answers with a choice or typed text', (tester) async {
+    final answers = <String>[];
+    await tester.pumpWidget(
+      themed(
+        ClarifyCard(
+          request: const ClarifyRequest(
+            requestId: 'srq-1',
+            sessionId: 'r',
+            questions: [
+              ClarifyQuestion(
+                id: 'q0',
+                text: 'Which branch?',
+                choices: [ClarifyChoice(label: 'Main', value: 'main')],
+                synthetic: true,
+              ),
+            ],
+          ),
+          onAnswer: (question, answer) => answers.add('${question.id}=$answer'),
+        ),
+      ),
+    );
+    expect(find.text('Which branch?'), findsOneWidget);
+    await tester.tap(find.text('Main'));
+    await tester.enterText(find.byType(EditableText), 'dev');
+    await tester.tap(find.text('Answer'));
+    expect(answers, ['q0=main', 'q0=dev']);
+  });
+
+  testWidgets('the composer sends only with text, and stops while running', (tester) async {
+    final text = TextEditingController();
+    addTearDown(text.dispose);
+    var sent = 0;
+    var stopped = 0;
+    Widget composer({required bool running}) => themed(
+      Composer(
+        controller: text,
+        running: running,
+        onSend: () => sent++,
+        onStop: () => stopped++,
+      ),
+    );
+    await tester.pumpWidget(composer(running: false));
+    await tester.tap(find.text('Send'));
+    expect(sent, 0);
+    await tester.enterText(find.byType(EditableText), 'hi');
+    await tester.pump();
+    await tester.tap(find.text('Send'));
+    expect(sent, 1);
+    await tester.pumpWidget(composer(running: true));
+    await tester.tap(find.text('Stop'));
+    expect(stopped, 1);
+  });
+}
