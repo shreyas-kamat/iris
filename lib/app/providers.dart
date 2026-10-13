@@ -14,6 +14,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/result.dart';
+import '../data/chat/chat_backend.dart';
+import '../data/chat/chat_models.dart';
 import '../data/db/database.dart';
 import '../data/net/capabilities.dart';
 import '../data/net/credentials.dart';
@@ -148,5 +150,36 @@ final activeServerStateProvider = Provider<AsyncValue<ServerState?>>((ref) {
       stackTrace,
     ),
     _ => const AsyncLoading(),
+  };
+});
+
+/// The chat backend for the active server's live link.
+final activeChatProvider = FutureProvider<ChatBackend?>((ref) async {
+  final session = await ref.watch(activeSessionProvider.future);
+  if (session == null) return null;
+  final chat = DashboardChat(session);
+  ref.onDispose(() => unawaited(chat.dispose()));
+  return chat;
+});
+
+/// Recent conversations on the active server, newest first.
+///
+/// Null until the link is live, because `session.list` needs the socket. Read
+/// again each time the link comes back, so a list loaded before a drop
+/// catches up.
+final conversationsProvider = FutureProvider<List<ConversationSummary>?>((
+  ref,
+) async {
+  final live = ref.watch(
+    activeLinkProvider.select(
+      (link) => link.value?.phase == LinkPhase.live,
+    ),
+  );
+  if (!live) return null;
+  final chat = await ref.watch(activeChatProvider.future);
+  if (chat == null) return null;
+  return switch (await chat.conversations()) {
+    Ok(:final value) => value,
+    Err(:final failure) => throw failure,
   };
 });
