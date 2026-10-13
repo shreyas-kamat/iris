@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/result.dart';
 import '../../data/chat/chat_models.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/theme/iris_theme.dart';
@@ -91,7 +91,7 @@ class _ModelSheetState extends State<ModelSheet> {
         child: switch (snapshot.data) {
           null => const Padding(
             padding: EdgeInsets.all(IrisSpace.xl),
-            child: Center(child: Aperture(state: AgentState.thinking)),
+            child: Center(child: IrisOrb(state: AgentState.thinking)),
           ),
           Err(:final failure) => Padding(
             padding: const EdgeInsets.symmetric(vertical: IrisSpace.lg),

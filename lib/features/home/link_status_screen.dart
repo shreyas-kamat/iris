@@ -14,8 +14,8 @@ import '../../app/providers.dart';
 import '../../core/failure.dart';
 import '../../data/net/capabilities.dart';
 import '../../data/rpc/dashboard_session.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/adaptive.dart';
@@ -25,12 +25,12 @@ import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
 import '../servers/server_switcher.dart';
 
-/// The aperture state, headline and explanation for [link].
+/// The orb state, headline and explanation for [link].
 (AgentState, String, String) describeLink(LinkState link) {
   final tls = link.failure?.kind == FailureKind.tls;
   return switch (link.phase) {
     LinkPhase.idle || LinkPhase.connecting => (
-      AgentState.thinking,
+      AgentState.loading,
       'Connecting',
       'Opening a live connection to the dashboard.',
     ),
@@ -40,7 +40,7 @@ import '../servers/server_switcher.dart';
       'Iris holds a live connection to your agent.',
     ),
     LinkPhase.retrying => (
-      AgentState.waiting,
+      AgentState.offline,
       'Reconnecting',
       'The connection dropped. Trying again in '
           '${link.retryIn?.inSeconds ?? 1}s.',
@@ -92,7 +92,7 @@ class LinkStatusScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: IrisSpace.huge),
-              Aperture(state: state, size: 40),
+              IrisOrb(state: state, size: 40),
               const SizedBox(height: IrisSpace.lg),
               Text(headline, style: theme.typography.display),
               const SizedBox(height: IrisSpace.sm),

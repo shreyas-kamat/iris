@@ -16,8 +16,8 @@ import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/rpc/dashboard_session.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/adaptive.dart';
@@ -134,7 +134,7 @@ class _ConversationListScreenState
                 ),
                 child: Row(
                   children: [
-                    Aperture(state: state),
+                    IrisOrb(state: state),
                     const SizedBox(width: IrisSpace.md),
                     Expanded(
                       child: Column(

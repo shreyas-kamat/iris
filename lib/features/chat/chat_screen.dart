@@ -6,8 +6,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_backend.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
@@ -146,7 +146,7 @@ class _ChatScreenState extends State<ChatScreen> {
     switch (state.phase) {
       case ChatPhase.loading:
         return const Center(
-          child: Aperture(state: AgentState.thinking, size: 32),
+          child: IrisOrb(state: AgentState.thinking, size: 32),
         );
       case ChatPhase.failed:
         return IrisEmptyState(
@@ -245,7 +245,7 @@ class _ChatHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: IrisSpace.xs),
-          Aperture(state: agentStateFor(turn)),
+          IrisOrb(state: agentStateFor(turn)),
           const SizedBox(width: IrisSpace.sm),
           Expanded(
             child: Column(

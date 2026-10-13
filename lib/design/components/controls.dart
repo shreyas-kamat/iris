@@ -10,7 +10,7 @@ import '../theme/iris_theme.dart';
 import '../tokens/metrics.dart';
 import '../tokens/motion.dart';
 import '../tokens/palette.dart';
-import 'aperture.dart';
+import 'iris_orb.dart';
 import 'primitives.dart';
 
 /// How much weight a button carries.
@@ -80,7 +80,7 @@ class IrisButton extends StatelessWidget {
         // the same mark means the same thing everywhere in the app, and the
         // label stays put so the button does not change width mid-press.
         if (busy) ...[
-          const Aperture(
+          const IrisOrb(
             state: AgentState.working,
             size: IrisSize.iconSmall,
             semanticLabel: 'Working',
