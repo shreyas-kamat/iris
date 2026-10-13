@@ -15,6 +15,7 @@ import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 
 import 'api_client.dart';
 import 'credentials.dart';
+import 'dashboard_auth.dart';
 import 'server_config.dart';
 
 final class ServerConnection {
@@ -48,6 +49,8 @@ final class ServerConnection {
   final ServerSecrets secrets;
   final ApiClient client;
   final CookieJar _jar;
+
+  DashboardAuth get auth => DashboardAuth(client);
 
   /// The Access headers for a request to [uri]: none over cleartext.
   Map<String, String> accessHeadersFor(Uri uri) =>
