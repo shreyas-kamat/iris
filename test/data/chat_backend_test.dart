@@ -1,6 +1,8 @@
 /// The real chat backend against a scripted socket and HTTP server.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/json.dart';
@@ -17,20 +19,17 @@ import '../support/fake_wire_socket.dart';
 void main() {
   late FakeHttp http;
   late FakeWireSocket socket;
+  late DashboardSession session;
   late DashboardChat chat;
 
   setUp(() async {
     http = FakeHttp()
-      ..on(
-        'POST',
-        '/api/auth/ws-ticket',
-        (_) => FakeReply.json({'ticket': 't'}),
-      );
+      ..on('POST', '/api/auth/ws-ticket', (_) => FakeReply.json({'ticket': 't'}));
     final connection = ServerConnection.create(
       const ServerConfig(id: 's', baseUrl: 'https://h.example', label: 'H'),
       adapter: http,
     );
-    final session = DashboardSession(
+    session = DashboardSession(
       http: connection,
       backoff: (_) => Duration.zero,
       connector: (uri, headers) async => socket = FakeWireSocket(),
@@ -52,64 +51,178 @@ void main() {
     return sent;
   }
 
-  test('lists conversations over session.list', () async {
-    final future = chat.conversations();
+  List<Map<String, Object?>> rows(int from, int to) => [
+    for (var i = from; i <= to; i++) {'id': i, 'role': 'user', 'content': 'm$i'},
+  ];
+
+  group('conversations and profiles', () {
+    test('lists conversations over REST for the profile, a page at a time', () async {
+      Map<String, String>? query;
+      http.on('GET', '/api/profiles/sessions', (request) {
+        query = request.uri.queryParameters;
+        return FakeReply.json({
+          'sessions': [
+            {'id': 'a', 'title': null, 'preview': 'Hello', 'profile': 'default'},
+          ],
+          'total': 256,
+          'limit': 50,
+          'offset': 50,
+        });
+      });
+      final page = (await chat.conversations(50)).valueOrNull!;
+      expect(page.items.single.title, 'Hello');
+      expect(page.items.single.profile, 'default');
+      expect(page.total, 256);
+      expect(query, containsPair('profile', 'default'));
+      expect(query, containsPair('offset', '50'));
+      expect(query, containsPair('limit', '50'));
+      expect(query, containsPair('order', 'recent'));
+    });
+
+    test('lists profiles', () async {
+      http.on(
+        'GET',
+        '/api/profiles',
+        (_) => FakeReply.json({
+          'profiles': [
+            {'name': 'default', 'is_default': true},
+            {'name': 'ananta', 'is_default': false},
+          ],
+        }),
+      );
+      final profiles = (await chat.profiles()).valueOrNull!;
+      expect(profiles.map((p) => p.name), ['default', 'ananta']);
+    });
+  });
+
+  group('history', () {
+    test('a dashboard that pages from the oldest opens on the newest page', () async {
+      http
+        ..on('GET', '/api/sessions/abc/messages', (request) {
+          final q = request.uri.queryParameters;
+          final offset = int.parse(q['offset']!);
+          final limit = int.parse(q['limit']!);
+          final last = math.min(offset + limit, 184);
+          return FakeReply.json({
+            'session_id': 'abc',
+            'messages': rows(offset + 1, last),
+            'pagination': {
+              'limit': limit,
+              'offset': offset,
+              'returned': math.max(0, last - offset),
+            },
+          });
+        })
+        ..on(
+          'GET',
+          '/api/sessions/abc',
+          (_) => FakeReply.json({'id': 'abc', 'message_count': 184}),
+        );
+      final page = (await chat.history('abc')).valueOrNull!;
+      expect(page.items.first.id, '65');
+      expect(page.items.last.id, '184');
+      expect(page.earlier?.offset, 64);
+      expect(page.earlier?.fromNewest, isFalse);
+
+      final earlier = (await chat.history('abc', before: page.earlier))
+          .valueOrNull!;
+      expect(earlier.items.first.id, '1');
+      expect(earlier.items.last.id, '64');
+      expect(earlier.earlier, isNull);
+    });
+
+    test('a dashboard that honours order=latest is used as it is', () async {
+      http.on(
+        'GET',
+        '/api/sessions/abc/messages',
+        (_) => FakeReply.json({
+          'messages': rows(65, 184),
+          'pagination': {
+            'limit': 120,
+            'offset': 0,
+            'returned': 120,
+            'order': 'latest',
+          },
+        }),
+      );
+      final page = (await chat.history('abc')).valueOrNull!;
+      expect(page.items.last.id, '184');
+      expect(page.earlier?.offset, 120);
+      expect(page.earlier?.fromNewest, isTrue);
+      expect(http.to('/api/sessions/abc'), isEmpty);
+    });
+
+    test('a short conversation is a single page', () async {
+      http.on(
+        'GET',
+        '/api/sessions/abc/messages',
+        (_) => FakeReply.json({
+          'messages': rows(1, 5),
+          'pagination': {'limit': 120, 'offset': 0, 'returned': 5},
+        }),
+      );
+      final page = (await chat.history('abc')).valueOrNull!;
+      expect(page.items, hasLength(5));
+      expect(page.earlier, isNull);
+      expect(http.to('/api/sessions/abc'), isEmpty);
+      final sent = http.to('/api/sessions/abc/messages').single;
+      expect(sent.uri.queryParameters.containsKey('profile'), isFalse);
+    });
+
+    test('a named profile scopes its routes and calls', () async {
+      final scoped = DashboardChat(session, profile: 'ananta');
+      addTearDown(scoped.dispose);
+      http.on(
+        'GET',
+        '/api/sessions/abc/messages',
+        (_) => FakeReply.json({'messages': rows(1, 2)}),
+      );
+      await scoped.history('abc');
+      expect(
+        http.to('/api/sessions/abc/messages').single.uri.queryParameters['profile'],
+        'ananta',
+      );
+      final resume = scoped.resume('abc');
+      final resumed = await answer({'session_id': 'run-1'});
+      expect(resumed['params']['profile'].stringOrNull, 'ananta');
+      await resume;
+      final create = scoped.create();
+      final created = await answer({'session_id': 'run-2'});
+      expect(created['params']['profile'].stringOrNull, 'ananta');
+      await create;
+    });
+  });
+
+  test('resume returns the runtime id, model and decisions still waiting', () async {
+    final future = chat.resume('abc');
     final sent = await answer({
-      'sessions': [
-        {'id': 'a', 'title': 'One'},
+      'session_id': 'run-1',
+      'running': true,
+      'info': {'model': 'gpt-6.1-sol', 'provider': 'openai-codex'},
+      'open_requests': [
+        {
+          'id': 'srq-1',
+          'method': 'clarify',
+          'params': {'session_id': 'run-1', 'question': 'Which?'},
+        },
+        {
+          'id': 'srq-2',
+          'method': 'secret',
+          'params': {'session_id': 'run-1'},
+        },
       ],
     });
-    expect(sent['method'].stringOrNull, 'session.list');
-    expect((await future).valueOrNull?.single.title, 'One');
+    expect(sent['method'].stringOrNull, 'session.resume');
+    expect(sent['params']['session_id'].stringOrNull, 'abc');
+    expect(sent['params']['omit_messages'].boolOrNull, isTrue);
+    expect(sent['params']['profile'].exists, isFalse);
+    final resumed = (await future).valueOrNull!;
+    expect(resumed.runtimeId, 'run-1');
+    expect(resumed.running, isTrue);
+    expect(resumed.model, 'gpt-6.1-sol');
+    expect(resumed.provider, 'openai-codex');
+    expect(resumed.pending.single, isA<ClarifyAsked>());
   });
-
-  test('reads history over REST, newest page first', () async {
-    Map<String, String>? query;
-    http.on('GET', '/api/sessions/abc/messages', (request) {
-      query = request.uri.queryParameters;
-      return FakeReply.json({
-        'session_id': 'abc',
-        'messages': [
-          {'id': 1, 'role': 'user', 'content': 'hi'},
-        ],
-      });
-    });
-    final items = (await chat.history('abc')).valueOrNull!;
-    expect(items.single, isA<UserTurn>());
-    expect(query, containsPair('order', 'latest'));
-    expect(query, containsPair('limit', '120'));
-    expect(query, containsPair('include_compacted', 'true'));
-  });
-
-  test(
-    'resume returns the runtime id and the decisions still waiting',
-    () async {
-      final future = chat.resume('abc');
-      final sent = await answer({
-        'session_id': 'run-1',
-        'running': true,
-        'open_requests': [
-          {
-            'id': 'srq-1',
-            'method': 'clarify',
-            'params': {'session_id': 'run-1', 'question': 'Which?'},
-          },
-          {
-            'id': 'srq-2',
-            'method': 'secret',
-            'params': {'session_id': 'run-1'},
-          },
-        ],
-      });
-      expect(sent['method'].stringOrNull, 'session.resume');
-      expect(sent['params']['session_id'].stringOrNull, 'abc');
-      expect(sent['params']['omit_messages'].boolOrNull, isTrue);
-      final resumed = (await future).valueOrNull!;
-      expect(resumed.runtimeId, 'run-1');
-      expect(resumed.running, isTrue);
-      expect(resumed.pending.single, isA<ClarifyAsked>());
-    },
-  );
 
   test('create returns both ids', () async {
     final future = chat.create();
@@ -119,6 +232,7 @@ void main() {
     });
     expect(sent['method'].stringOrNull, 'session.create');
     expect(sent['params']['source'].stringOrNull, 'desktop');
+    expect(sent['params']['profile'].exists, isFalse);
     final created = (await future).valueOrNull!;
     expect(created.runtimeId, 'run-2');
     expect(created.storedId, 'st-2');
@@ -165,25 +279,22 @@ void main() {
     expect((await future).isOk, isTrue);
   });
 
-  test(
-    'a single server-request question is answered with a result frame',
-    () async {
-      const request = ClarifyRequest(
-        requestId: 'srq-4',
-        sessionId: 'run-1',
-        questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
-      );
-      final result = await chat.answerClarify(
-        request,
-        request.questions.single,
-        'main',
-      );
-      expect(result.isOk, isTrue);
-      expect(socket.lastSent['id'].stringOrNull, 'srq-4');
-      expect(socket.lastSent['result']['answer'].stringOrNull, 'main');
-      expect(socket.lastSent['method'].exists, isFalse);
-    },
-  );
+  test('a single server-request question is answered with a result frame', () async {
+    const request = ClarifyRequest(
+      requestId: 'srq-4',
+      sessionId: 'run-1',
+      questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+    );
+    final result = await chat.answerClarify(
+      request,
+      request.questions.single,
+      'main',
+    );
+    expect(result.isOk, isTrue);
+    expect(socket.lastSent['id'].stringOrNull, 'srq-4');
+    expect(socket.lastSent['result']['answer'].stringOrNull, 'main');
+    expect(socket.lastSent['method'].exists, isFalse);
+  });
 
   test('a batch question is locked by its qid', () async {
     const request = ClarifyRequest(
@@ -206,27 +317,144 @@ void main() {
     expect((await future).isOk, isTrue);
   });
 
-  test(
-    'a legacy clarify uses clarify.respond without a made-up question id',
-    () async {
-      const request = ClarifyRequest(
-        requestId: 'c-1',
-        sessionId: 'run-1',
-        questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+  test('a legacy clarify uses clarify.respond without a made-up question id', () async {
+    const request = ClarifyRequest(
+      requestId: 'c-1',
+      sessionId: 'run-1',
+      questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+    );
+    final future = chat.answerClarify(
+      request,
+      request.questions.single,
+      'main',
+    );
+    final sent = await answer({'status': 'ok'});
+    expect(sent['method'].stringOrNull, 'clarify.respond');
+    expect(sent['params']['request_id'].stringOrNull, 'c-1');
+    expect(sent['params']['answer'].stringOrNull, 'main');
+    expect(sent['params']['question_id'].exists, isFalse);
+    expect((await future).isOk, isTrue);
+  });
+
+  group('models', () {
+    test('options for the live session', () async {
+      final options = chat.modelOptions(runtimeId: 'run-1');
+      final sent = await answer({
+        'model': 'gpt-6.1-sol',
+        'provider': 'openai-codex',
+        'providers': [
+          {
+            'slug': 'openai-codex',
+            'name': 'OpenAI Codex',
+            'authenticated': true,
+            'models': ['gpt-6.1-sol', 'gpt-6-luna'],
+          },
+        ],
+      });
+      expect(sent['method'].stringOrNull, 'model.options');
+      expect(sent['params']['explicit_only'].boolOrNull, isTrue);
+      expect(sent['params']['session_id'].stringOrNull, 'run-1');
+      final got = (await options).valueOrNull!;
+      expect(got.model, 'gpt-6.1-sol');
+      expect(got.usable.single.models, ['gpt-6.1-sol', 'gpt-6-luna']);
+    });
+
+    test('a switch that needs confirming, then confirmed', () async {
+      final first = chat.switchModel(
+        'run-1',
+        model: 'gpt-6-luna',
+        provider: 'openai-codex',
+        confirmed: false,
       );
-      final future = chat.answerClarify(
-        request,
-        request.questions.single,
-        'main',
+      final asked = await answer({
+        'confirm_required': true,
+        'confirm_message': 'Expensive.',
+      });
+      expect(asked['method'].stringOrNull, 'config.set');
+      expect(asked['params']['key'].stringOrNull, 'model');
+      expect(asked['params']['session_id'].stringOrNull, 'run-1');
+      expect(
+        asked['params']['value'].stringOrNull,
+        'gpt-6-luna --provider openai-codex --session',
       );
-      final sent = await answer({'status': 'ok'});
-      expect(sent['method'].stringOrNull, 'clarify.respond');
-      expect(sent['params']['request_id'].stringOrNull, 'c-1');
-      expect(sent['params']['answer'].stringOrNull, 'main');
-      expect(sent['params']['question_id'].exists, isFalse);
-      expect((await future).isOk, isTrue);
-    },
-  );
+      expect(asked['params']['confirm_expensive_model'].exists, isFalse);
+      final outcome = (await first).valueOrNull!;
+      expect(outcome.confirmRequired, isTrue);
+      expect(outcome.confirmMessage, 'Expensive.');
+
+      final second = chat.switchModel(
+        'run-1',
+        model: 'gpt-6-luna',
+        provider: 'openai-codex',
+        confirmed: true,
+      );
+      final again = await answer({
+        'value': 'gpt-6-luna --provider openai-codex --session',
+      });
+      expect(again['params']['confirm_expensive_model'].boolOrNull, isTrue);
+      expect((await second).valueOrNull?.model, 'gpt-6-luna');
+    });
+  });
+
+  group('slash commands', () {
+    test('the catalogue, and a command run without its slash', () async {
+      final catalog = chat.commands();
+      final asked = await answer({
+        'pairs': [
+          ['/new', 'Start a new session'],
+          ['/model', 'Switch model'],
+        ],
+      });
+      expect(asked['method'].stringOrNull, 'commands.catalog');
+      expect((await catalog).valueOrNull?.map((c) => c.name), ['/new', '/model']);
+
+      final run = chat.runSlash('run-1', '/usage');
+      final sent = await answer({'type': 'exec', 'output': 'Tokens: 12k'});
+      expect(sent['method'].stringOrNull, 'slash.exec');
+      expect(sent['params']['session_id'].stringOrNull, 'run-1');
+      expect(sent['params']['command'].stringOrNull, 'usage');
+      final outcome = (await run).valueOrNull!;
+      expect(outcome.kind, SlashKind.exec);
+      expect(outcome.text, 'Tokens: 12k');
+    });
+
+    test('a command slash.exec declines falls back to command.dispatch', () async {
+      final run = chat.runSlash('run-1', '/plan write the tests');
+      await Future<void>.delayed(Duration.zero);
+      socket.replyToLast(
+        error: {
+          'code': 4004,
+          'message': 'skill command: use command.dispatch for /plan',
+        },
+      );
+      final dispatched = await answer({
+        'type': 'send',
+        'message': 'Plan: write the tests',
+      });
+      expect(dispatched['method'].stringOrNull, 'command.dispatch');
+      expect(dispatched['params']['name'].stringOrNull, 'plan');
+      expect(dispatched['params']['arg'].stringOrNull, 'write the tests');
+      final outcome = (await run).valueOrNull!;
+      expect(outcome.kind, SlashKind.send);
+      expect(outcome.text, 'Plan: write the tests');
+    });
+
+    test('a slash command that fails without a gateway answer is not dispatched again', () async {
+      // Only a gateway rejection proves the command did not run. A timeout or
+      // a dropped socket may mean it is running, and dispatching it again
+      // could run it twice. A dropped socket takes the same path as a
+      // timeout, without a 30-second wait.
+      final first = socket;
+      final run = chat.runSlash('run-1', '/compress');
+      await Future<void>.delayed(Duration.zero);
+      await first.serverCloses();
+      final result = await run;
+      expect(result.failureOrNull?.kind, FailureKind.offline);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final everything = [...first.sent, ...socket.sent];
+      expect(everything.where((frame) => frame.contains('command.dispatch')), isEmpty);
+    });
+  });
 
   test('stream events and server requests arrive as chat events', () async {
     final events = <ChatEvent>[];

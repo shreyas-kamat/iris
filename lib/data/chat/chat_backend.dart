@@ -2,20 +2,46 @@
 ///
 /// [ChatBackend] is the seam the chat screen depends on, so the screen is
 /// tested against a scripted fake. [DashboardChat] is the real one: the live
-/// socket for anything live, and REST for stored history — the split Hermes
-/// Desktop and Conduit both use, because a long transcript sent over the
+/// socket for anything live, and REST for stored history and lists — the split
+/// Hermes Desktop and Conduit both use, because a long transcript sent over the
 /// socket would hold up every event queued behind it.
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import '../../core/failure.dart';
+import '../../core/json.dart';
 import '../../core/result.dart';
 import '../rpc/dashboard_session.dart';
 import '../rpc/rpc_frame.dart';
+import 'catalog_parser.dart';
 import 'chat_event.dart';
 import 'chat_models.dart';
 import 'history_parser.dart';
+
+/// Where a page of stored history starts, in the server's own terms.
+final class HistoryCursor {
+  const HistoryCursor({required this.offset, required this.fromNewest});
+
+  /// Rows to skip.
+  final int offset;
+
+  /// Whether [offset] counts back from the newest row (a dashboard that
+  /// honours `order=latest`) or forward from the oldest (Hermes 0.18.2).
+  final bool fromNewest;
+}
+
+/// One page of stored history.
+final class HistoryPage {
+  const HistoryPage({required this.items, this.earlier});
+
+  /// Oldest first.
+  final List<TranscriptItem> items;
+
+  /// Where the page before this one starts; null at the beginning.
+  final HistoryCursor? earlier;
+}
 
 /// A conversation Iris just created.
 final class NewConversation {
@@ -34,6 +60,8 @@ final class ResumedConversation {
     required this.runtimeId,
     this.running = false,
     this.pending = const [],
+    this.model,
+    this.provider,
   });
 
   final String runtimeId;
@@ -44,6 +72,10 @@ final class ResumedConversation {
 
   /// Approvals and questions still waiting for an answer.
   final List<ChatEvent> pending;
+
+  /// The model the conversation runs on, when the gateway says.
+  final String? model;
+  final String? provider;
 }
 
 abstract interface class ChatBackend {
@@ -56,10 +88,15 @@ abstract interface class ChatBackend {
   /// conversation has to resume again or its events go nowhere.
   Stream<void> get reconnected;
 
-  Future<Result<List<ConversationSummary>>> conversations();
+  /// A page of this profile's conversations, newest first, from [offset].
+  Future<Result<ConversationPage>> conversations(int offset);
 
-  /// The newest page of [storedId]'s transcript, oldest first.
-  Future<Result<List<TranscriptItem>>> history(String storedId);
+  /// Every agent profile on the dashboard.
+  Future<Result<List<AgentProfile>>> profiles();
+
+  /// The newest page of [storedId]'s transcript, or the page before
+  /// [before].
+  Future<Result<HistoryPage>> history(String storedId, {HistoryCursor? before});
 
   Future<Result<ResumedConversation>> resume(String storedId);
 
@@ -76,10 +113,29 @@ abstract interface class ChatBackend {
     ClarifyQuestion question,
     String answer,
   );
+
+  /// The models the live session — or, without one, the profile — can use.
+  Future<Result<ModelOptions>> modelOptions({String? runtimeId});
+
+  /// Switches the live session's model. A switch Hermes wants confirmed
+  /// changes nothing and says so; call again with [confirmed] once the
+  /// person agrees.
+  Future<Result<ModelSwitch>> switchModel(
+    String runtimeId, {
+    required String model,
+    required String provider,
+    required bool confirmed,
+  });
+
+  /// Every slash command the gateway knows.
+  Future<Result<List<SlashCommand>>> commands();
+
+  /// Runs [command] (with or without its leading slash) in the live session.
+  Future<Result<SlashOutcome>> runSlash(String runtimeId, String command);
 }
 
 final class DashboardChat implements ChatBackend {
-  DashboardChat(this._session)
+  DashboardChat(this._session, {this.profile = 'default'})
     : _live = _session.state.phase == LinkPhase.live,
       _everLive = _session.state.phase == LinkPhase.live {
     _linkSubscription = _session.states.listen(_onLink);
@@ -96,9 +152,15 @@ final class DashboardChat implements ChatBackend {
   /// Rows per history page, as Hermes Desktop asks for.
   static const historyPage = 120;
 
+  /// Conversations per list page.
+  static const conversationPage = 50;
+
   /// Long enough for a busy gateway to accept a turn. The reply itself
   /// streams as events, not as this call's result.
   static const submitTimeout = Duration(seconds: 180);
+
+  /// The agent profile this backend reads and writes.
+  final String profile;
 
   final DashboardSession _session;
   final _events = StreamController<ChatEvent>.broadcast();
@@ -122,32 +184,145 @@ final class DashboardChat implements ChatBackend {
     _live = live;
   }
 
-  @override
-  Future<Result<List<ConversationSummary>>> conversations() async =>
-      (await _session.call('session.list')).map(HistoryParser.conversations);
+  /// [values] plus this profile, for a route or call that belongs to it. The
+  /// default profile is left implicit, as the dashboard expects; a named
+  /// profile's sessions answer 404 without it.
+  Map<String, Object?> _scoped(Map<String, Object?> values) =>
+      profile == 'default' ? values : {...values, 'profile': profile};
 
   @override
-  Future<Result<List<TranscriptItem>>> history(String storedId) async =>
+  Future<Result<ConversationPage>> conversations(int offset) async =>
       (await _session.connection.client.get(
-        '/api/sessions/${Uri.encodeComponent(storedId)}/messages',
+        '/api/profiles/sessions',
+        // Always named, even for the default: without it the route merges
+        // every profile's conversations.
         query: {
-          'limit': historyPage,
-          'offset': 0,
-          'order': 'latest',
-          'include_compacted': 'true',
+          'profile': profile,
+          'limit': conversationPage,
+          'offset': offset,
+          'min_messages': 1,
+          'archived': 'exclude',
+          'order': 'recent',
         },
-      )).map(HistoryParser.transcript);
+      )).map(CatalogParser.conversationPage);
+
+  @override
+  Future<Result<List<AgentProfile>>> profiles() async => (await _session
+      .connection
+      .client
+      .get('/api/profiles')).map(CatalogParser.profiles);
+
+  @override
+  Future<Result<HistoryPage>> history(
+    String storedId, {
+    HistoryCursor? before,
+  }) async {
+    final path = '/api/sessions/${Uri.encodeComponent(storedId)}';
+    if (before != null) return _earlier(path, before);
+    // Ask for the newest page. A dashboard that honours `order=latest` echoes
+    // it and counts offsets back from the newest row. One that does not —
+    // Hermes 0.18.2 — counts from the oldest, so its newest page starts at
+    // `message_count - historyPage`.
+    final first = await _messages(path, offset: 0, limit: historyPage);
+    switch (first) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(value: final body):
+        final rows = body['messages'].list.length;
+        if (body['pagination']['order'].stringOrNull == 'latest') {
+          return Ok(
+            HistoryPage(
+              items: HistoryParser.transcript(body),
+              earlier: rows < historyPage
+                  ? null
+                  : const HistoryCursor(offset: historyPage, fromNewest: true),
+            ),
+          );
+        }
+        final all = HistoryPage(items: HistoryParser.transcript(body));
+        if (rows < historyPage) return Ok(all);
+        final row = await _session.connection.client.get(
+          path,
+          query: _scoped(const {}),
+        );
+        final count = row.valueOrNull?['message_count'].intOrNull;
+        // Without a count the end cannot be found; the oldest page beats
+        // nothing.
+        if (count == null || count <= historyPage) return Ok(all);
+        final start = count - historyPage;
+        final tail = await _messages(path, offset: start, limit: historyPage);
+        return tail.map(
+          (page) => page['messages'].list.isEmpty
+              ? all
+              : HistoryPage(
+                  items: HistoryParser.transcript(page),
+                  earlier: HistoryCursor(offset: start, fromNewest: false),
+                ),
+        );
+    }
+  }
+
+  Future<Result<HistoryPage>> _earlier(
+    String path,
+    HistoryCursor before,
+  ) async {
+    if (before.fromNewest) {
+      final page = await _messages(
+        path,
+        offset: before.offset,
+        limit: historyPage,
+      );
+      return page.map((body) {
+        final rows = body['messages'].list.length;
+        return HistoryPage(
+          items: HistoryParser.transcript(body),
+          earlier: rows < historyPage
+              ? null
+              : HistoryCursor(offset: before.offset + rows, fromNewest: true),
+        );
+      });
+    }
+    if (before.offset <= 0) return const Ok(HistoryPage(items: []));
+    final start = math.max(0, before.offset - historyPage);
+    final page = await _messages(
+      path,
+      offset: start,
+      limit: before.offset - start,
+    );
+    return page.map(
+      (body) => HistoryPage(
+        items: HistoryParser.transcript(body),
+        earlier: start == 0
+            ? null
+            : HistoryCursor(offset: start, fromNewest: false),
+      ),
+    );
+  }
+
+  Future<Result<Json>> _messages(
+    String path, {
+    required int offset,
+    required int limit,
+  }) => _session.connection.client.get(
+    '$path/messages',
+    query: _scoped({
+      'limit': limit,
+      'offset': offset,
+      'order': 'latest',
+      'include_compacted': 'true',
+    }),
+  );
 
   @override
   Future<Result<ResumedConversation>> resume(String storedId) async {
     final result = await _session.call(
       'session.resume',
-      params: {
+      params: _scoped({
         'session_id': storedId,
         'cols': 96,
         'source': 'desktop',
         'omit_messages': true,
-      },
+      }),
     );
     return result.map((json) {
       final pending = <ChatEvent>[];
@@ -166,12 +341,14 @@ final class DashboardChat implements ChatBackend {
           pending.add(parsed);
         }
       }
+      final info = json['info'];
       return ResumedConversation(
         runtimeId:
             HistoryParser.firstText(json, const ['session_id']) ?? storedId,
-        running:
-            json['running'].boolOrNull ?? json['info']['running'].boolean(),
+        running: json['running'].boolOrNull ?? info['running'].boolean(),
         pending: pending,
+        model: HistoryParser.firstText(info, const ['model']),
+        provider: HistoryParser.firstText(info, const ['provider']),
       );
     });
   }
@@ -180,7 +357,7 @@ final class DashboardChat implements ChatBackend {
   Future<Result<NewConversation>> create() async {
     final result = await _session.call(
       'session.create',
-      params: const {'cols': 96, 'source': 'desktop'},
+      params: _scoped({'cols': 96, 'source': 'desktop'}),
     );
     switch (result) {
       case Err(:final failure):
@@ -268,6 +445,69 @@ final class DashboardChat implements ChatBackend {
         : const Err(
             IrisFailure.offline(message: 'Not connected to the dashboard.'),
           );
+  }
+
+  @override
+  Future<Result<ModelOptions>> modelOptions({String? runtimeId}) async =>
+      (await _session.call(
+        'model.options',
+        params: {'explicit_only': true, 'session_id': ?runtimeId},
+      )).map(CatalogParser.modelOptions);
+
+  @override
+  Future<Result<ModelSwitch>> switchModel(
+    String runtimeId, {
+    required String model,
+    required String provider,
+    required bool confirmed,
+  }) async =>
+      (await _session.call(
+        'config.set',
+        params: {
+          'key': 'model',
+          'session_id': runtimeId,
+          'value': '$model --provider $provider --session',
+          if (confirmed) 'confirm_expensive_model': true,
+        },
+      )).map((json) => CatalogParser.modelSwitch(json, requested: model));
+
+  @override
+  Future<Result<List<SlashCommand>>> commands() async =>
+      (await _session.call('commands.catalog')).map(CatalogParser.commands);
+
+  @override
+  Future<Result<SlashOutcome>> runSlash(
+    String runtimeId,
+    String command,
+  ) async {
+    final cleaned = command.replaceFirst(RegExp('^/+'), '').trim();
+    final result = await _session.call(
+      'slash.exec',
+      params: {'session_id': runtimeId, 'command': cleaned},
+    );
+    // Only a gateway answer means slash.exec declined to run it. A timeout or
+    // a dropped socket may mean it IS running, and dispatching it again could
+    // run it twice.
+    if (result case Err(:final failure)
+        when failure.kind == FailureKind.rejected) {
+      final space = cleaned.indexOf(' ');
+      final dispatched = await _session.call(
+        'command.dispatch',
+        params: {
+          'session_id': runtimeId,
+          'name': space < 0 ? cleaned : cleaned.substring(0, space),
+          'arg': space < 0 ? '' : cleaned.substring(space + 1).trim(),
+        },
+      );
+      // When slash.exec pointed at command.dispatch, dispatch's own failure is
+      // the real one; otherwise slash.exec's rejection is.
+      if (dispatched is Err &&
+          !(failure.message ?? '').contains('command.dispatch')) {
+        return Err(failure);
+      }
+      return dispatched.map(CatalogParser.slashOutcome);
+    }
+    return result.map(CatalogParser.slashOutcome);
   }
 
   Future<void> dispose() async {

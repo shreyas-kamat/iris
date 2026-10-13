@@ -104,19 +104,19 @@ void main() {
         connection.close();
       });
       await session.start();
-      final conversations = await chat.conversations();
+      final conversations = await chat.conversations(0);
       expect(
         conversations.isOk,
         isTrue,
         reason: '${conversations.failureOrNull}',
       );
-      final list = conversations.valueOrNull!;
+      final list = conversations.valueOrNull!.items;
       stdout.writeln('conversations: ${list.length}');
       if (list.isEmpty) return;
       final history = await chat.history(list.first.id);
       expect(history.isOk, isTrue, reason: '${history.failureOrNull}');
       final counts = <String, int>{};
-      for (final item in history.valueOrNull!) {
+      for (final item in history.valueOrNull!.items) {
         counts.update(
           item.runtimeType.toString(),
           (n) => n + 1,

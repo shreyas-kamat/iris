@@ -14,7 +14,19 @@ final class FakeChatBackend implements ChatBackend {
   final _reconnects = StreamController<void>.broadcast();
 
   Result<List<ConversationSummary>> conversationsResult = const Ok([]);
+
+  /// The list's total; the page's own length when null.
+  int? conversationsTotal;
+  Result<List<AgentProfile>> profilesResult = const Ok([]);
+
+  /// The newest page of history.
   Result<List<TranscriptItem>> historyResult = const Ok([]);
+
+  /// The cursor reported with the newest page.
+  HistoryCursor? historyEarlier;
+
+  /// Any earlier page.
+  Result<HistoryPage> earlierResult = const Ok(HistoryPage(items: []));
   Result<ResumedConversation> resumeResult = const Ok(
     ResumedConversation(runtimeId: 'run-1'),
   );
@@ -23,13 +35,24 @@ final class FakeChatBackend implements ChatBackend {
   );
   Result<void> submitResult = const Ok(null);
   Result<void> answerResult = const Ok(null);
+  Result<ModelOptions> modelOptionsResult = const Ok(ModelOptions());
+  Result<ModelSwitch> switchResult = const Ok(ModelSwitch(model: ''));
+  Result<List<SlashCommand>> commandsResult = const Ok([]);
+  Result<SlashOutcome> slashResult = const Ok(
+    SlashOutcome(kind: SlashKind.exec),
+  );
 
   /// Everything asked of the backend, in order: `history <id>`,
-  /// `resume <id>`, `create`, `interrupt <id>`, `conversations`.
+  /// `earlier <id> <offset>`, `resume <id>`, `create`, `interrupt <id>`,
+  /// `conversations <offset>`, `profiles`, `models`, `commands`.
   final List<String> calls = [];
   final List<(String, String)> submitted = [];
   final List<String> approvals = [];
   final List<String> answers = [];
+
+  /// `<model>@<provider>`, with ` confirmed` when it was.
+  final List<String> switches = [];
+  final List<String> slashes = [];
 
   /// Delivers [event] as if the gateway had sent it.
   void emit(ChatEvent event) => _events.add(event);
@@ -49,15 +72,35 @@ final class FakeChatBackend implements ChatBackend {
   Stream<void> get reconnected => _reconnects.stream;
 
   @override
-  Future<Result<List<ConversationSummary>>> conversations() async {
-    calls.add('conversations');
-    return conversationsResult;
+  Future<Result<ConversationPage>> conversations(int offset) async {
+    calls.add('conversations $offset');
+    return conversationsResult.map(
+      (items) => ConversationPage(
+        items: items,
+        total: conversationsTotal ?? items.length,
+      ),
+    );
   }
 
   @override
-  Future<Result<List<TranscriptItem>>> history(String storedId) async {
+  Future<Result<List<AgentProfile>>> profiles() async {
+    calls.add('profiles');
+    return profilesResult;
+  }
+
+  @override
+  Future<Result<HistoryPage>> history(
+    String storedId, {
+    HistoryCursor? before,
+  }) async {
+    if (before != null) {
+      calls.add('earlier $storedId ${before.offset}');
+      return earlierResult;
+    }
     calls.add('history $storedId');
-    return historyResult;
+    return historyResult.map(
+      (items) => HistoryPage(items: items, earlier: historyEarlier),
+    );
   }
 
   @override
@@ -101,5 +144,37 @@ final class FakeChatBackend implements ChatBackend {
   ) async {
     answers.add('${question.id}=$answer');
     return answerResult;
+  }
+
+  @override
+  Future<Result<ModelOptions>> modelOptions({String? runtimeId}) async {
+    calls.add('models');
+    return modelOptionsResult;
+  }
+
+  @override
+  Future<Result<ModelSwitch>> switchModel(
+    String runtimeId, {
+    required String model,
+    required String provider,
+    required bool confirmed,
+  }) async {
+    switches.add('$model@$provider${confirmed ? ' confirmed' : ''}');
+    return switchResult;
+  }
+
+  @override
+  Future<Result<List<SlashCommand>>> commands() async {
+    calls.add('commands');
+    return commandsResult;
+  }
+
+  @override
+  Future<Result<SlashOutcome>> runSlash(
+    String runtimeId,
+    String command,
+  ) async {
+    slashes.add(command);
+    return slashResult;
   }
 }

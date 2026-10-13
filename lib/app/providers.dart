@@ -178,8 +178,8 @@ final conversationsProvider = FutureProvider<List<ConversationSummary>?>((
   if (!live) return null;
   final chat = await ref.watch(activeChatProvider.future);
   if (chat == null) return null;
-  return switch (await chat.conversations()) {
-    Ok(:final value) => value,
+  return switch (await chat.conversations(0)) {
+    Ok(:final value) => value.items,
     Err(:final failure) => throw failure,
   };
 });

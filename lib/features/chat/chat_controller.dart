@@ -47,8 +47,8 @@ final class ChatController extends ValueNotifier<ChatState> {
       case Err(:final failure):
         _update(value.copyWith(phase: ChatPhase.failed, failure: failure));
         return;
-      case Ok(value: final items):
-        _update(value.copyWith(phase: ChatPhase.ready, items: items));
+      case Ok(value: final page):
+        _update(value.copyWith(phase: ChatPhase.ready, items: page.items));
     }
     if (_disposed) return;
     switch (await _backend.resume(storedId)) {
@@ -77,8 +77,8 @@ final class ChatController extends ValueNotifier<ChatState> {
     if (storedId == null || _disposed) return;
     final history = await _backend.history(storedId);
     if (_disposed) return;
-    if (history case Ok(value: final items)) {
-      _update(value.copyWith(phase: ChatPhase.ready, items: items));
+    if (history case Ok(value: final page)) {
+      _update(value.copyWith(phase: ChatPhase.ready, items: page.items));
     }
     final resumed = await _backend.resume(storedId);
     if (_disposed) return;
