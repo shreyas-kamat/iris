@@ -431,7 +431,15 @@ class _NewChatBar extends StatelessWidget {
                 color: palette.line,
                 width: IrisStroke.hairline,
               ),
-              boxShadow: IrisDepth.of(IrisPlane.overlay, palette).shadows,
+              // The overlay shadow drops 16pt and the bar sits only that far
+              // above the screen edge, so on a light ground its core is cut
+              // off into a hard grey band. Light uses the shallow raised
+              // shadow; dark keeps the design's deep one, which reads as
+              // depth there rather than as a smudge.
+              boxShadow: IrisDepth.of(
+                palette.isDark ? IrisPlane.overlay : IrisPlane.raised,
+                palette,
+              ).shadows,
             ),
             child: IrisPressable(
               onTap: enabled ? onTap : null,
