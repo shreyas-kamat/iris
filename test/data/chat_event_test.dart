@@ -1,0 +1,186 @@
+/// Stream events and server requests become chat events, with every field
+/// spelling Hermes has used.
+library;
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/core/json.dart';
+import 'package:iris/data/chat/chat_event.dart';
+import 'package:iris/data/rpc/rpc_frame.dart';
+
+RpcEvent event(String type, {Map<String, Object?> payload = const {}}) =>
+    RpcEvent(
+      type: type,
+      sessionId: 'r1',
+      payload: Json.of(payload),
+      raw: Json.of({'type': type, 'session_id': 'r1', 'payload': payload}),
+    );
+
+RpcServerRequest request(String id, String method, Map<String, Object?> params) =>
+    RpcServerRequest(id: id, method: method, params: Json.of(params));
+
+void main() {
+  test('a delta carries its text and session', () {
+    final parsed = ChatEvent.fromEvent(event('message.delta', payload: {'text': 'Hel'}));
+    expect(parsed, isA<TextDelta>().having((e) => e.text, 'text', 'Hel'));
+    expect(parsed?.sessionId, 'r1');
+  });
+
+  test('an empty delta is dropped', () {
+    expect(ChatEvent.fromEvent(event('message.delta', payload: {'text': ''})), isNull);
+  });
+
+  test('reasoning arrives under any of its names', () {
+    for (final key in ['reasoning', 'reasoning_content', 'text']) {
+      final parsed = ChatEvent.fromEvent(event('reasoning.delta', payload: {key: 'hmm'}));
+      expect(parsed, isA<ReasoningDelta>().having((e) => e.text, 'text', 'hmm'), reason: key);
+    }
+  });
+
+  test('a tool start reads its id, name and structured arguments', () {
+    final parsed = ChatEvent.fromEvent(
+      event('tool.start', payload: {'tool_id': 't1', 'name': 'terminal', 'args': {'command': 'ls'}}),
+    );
+    expect(parsed, isA<ToolStarted>());
+    final start = parsed! as ToolStarted;
+    expect(start.toolId, 't1');
+    expect(start.name, 'terminal');
+    expect(start.input, '{"command":"ls"}');
+  });
+
+  test('a tool result reads its output', () {
+    final parsed = ChatEvent.fromEvent(
+      event('tool.complete', payload: {'tool_call_id': 't1', 'name': 'terminal', 'output': 'a.txt'}),
+    );
+    final done = parsed! as ToolCompleted;
+    expect(done.toolId, 't1');
+    expect(done.output, 'a.txt');
+    expect(done.failed, isFalse);
+  });
+
+  test('busy, completion, errors and titles', () {
+    expect(
+      ChatEvent.fromEvent(event('session.busy', payload: {'busy': false})),
+      isA<BusyChanged>().having((e) => e.busy, 'busy', isFalse),
+    );
+    expect(
+      ChatEvent.fromEvent(event('message.complete', payload: {'content': 'Hi'})),
+      isA<MessageCompleted>().having((e) => e.content, 'content', 'Hi'),
+    );
+    expect(
+      ChatEvent.fromEvent(event('error', payload: {'message': 'boom'})),
+      isA<TurnFailed>().having((e) => e.message, 'message', 'boom'),
+    );
+    expect(
+      ChatEvent.fromEvent(event('session.title', payload: {'title': 'Plans'})),
+      isA<TitleChanged>().having((e) => e.title, 'title', 'Plans'),
+    );
+    expect(ChatEvent.fromEvent(event('message.interrupted')), isA<TurnInterrupted>());
+  });
+
+  test('an approval event offers the default choices', () {
+    final parsed = ChatEvent.fromEvent(
+      event('approval.request', payload: {
+        'command': 'rm -rf build',
+        'description': 'Delete build output',
+        'request_id': 'q1',
+      }),
+    );
+    final approval = (parsed! as ApprovalAsked).request;
+    expect(approval.choices, ['once', 'session', 'always', 'deny']);
+    expect(approval.queueId, 'q1');
+    expect(approval.serverRequestId, isNull);
+    expect(approval.command, 'rm -rf build');
+    expect(parsed.sessionId, 'r1');
+  });
+
+  test('an approval that forbids permanent drops always', () {
+    final parsed = ChatEvent.fromEvent(
+      event('approval.request', payload: {'command': 'ls', 'allow_permanent': false}),
+    );
+    expect((parsed! as ApprovalAsked).request.choices, ['once', 'session', 'deny']);
+  });
+
+  test('an approval server request keeps both ids and its choices', () {
+    final parsed = ChatEvent.fromServerRequest(
+      request('srq-1', 'approval', {
+        'session_id': 'r1',
+        'request_id': 'q9',
+        'command': 'git push',
+        'choices': ['once', 'deny'],
+      }),
+    );
+    final approval = (parsed! as ApprovalAsked).request;
+    expect(approval.serverRequestId, 'srq-1');
+    expect(approval.queueId, 'q9');
+    expect(approval.choices, ['once', 'deny']);
+    expect(approval.matches('srq-1'), isTrue);
+    expect(approval.matches('q9'), isTrue);
+  });
+
+  test('an approval without a session is dropped', () {
+    expect(
+      ChatEvent.fromServerRequest(request('srq-1', 'approval', {'command': 'ls'})),
+      isNull,
+    );
+  });
+
+  test('a single clarify question gets a synthetic id', () {
+    final parsed = ChatEvent.fromServerRequest(
+      request('srq-2', 'clarify', {
+        'session_id': 'r1',
+        'question': 'Which branch?',
+        'choices': [
+          'main',
+          {'label': 'Dev', 'value': 'dev'},
+        ],
+      }),
+    );
+    final clarify = (parsed! as ClarifyAsked).request;
+    expect(clarify.requestId, 'srq-2');
+    expect(clarify.isServerRequest, isTrue);
+    final question = clarify.questions.single;
+    expect(question.synthetic, isTrue);
+    expect(question.text, 'Which branch?');
+    expect(question.choices.map((c) => c.label), ['main', 'Dev']);
+    expect(question.choices.map((c) => c.value), ['main', 'dev']);
+  });
+
+  test('batch clarify questions keep their qids and drop duplicates', () {
+    final parsed = ChatEvent.fromServerRequest(
+      request('srq-3', 'clarify', {
+        'session_id': 'r1',
+        'questions': [
+          {'qid': 'a', 'question': 'One?'},
+          {'qid': 'b', 'question': 'Two?'},
+          {'qid': 'a', 'question': 'dup'},
+        ],
+      }),
+    );
+    final clarify = (parsed! as ClarifyAsked).request;
+    expect(clarify.questions.map((q) => q.id), ['a', 'b']);
+    expect(clarify.questions.every((q) => !q.synthetic), isTrue);
+  });
+
+  test('a clarify without a question is dropped', () {
+    expect(
+      ChatEvent.fromServerRequest(request('srq-4', 'clarify', {'session_id': 'r1'})),
+      isNull,
+    );
+  });
+
+  test('a withdrawn request names its id', () {
+    expect(
+      ChatEvent.fromEvent(event('request.cancel', payload: {'id': 'srq-2', 'method': 'clarify', 'reason': 'timeout'})),
+      isA<RequestWithdrawn>().having((e) => e.requestId, 'requestId', 'srq-2'),
+    );
+    expect(
+      ChatEvent.fromEvent(event('clarify.expire', payload: {'request_id': 'c-1'})),
+      isA<RequestWithdrawn>().having((e) => e.requestId, 'requestId', 'c-1'),
+    );
+  });
+
+  test('unknown events and other server requests are ignored', () {
+    expect(ChatEvent.fromEvent(event('context.update')), isNull);
+    expect(ChatEvent.fromServerRequest(request('srq-5', 'secret', {'session_id': 'r1'})), isNull);
+  });
+}
