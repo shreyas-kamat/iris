@@ -49,23 +49,24 @@ class IrisApp extends ConsumerWidget {
           // Applied once at the root so no individual list has to remember to
           // bounce on iOS and clamp on Android.
           scrollBehavior: const IrisScrollBehavior(),
+          // Above the Navigator, so pushed routes (the chat screen, the link
+          // status screen) get both, not only the home route.
+          //
           // Iris draws its own surfaces, but Flutter still requires a Material
           // ancestor for text to render normally — without one every Text gets
           // the yellow "missing material" underline. Transparent, so it
           // contributes nothing but that.
-          // Above the Navigator, so pushed routes (the chat screen, the link
-          // status screen) see the theme too, not only the home route.
           builder: (context, navigator) => AnimatedIrisTheme(
             data: theme,
-            child: navigator!,
-          ),
-          home: Material(
-            type: MaterialType.transparency,
-            child: ServerGate(
-              // Conversations are home; the link status screen opens from
-              // the list's header.
-              connected: (context) => const ConversationListScreen(),
+            child: Material(
+              type: MaterialType.transparency,
+              child: navigator,
             ),
+          ),
+          home: ServerGate(
+            // Conversations are home; the link status screen opens from the
+            // list's header.
+            connected: (context) => const ConversationListScreen(),
           ),
         );
       },
