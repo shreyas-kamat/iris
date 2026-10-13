@@ -104,10 +104,15 @@ final class IrisLog {
       RegExp(r'(set-cookie|cookie)\s*[:=]\s*[^\s,;]+', caseSensitive: false),
       r'$1: <cookie>',
     ),
+    // Cloudflare Access service-token secret, as a header.
+    (
+      RegExp(r'(cf-access-client-secret)\s*[:=]\s*\S+', caseSensitive: false),
+      r'$1: <secret>',
+    ),
     // Any JSON field whose name suggests a secret.
     (
       RegExp(
-        r'"(password|passwd|secret|token|api_?key|access_?key|authorization|client_secret|refresh_token|session_key)"\s*:\s*"[^"]*"',
+        r'"(password|passwd|secret|token|ticket|api_?key|access_?key|authorization|client_secret|refresh_token|session_key)"\s*:\s*"[^"]*"',
         caseSensitive: false,
       ),
       r'"$1":"<redacted>"',
@@ -115,7 +120,7 @@ final class IrisLog {
     // The same, as a query parameter.
     (
       RegExp(
-        r'([?&](?:password|token|api_?key|key|secret)=)[^&\s]*',
+        r"([?&](?:password|token|ticket|api_?key|key|secret)=)[^&\s']*",
         caseSensitive: false,
       ),
       r'$1<redacted>',

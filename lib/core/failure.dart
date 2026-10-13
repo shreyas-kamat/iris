@@ -21,6 +21,11 @@ enum FailureKind {
   /// Credentials are missing, wrong, or the session cookie expired (401/403).
   unauthorized,
 
+  /// An access proxy in front of the server — Cloudflare Access — turned the
+  /// request away before Hermes saw it. Fixed with a service token, not a
+  /// password, so it is kept apart from [unauthorized].
+  accessGate,
+
   /// The resource does not exist (404). Often a session deleted on another
   /// client, or an endpoint this server version does not implement.
   notFound,
@@ -84,6 +89,7 @@ final class IrisFailure implements Exception {
     FailureKind.unknown => true,
     FailureKind.tls ||
     FailureKind.unauthorized ||
+    FailureKind.accessGate ||
     FailureKind.notFound ||
     FailureKind.rejected ||
     FailureKind.malformed ||
@@ -93,7 +99,10 @@ final class IrisFailure implements Exception {
   /// Whether this failure means the server is unusable until the user acts,
   /// as opposed to one request having failed.
   bool get isConnectionLevel => switch (kind) {
-    FailureKind.offline || FailureKind.tls || FailureKind.unauthorized => true,
+    FailureKind.offline ||
+    FailureKind.tls ||
+    FailureKind.unauthorized ||
+    FailureKind.accessGate => true,
     _ => false,
   };
 
