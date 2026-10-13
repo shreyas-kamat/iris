@@ -1,11 +1,9 @@
-/// What one particular server can actually do.
+/// What one particular dashboard can actually do.
 ///
-/// hermes-webui ships fast and users self-host, so no two servers Iris talks to
-/// are guaranteed to be the same build. Two answers to that are possible: pin a
-/// tested upstream commit and refuse anything else, or ask the server what it
-/// supports and adapt. Iris takes the second, because the alternative means a
-/// user's own machine can become "unsupported" by an app update they did not
-/// ask for.
+/// Hermes ships fast and users self-host, so no two dashboards Iris talks to
+/// are guaranteed to be the same build, and plugins such as Kanban are
+/// optional. Iris asks the dashboard what it supports and adapts, rather than
+/// pinning a version and declaring a user's own machine unsupported.
 ///
 /// So features are gated on a probe, not on a version string — version numbers
 /// lie about backported and locally-patched builds, while a 404 does not.
@@ -24,35 +22,34 @@ import 'api_client.dart';
 /// central the feature is: the probe runs them in parallel, but the UI reports
 /// progress in this order.
 enum ServerCapability {
-  /// Per-session resumable stream with `Last-Event-ID` cursors. Newer servers
-  /// only; falls back to the legacy `/api/chat/stream` when absent.
-  resumableSessionStream('/api/sessions/events'),
+  /// Named agent configurations, including bots.
+  profiles('/api/profiles', 'Profiles'),
 
-  /// Session search by title.
-  sessionSearch('/api/sessions/search'),
+  /// Full-text search across sessions.
+  sessionSearch('/api/sessions/search', 'Search'),
 
-  /// Scheduled runs — the Tasks panel.
-  crons('/api/crons'),
+  /// Scheduled jobs and their runs.
+  cronJobs('/api/cron/jobs', 'Scheduled jobs'),
 
-  /// Installed agent skills.
-  skills('/api/skills'),
+  /// Installed skills.
+  skills('/api/skills', 'Skills'),
 
-  /// The agent's memory documents.
-  memory('/api/memory'),
+  /// Toolsets, including speech providers.
+  toolsets('/api/tools/toolsets', 'Tools'),
 
-  /// Registered workspace roots.
-  workspaces('/api/workspaces'),
+  /// The Kanban plugin's board.
+  kanban('/api/plugins/kanban', 'Kanban'),
 
-  /// Named agent configurations.
-  profiles('/api/profiles'),
+  /// Hermes Conduit's notifier plugin: push, live voice tokens, calls.
+  conduitPlugin('/api/plugins/conduit_push/capabilities', 'Notifier plugin');
 
-  /// The configured model list for the model picker.
-  models('/api/models');
-
-  const ServerCapability(this.probePath);
+  const ServerCapability(this.probePath, this.label);
 
   /// A GET path whose response proves the capability exists.
   final String probePath;
+
+  /// What the UI calls it.
+  final String label;
 }
 
 /// The probe result for one server.
@@ -79,8 +76,7 @@ final class ServerCapabilities {
   final Set<ServerCapability> available;
   final DateTime? probedAt;
 
-  /// Whatever `/health` reported, for the About screen. Never used to gate a
-  /// feature — that is what [available] is for.
+  /// What /api/status reported, for display. Never used to gate a feature.
   final String? serverVersion;
 
   /// Whether an unauthenticated probe was challenged.
@@ -109,7 +105,7 @@ final class CapabilityProbe {
 
   final ApiClient _client;
 
-  /// Probes `/health` and every capability endpoint concurrently.
+  /// Probes /api/status and every capability endpoint concurrently.
   ///
   /// Never fails: an unreachable server yields an empty capability set with the
   /// [ServerCapabilities.requiresAuth] flag set if that is why. Callers decide
@@ -117,16 +113,15 @@ final class CapabilityProbe {
   Future<ServerCapabilities> run({
     Duration timeout = const Duration(seconds: 10),
   }) async {
-    final health = await _client.get('/health');
-    final version = switch (health) {
-      Ok(:final value) => value.any([
-        'version',
-        'server_version',
-        'build',
-      ]).stringOrNull,
+    final status = await _client.get('/api/status');
+    final version = switch (status) {
+      Ok(:final value) => value['version'].stringOrNull,
       Err() => null,
     };
-    final challenged = health.failureOrNull?.kind == FailureKind.unauthorized;
+    final challenged = switch (status.failureOrNull?.kind) {
+      FailureKind.unauthorized || FailureKind.accessGate => true,
+      _ => false,
+    };
 
     final probes = await Future.wait([
       for (final capability in ServerCapability.values)

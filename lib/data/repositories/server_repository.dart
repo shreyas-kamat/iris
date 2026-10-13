@@ -1,10 +1,10 @@
 /// Managing the servers Iris knows about.
 ///
-/// One repository owns the whole lifecycle: adding a server, signing in to it,
-/// discovering what it supports, keeping a live connection, and forgetting it
-/// completely. Splitting these across several objects would mean four places
-/// that each know a little about credentials, and the one that forgets to clear
-/// them is the bug.
+/// One repository owns the whole lifecycle: adding a dashboard, keeping its
+/// secrets, its HTTP connection and its live link, discovering what it
+/// supports, and forgetting it completely. Splitting these across several
+/// objects would mean several places that each know a little about
+/// credentials, and the one that forgets to clear them is the bug.
 library;
 
 import 'dart:async';
@@ -14,33 +14,53 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/failure.dart';
+import '../../core/json.dart';
 import '../../core/logging.dart';
 import '../../core/result.dart';
 import '../db/database.dart';
 import '../net/capabilities.dart';
 import '../net/credentials.dart';
+import '../net/dashboard_auth.dart';
 import '../net/server_config.dart';
-import '../net/session_auth.dart';
+import '../net/server_connection.dart';
+import '../rpc/dashboard_session.dart';
+import '../rpc/wire_socket.dart';
 
 /// How a server is doing, right now.
 enum ServerHealth {
-  /// Never contacted since the app started.
+  /// Not contacted since the app started.
   unknown,
 
-  /// A request is in flight.
+  /// Connecting.
   checking,
 
-  /// Answering normally.
+  /// The live link is open.
   online,
 
-  /// Reachable but rejecting us. The session expired or the password changed.
+  /// The saved login no longer works.
   unauthorized,
 
-  /// Not reachable.
+  /// An access proxy wants a (different) service token.
+  gated,
+
+  /// Not reachable at the moment; Iris keeps trying.
   offline,
 
   /// Reachable, but the certificate is not trusted.
-  untrusted,
+  untrusted;
+
+  /// What a live-link state means for the status shown beside a server.
+  static ServerHealth fromLink(LinkState link) => switch (link.phase) {
+    LinkPhase.idle => ServerHealth.unknown,
+    LinkPhase.connecting => ServerHealth.checking,
+    LinkPhase.live => ServerHealth.online,
+    LinkPhase.retrying => ServerHealth.offline,
+    LinkPhase.needsSignIn => ServerHealth.unauthorized,
+    LinkPhase.blocked =>
+      link.failure?.kind == FailureKind.tls
+          ? ServerHealth.untrusted
+          : ServerHealth.gated,
+  };
 }
 
 /// A server plus everything currently known about it.
@@ -62,21 +82,6 @@ final class ServerState {
 
   bool get isUsable => health == ServerHealth.online;
 
-  ServerState copyWith({
-    ServerConfig? config,
-    ServerHealth? health,
-    ServerCapabilities? capabilities,
-    IrisFailure? lastError,
-    bool clearError = false,
-    DateTime? lastSeen,
-  }) => ServerState(
-    config: config ?? this.config,
-    health: health ?? this.health,
-    capabilities: capabilities ?? this.capabilities,
-    lastError: clearError ? null : (lastError ?? this.lastError),
-    lastSeen: lastSeen ?? this.lastSeen,
-  );
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -89,43 +94,44 @@ final class ServerState {
   int get hashCode => Object.hash(config, health, lastSeen);
 }
 
-/// The result of trying to reach a server for the first time.
-@immutable
-final class ConnectionAttempt {
-  const ConnectionAttempt({
-    required this.requirement,
-    this.serverVersion,
-    this.failure,
-  });
-
-  final AuthRequirement requirement;
-  final String? serverVersion;
-  final IrisFailure? failure;
-
-  bool get reachable => failure == null;
-  bool get needsPassword => requirement == AuthRequirement.password;
-}
+/// Builds the HTTP side of a server. Replaced in tests.
+typedef ServerConnectionFactory =
+    ServerConnection Function(
+      ServerConfig config, {
+      required ServerSecrets secrets,
+    });
 
 /// Owns the set of known servers.
 final class ServerRepository {
   ServerRepository({
     required IrisDatabase database,
     required CredentialStore credentials,
+    ServerConnectionFactory? connect,
+    WireConnector? connector,
   }) : _db = database,
-       _credentials = credentials;
+       _credentials = credentials,
+       _connect =
+           connect ??
+           ((config, {required secrets}) =>
+               ServerConnection.create(config, secrets: secrets)),
+       _connector = connector;
 
   static const _log = IrisLog('servers');
 
   final IrisDatabase _db;
   final CredentialStore _credentials;
+  final ServerConnectionFactory _connect;
+  final WireConnector? _connector;
 
-  /// Live connections, one per server, created lazily and reused.
-  ///
-  /// Reused because each carries a cookie jar: rebuilding the connection would
-  /// silently discard the session and produce a spurious re-login prompt.
+  /// HTTP connections, one per server, kept because each carries a cookie
+  /// jar: rebuilding one would discard the session and force a new login.
   final Map<String, ServerConnection> _connections = {};
 
-  /// Every known server, newest activity first, as a live query.
+  /// Live links, one per server that something is currently watching.
+  final Map<String, DashboardSession> _sessions = {};
+  final Map<String, StreamSubscription<LinkState>> _watchers = {};
+
+  /// Every known server, in switcher order, as a live query.
   Stream<List<ServerConfig>> watchServers() =>
       (_db.select(_db.servers)..orderBy([
             (s) => OrderingTerm(expression: s.position),
@@ -153,69 +159,49 @@ final class ServerRepository {
     allowSelfSignedCertificate: row.allowSelfSigned,
   );
 
-  /// The live connection for [config], creating it if needed.
-  ServerConnection connectionFor(ServerConfig config) =>
-      _connections.putIfAbsent(config.id, () {
-        _log.info('opening connection to ${config.label}');
-        return ServerConnection.create(config);
-      });
-
-  /// Contacts [baseUrl] without saving anything, to find out what it is.
-  ///
-  /// Run before a server is added so the wizard can ask for a password only
-  /// when one is actually wanted, and can explain an untrusted certificate
-  /// rather than failing with a generic network error.
-  Future<ConnectionAttempt> testConnection(
+  /// Looks at [baseUrl] without saving anything, so the connect screen asks
+  /// only for what this dashboard wants.
+  Future<DashboardProbe> testConnection(
     String baseUrl, {
     bool allowSelfSigned = false,
+    ServerSecrets secrets = ServerSecrets.none,
   }) async {
     final normalised = ServerConfig.normaliseBaseUrl(baseUrl);
-    final probe = ServerConfig(
-      id: 'probe',
-      baseUrl: normalised,
-      label: 'probe',
-      allowSelfSignedCertificate: allowSelfSigned,
+    if (normalised.isEmpty) {
+      return const DashboardProbe(
+        access: DashboardAccess.unreachable,
+        failure: IrisFailure(
+          FailureKind.rejected,
+          message: 'Enter a server address.',
+        ),
+      );
+    }
+    final probe = _connect(
+      ServerConfig(
+        id: 'probe',
+        baseUrl: normalised,
+        label: 'probe',
+        allowSelfSignedCertificate: allowSelfSigned,
+      ),
+      secrets: secrets,
     );
-    final connection = ServerConnection.create(probe);
     try {
-      final result = await connection.auth.probe();
-      return switch (result.requirement) {
-        AuthRequirement.unknown => ConnectionAttempt(
-          requirement: AuthRequirement.unknown,
-          failure: IrisFailure(
-            // A probe that cannot classify itself is almost always the address
-            // being wrong or the certificate being untrusted, and those need
-            // different fixes, so the detail is passed through verbatim.
-            _looksUntrusted(result.detail)
-                ? FailureKind.tls
-                : FailureKind.offline,
-            message: result.detail,
-          ),
-        ),
-        _ => ConnectionAttempt(
-          requirement: result.requirement,
-          serverVersion: result.serverVersion,
-        ),
-      };
+      return await probe.auth.probe();
     } finally {
-      connection.close();
+      probe.close();
     }
   }
 
-  static bool _looksUntrusted(String? detail) {
-    final text = (detail ?? '').toLowerCase();
-    return text.contains('certificate') || text.contains('handshake');
-  }
-
-  /// Saves a server and signs in if a password was supplied.
+  /// Saves a dashboard once its whole sign-in chain is proven.
   ///
-  /// Only persists after authentication succeeds. A server row the user cannot
-  /// actually reach is worse than no row: it appears in the switcher and fails
-  /// every time it is selected.
+  /// A server row the user cannot actually reach is worse than no row: it
+  /// appears in the switcher and fails every time it is selected. So the login
+  /// and a ticket mint both have to succeed first, and secrets are written only
+  /// after that.
   Future<Result<ServerConfig>> addServer({
     required String baseUrl,
     required String label,
-    String? password,
+    ServerSecrets secrets = ServerSecrets.none,
     bool allowSelfSigned = false,
   }) async {
     final normalised = ServerConfig.normaliseBaseUrl(baseUrl);
@@ -239,21 +225,19 @@ final class ServerRepository {
       id: _newId(),
       baseUrl: normalised,
       label: label.trim().isEmpty ? _labelFromUrl(normalised) : label.trim(),
-      requiresPassword: password != null && password.isNotEmpty,
+      requiresPassword: secrets.hasLogin,
+      usesAccessToken: secrets.hasAccessToken,
       allowSelfSignedCertificate: allowSelfSigned,
     );
 
-    final connection = ServerConnection.create(config);
-    if (password != null && password.isNotEmpty) {
-      final signIn = await connection.auth.signIn(password);
-      if (signIn case Err(:final failure)) {
-        connection.close();
-        return Err(failure);
-      }
-      final stored = await _credentials.write(
-        config.id,
-        ServerSecrets(password: password),
-      );
+    final connection = _connect(config, secrets: secrets);
+    final proven = await _prove(connection, secrets);
+    if (proven case Err(:final failure)) {
+      connection.close();
+      return Err(failure);
+    }
+    if (!secrets.isEmpty) {
+      final stored = await _credentials.write(config.id, secrets);
       if (stored case Err(:final failure)) {
         connection.close();
         return Err(failure);
@@ -268,6 +252,7 @@ final class ServerRepository {
             baseUrl: config.baseUrl,
             label: config.label,
             requiresPassword: Value(config.requiresPassword),
+            usesAccessToken: Value(config.usesAccessToken),
             allowSelfSigned: Value(config.allowSelfSignedCertificate),
             lastConnectedAt: Value(DateTime.now()),
             position: Value(existing.length),
@@ -279,83 +264,121 @@ final class ServerRepository {
     return Ok(config);
   }
 
-  /// Re-authenticates using the stored password, after a session expires.
-  ///
-  /// Returns a specific failure when nothing is stored, so the UI can prompt
-  /// for a password instead of retrying an empty sign-in forever.
-  Future<Result<void>> refreshSession(ServerConfig config) async {
-    if (!config.requiresPassword) return const Ok(null);
-
-    final stored = await _credentials.read(config.id);
-    return switch (stored) {
-      Err(:final failure) => Err(failure),
-      Ok(:final value) when value.password == null || value.password!.isEmpty =>
-        const Err(
-          IrisFailure(
-            FailureKind.unauthorized,
-            message: 'Sign in to this server again.',
-          ),
-        ),
-      Ok(:final value) => await connectionFor(
-        config,
-      ).auth.signIn(value.password!),
-    };
-  }
-
-  /// Checks a server and updates what is known about it.
-  Future<ServerState> refresh(ServerState current) async {
-    final connection = connectionFor(current.config);
-    final probe = await connection.auth.probe();
-
-    if (probe.requirement == AuthRequirement.password) {
-      // A password-guarded server that rejects us may simply have an expired
-      // cookie, which is recoverable without bothering the user.
-      final retry = await refreshSession(current.config);
-      if (retry.isOk) {
-        return _probeCapabilities(connection, current);
-      }
-      return current.copyWith(
-        health: ServerHealth.unauthorized,
-        lastError: retry.failureOrNull,
-      );
-    }
-
-    if (probe.requirement == AuthRequirement.unknown) {
-      return current.copyWith(
-        health: _looksUntrusted(probe.detail)
-            ? ServerHealth.untrusted
-            : ServerHealth.offline,
-        lastError: IrisFailure(FailureKind.offline, message: probe.detail),
-      );
-    }
-
-    return _probeCapabilities(connection, current);
-  }
-
-  Future<ServerState> _probeCapabilities(
+  /// Signs in if a login was given, then mints a ticket: the one request that
+  /// proves the whole chain — access proxy, login, and the dashboard's
+  /// willingness to open a live connection.
+  static Future<Result<void>> _prove(
     ServerConnection connection,
-    ServerState current,
+    ServerSecrets secrets,
   ) async {
-    final capabilities = await CapabilityProbe(connection.client).run();
-    final now = DateTime.now();
+    if (secrets.hasLogin) {
+      final signedIn = await connection.auth.signIn(
+        username: secrets.username!.trim(),
+        password: secrets.password!,
+      );
+      if (signedIn case Err(:final failure)) return Err(failure);
+    }
+    return (await connection.auth.mintTicket()).map((_) {});
+  }
 
-    await (_db.update(_db.servers)
-          ..where((s) => s.id.equals(current.config.id)))
-        .write(
-          ServersCompanion(
-            capabilitiesJson: Value(
-              jsonEncode(capabilities.available.map((c) => c.name).toList()),
-            ),
-            probedAt: Value(capabilities.probedAt),
-            lastConnectedAt: Value(now),
-          ),
+  /// The HTTP side of [config], built once with its stored secrets.
+  Future<Result<ServerConnection>> connectionFor(ServerConfig config) async {
+    if (_connections[config.id] case final existing?) return Ok(existing);
+    final secrets = await _credentials.read(config.id);
+    switch (secrets) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(:final value):
+        // Checked again after the await: two callers can race to here.
+        return Ok(
+          _connections.putIfAbsent(config.id, () {
+            _log.info('opening ${config.label}');
+            return _connect(config, secrets: value);
+          }),
         );
+    }
+  }
 
-    return current.copyWith(
-      health: ServerHealth.online,
-      capabilities: capabilities,
-      lastSeen: now,
-      clearError: true,
+  /// The live link to [config], created once and kept until [release].
+  ///
+  /// Each time the link goes live the capability probe re-runs, so a plugin
+  /// installed on the server since last time shows up without a restart.
+  Future<Result<DashboardSession>> sessionFor(ServerConfig config) async {
+    if (_sessions[config.id] case final existing?) return Ok(existing);
+    final connection = await connectionFor(config);
+    switch (connection) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(:final value):
+        if (_sessions[config.id] case final raced?) return Ok(raced);
+        final session = DashboardSession(http: value, connector: _connector);
+        _sessions[config.id] = session;
+        _watchers[config.id] = session.states.listen((state) {
+          if (state.phase == LinkPhase.live) {
+            unawaited(refreshCapabilities(config));
+          }
+        });
+        return Ok(session);
+    }
+  }
+
+  /// Stops [serverId]'s live link. Its sign-in is kept for next time.
+  Future<void> release(String serverId) async {
+    await _watchers.remove(serverId)?.cancel();
+    await _sessions.remove(serverId)?.dispose();
+  }
+
+  /// Re-probes what [config] supports and records it.
+  Future<void> refreshCapabilities(ServerConfig config) async {
+    final connection = await connectionFor(config);
+    if (connection case Ok(:final value)) {
+      final capabilities = await CapabilityProbe(value.client).run();
+      await (_db.update(
+        _db.servers,
+      )..where((s) => s.id.equals(config.id))).write(
+        ServersCompanion(
+          capabilitiesJson: Value(
+            jsonEncode(capabilities.available.map((c) => c.name).toList()),
+          ),
+          probedAt: Value(capabilities.probedAt),
+          serverVersion: Value(capabilities.serverVersion),
+          lastConnectedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+  }
+
+  /// What [serverId] was last found to support, as a live query.
+  Stream<ServerCapabilities> watchCapabilities(String serverId) =>
+      (_db.select(_db.servers)..where((s) => s.id.equals(serverId)))
+          .watchSingleOrNull()
+          .map(_capabilitiesOf);
+
+  /// Reads back the last probe, so navigation renders before the network
+  /// answers.
+  Future<ServerCapabilities> cachedCapabilities(String serverId) async =>
+      _capabilitiesOf(
+        await (_db.select(
+          _db.servers,
+        )..where((s) => s.id.equals(serverId))).getSingleOrNull(),
+      );
+
+  static ServerCapabilities _capabilitiesOf(Server? row) {
+    if (row == null || row.probedAt == null) {
+      return const ServerCapabilities.unknown();
+    }
+    final names = {
+      for (final name in Json.decode(row.capabilitiesJson).list)
+        ?name.stringOrNull,
+    };
+    return ServerCapabilities(
+      available: {
+        for (final capability in ServerCapability.values)
+          if (names.contains(capability.name)) capability,
+      },
+      probedAt: row.probedAt,
+      serverVersion: row.serverVersion,
+      requiresAuth: row.requiresPassword,
     );
   }
 
@@ -366,37 +389,25 @@ final class ServerRepository {
 
   /// Removes a server and everything belonging to it.
   ///
-  /// The credential goes first: if the database write fails halfway, the worst
+  /// The secrets go first: if the database write fails halfway, the worst
   /// outcome should be an orphaned row, never an orphaned password.
   Future<void> forget(ServerConfig config) async {
     await _credentials.delete(config.id);
+    await release(config.id);
     _connections.remove(config.id)?.close();
     await _db.forgetServer(config.id);
     _log.info('forgot ${config.label}');
   }
 
-  /// Reads back the capabilities recorded on the last successful probe, so the
-  /// app can render a usable navigation before the network answers.
-  Future<ServerCapabilities> cachedCapabilities(String serverId) async {
-    final row = await (_db.select(
-      _db.servers,
-    )..where((s) => s.id.equals(serverId))).getSingleOrNull();
-    if (row == null || row.probedAt == null) {
-      return const ServerCapabilities.unknown();
-    }
-    final names =
-        (jsonDecode(row.capabilitiesJson) as List<dynamic>).cast<String>();
-    return ServerCapabilities(
-      available: {
-        for (final capability in ServerCapability.values)
-          if (names.contains(capability.name)) capability,
-      },
-      probedAt: row.probedAt,
-      requiresAuth: row.requiresPassword,
-    );
-  }
-
   void dispose() {
+    for (final watcher in _watchers.values) {
+      unawaited(watcher.cancel());
+    }
+    _watchers.clear();
+    for (final session in _sessions.values) {
+      unawaited(session.dispose());
+    }
+    _sessions.clear();
     for (final connection in _connections.values) {
       connection.close();
     }

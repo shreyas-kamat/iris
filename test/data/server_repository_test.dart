@@ -14,19 +14,28 @@ import 'package:iris/data/db/database.dart';
 import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/credentials.dart';
 import 'package:iris/data/net/server_config.dart';
+import 'package:iris/data/net/server_connection.dart';
 import 'package:iris/data/repositories/server_repository.dart';
 
+import '../support/fake_http.dart';
 import '../support/fakes.dart';
 
 void main() {
   late IrisDatabase db;
   late FakeCredentialStore credentials;
   late ServerRepository repository;
+  late FakeHttp http;
 
   setUp(() {
     db = IrisDatabase(NativeDatabase.memory());
     credentials = FakeCredentialStore();
-    repository = ServerRepository(database: db, credentials: credentials);
+    http = FakeHttp();
+    repository = ServerRepository(
+      database: db,
+      credentials: credentials,
+      connect: (config, {required secrets}) =>
+          ServerConnection.create(config, secrets: secrets, adapter: http),
+    );
   });
 
   tearDown(() async {
@@ -122,6 +131,64 @@ void main() {
       expect(await repository.listServers(), isEmpty);
     });
 
+    test('a rejected login is never saved', () async {
+      http.on(
+        'POST',
+        '/auth/password-login',
+        (_) => FakeReply.json({'detail': 'Invalid credentials'}, status: 401),
+      );
+      final result = await repository.addServer(
+        baseUrl: 'https://h.example',
+        label: 'H',
+        secrets: const ServerSecrets(username: 'me', password: 'wrong'),
+      );
+      expect(result.failureOrNull?.kind, FailureKind.unauthorized);
+      expect(credentials.entries, isEmpty);
+      expect(await repository.listServers(), isEmpty);
+    });
+
+    test('secrets are saved only after a ticket proves them', () async {
+      http
+        ..on(
+          'POST',
+          '/auth/password-login',
+          (_) => FakeReply.json(
+            {'ok': true},
+            headers: {'set-cookie': 'hermes_session=abc; Path=/'},
+          ),
+        )
+        ..on(
+          'POST',
+          '/api/auth/ws-ticket',
+          (_) => FakeReply.json({'ticket': 't1'}),
+        );
+      const secrets = ServerSecrets(
+        username: 'me',
+        password: 'right',
+        accessClientId: 'id.access',
+        accessClientSecret: 'shh',
+      );
+      final result = await repository.addServer(
+        baseUrl: 'https://h.example',
+        label: 'H',
+        secrets: secrets,
+      );
+      final config = result.valueOrNull!;
+      expect(credentials.entries[config.id], secrets);
+      expect(config.requiresPassword, isTrue);
+      expect(config.usesAccessToken, isTrue);
+    });
+
+    test('an access-gated server without a token is refused as gated', () async {
+      http.on('POST', '/api/auth/ws-ticket', (_) => FakeReply.cloudflareLogin());
+      final result = await repository.addServer(
+        baseUrl: 'https://h.example',
+        label: 'H',
+      );
+      expect(result.failureOrNull?.kind, FailureKind.accessGate);
+      expect(await repository.listServers(), isEmpty);
+    });
+
     test('a duplicate address is refused', () async {
       await seedServer();
       final result = await repository.addServer(
@@ -149,23 +216,7 @@ void main() {
   });
 
   group('credentials', () {
-    test('refreshing without a stored password asks for sign-in', () async {
-      final id = await seedServer(requiresPassword: true);
-      final config = (await repository.listServers()).single;
-      expect(config.id, id);
-
-      final result = await repository.refreshSession(config);
-      expect(result.failureOrNull?.kind, FailureKind.unauthorized);
-      expect(result.failureOrNull?.message, contains('Sign in'));
-    });
-
-    test('an open server needs no session refresh', () async {
-      await seedServer();
-      final config = (await repository.listServers()).single;
-      expect((await repository.refreshSession(config)).isOk, isTrue);
-    });
-
-    test('forgetting a server removes its password', () async {
+    test('forgetting a server removes its secrets', () async {
       final id = await seedServer(requiresPassword: true, password: 'hunter2');
       expect(credentials.entries, contains(id));
 
@@ -205,23 +256,23 @@ void main() {
       final id = await seedServer();
       final capabilities = await repository.cachedCapabilities(id);
       expect(capabilities.hasProbed, isFalse);
-      expect(capabilities.has(ServerCapability.crons), isTrue);
+      expect(capabilities.has(ServerCapability.cronJobs), isTrue);
     });
 
     test('a stored probe is read back by name', () async {
       final id = await seedServer();
       await (db.update(db.servers)..where((s) => s.id.equals(id))).write(
         ServersCompanion(
-          capabilitiesJson: const Value('["crons","skills"]'),
+          capabilitiesJson: const Value('["cronJobs","skills"]'),
           probedAt: Value(DateTime.now()),
         ),
       );
 
       final capabilities = await repository.cachedCapabilities(id);
       expect(capabilities.hasProbed, isTrue);
-      expect(capabilities.confirmed(ServerCapability.crons), isTrue);
+      expect(capabilities.confirmed(ServerCapability.cronJobs), isTrue);
       expect(capabilities.confirmed(ServerCapability.skills), isTrue);
-      expect(capabilities.confirmed(ServerCapability.memory), isFalse);
+      expect(capabilities.confirmed(ServerCapability.kanban), isFalse);
     });
 
     test('a capability name this build does not know is ignored', () async {
@@ -230,12 +281,45 @@ void main() {
       final id = await seedServer();
       await (db.update(db.servers)..where((s) => s.id.equals(id))).write(
         ServersCompanion(
-          capabilitiesJson: const Value('["crons","time_travel"]'),
+          capabilitiesJson: const Value('["cronJobs","time_travel"]'),
           probedAt: Value(DateTime.now()),
         ),
       );
       final capabilities = await repository.cachedCapabilities(id);
-      expect(capabilities.confirmed(ServerCapability.crons), isTrue);
+      expect(capabilities.confirmed(ServerCapability.cronJobs), isTrue);
+    });
+
+    test('a probe stores names, version and time', () async {
+      http
+        ..on(
+          'GET',
+          '/api/status',
+          (_) => FakeReply.json({'version': '0.9.1'}),
+        )
+        ..on(
+          'GET',
+          '/api/profiles',
+          (_) => FakeReply.json({'profiles': <Object>[]}),
+        )
+        ..on(
+          'GET',
+          '/api/skills',
+          (_) => FakeReply.json({'skills': <Object>[]}),
+        );
+      await seedServer();
+      final config = (await repository.listServers()).single;
+
+      await repository.refreshCapabilities(config);
+
+      final capabilities = await repository.cachedCapabilities(config.id);
+      expect(capabilities.serverVersion, '0.9.1');
+      expect(capabilities.confirmed(ServerCapability.profiles), isTrue);
+      expect(capabilities.confirmed(ServerCapability.skills), isTrue);
+      expect(
+        capabilities.confirmed(ServerCapability.kanban),
+        isFalse,
+        reason: 'the fake answers 404 for routes it was not given',
+      );
     });
   });
 }

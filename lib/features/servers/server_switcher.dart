@@ -106,6 +106,7 @@ class _HealthDot extends StatelessWidget {
       ServerHealth.checking => 'Checking',
       ServerHealth.offline => 'Offline',
       ServerHealth.unauthorized => 'Sign in again',
+      ServerHealth.gated => 'Access token needed',
       ServerHealth.untrusted => 'Certificate not trusted',
       ServerHealth.unknown => 'Not checked',
     },
@@ -113,7 +114,7 @@ class _HealthDot extends StatelessWidget {
       ServerHealth.online => AgentState.done,
       ServerHealth.checking => AgentState.thinking,
       ServerHealth.offline || ServerHealth.untrusted => AgentState.failed,
-      ServerHealth.unauthorized => AgentState.waiting,
+      ServerHealth.unauthorized || ServerHealth.gated => AgentState.waiting,
       ServerHealth.unknown => AgentState.idle,
     },
   );

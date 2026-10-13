@@ -5,7 +5,6 @@
 /// below; the benefit is that the graph is readable in one file.
 library;
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -86,54 +85,13 @@ final activeServerProvider = Provider<ServerConfig?>((ref) {
   return null;
 });
 
-/// Live health and capabilities for the active server.
-///
-/// Polls rather than holding a socket open: the cost of a `/health` request a
-/// minute is negligible, and a persistent connection for status alone would
-/// keep the radio awake for no benefit.
-final activeServerStateProvider =
-    AsyncNotifierProvider<ActiveServerState, ServerState?>(
-      ActiveServerState.new,
-    );
-
-class ActiveServerState extends AsyncNotifier<ServerState?> {
-  Timer? _poll;
-
-  @override
-  Future<ServerState?> build() async {
-    final config = ref.watch(activeServerProvider);
-    _poll?.cancel();
-    if (config == null) return null;
-
-    final repository = ref.watch(serverRepositoryProvider);
-
-    // Start from what was recorded last time, so navigation renders
-    // immediately instead of waiting for the network.
-    final cached = await repository.cachedCapabilities(config.id);
-    final initial = ServerState(config: config, capabilities: cached);
-
-    _poll = Timer.periodic(
-      const Duration(seconds: 60),
-      (_) => unawaited(_check(silent: true)),
-    );
-    ref.onDispose(() => _poll?.cancel());
-
-    unawaited(_check(silent: true));
-    return initial;
-  }
-
-  /// Re-checks the server now.
-  Future<void> check() => _check(silent: false);
-
-  Future<void> _check({required bool silent}) async {
-    final current = state.value;
-    if (current == null) return;
-    if (!silent) {
-      state = AsyncData(current.copyWith(health: ServerHealth.checking));
-    }
-    final refreshed = await ref
-        .read(serverRepositoryProvider)
-        .refresh(current);
-    state = AsyncData(refreshed);
-  }
-}
+/// Health and capabilities for the active server. Interim: reads the cached
+/// probe only, until the live link is wired in.
+final activeServerStateProvider = FutureProvider<ServerState?>((ref) async {
+  final config = ref.watch(activeServerProvider);
+  if (config == null) return null;
+  final capabilities = await ref
+      .watch(serverRepositoryProvider)
+      .cachedCapabilities(config.id);
+  return ServerState(config: config, capabilities: capabilities);
+});

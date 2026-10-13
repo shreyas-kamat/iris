@@ -19,8 +19,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/failure.dart';
 import '../../core/result.dart';
+import '../../data/net/credentials.dart';
+import '../../data/net/dashboard_auth.dart';
 import '../../data/net/server_config.dart';
-import '../../data/net/session_auth.dart';
 import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/primitives.dart';
@@ -86,34 +87,26 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         .testConnection(_address.text, allowSelfSigned: _allowSelfSigned);
     if (!mounted) return;
 
-    if (!attempt.reachable) {
-      setState(() {
-        _step = _Step.address;
-        _failure = attempt.failure;
-      });
-      return;
+    switch (attempt.access) {
+      case DashboardAccess.password:
+        setState(() {
+          _serverVersion = attempt.version;
+          _step = _Step.password;
+        });
+      case DashboardAccess.open:
+        setState(() => _serverVersion = attempt.version);
+        await _join();
+      case _:
+        setState(() {
+          _step = _Step.address;
+          _failure =
+              attempt.failure ??
+              const IrisFailure(
+                FailureKind.rejected,
+                message: 'Iris cannot connect to this dashboard yet.',
+              );
+        });
     }
-
-    if (attempt.requirement == AuthRequirement.externalIdentityProvider) {
-      setState(() {
-        _step = _Step.address;
-        _failure = const IrisFailure(
-          FailureKind.rejected,
-          message:
-              'This server signs in through an identity provider, which Iris '
-              'cannot complete yet. Use a password-protected or private '
-              'endpoint for now.',
-        );
-      });
-      return;
-    }
-
-    setState(() {
-      _serverVersion = attempt.serverVersion;
-      _step = attempt.needsPassword ? _Step.password : _Step.joining;
-    });
-
-    if (!attempt.needsPassword) await _join();
   }
 
   Future<void> _join() async {
@@ -127,7 +120,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         .addServer(
           baseUrl: _address.text,
           label: _label.text,
-          password: _password.text.isEmpty ? null : _password.text,
+          secrets: ServerSecrets(
+            password: _password.text.isEmpty ? null : _password.text,
+          ),
           allowSelfSigned: _allowSelfSigned,
         );
     if (!mounted) return;
