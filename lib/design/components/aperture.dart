@@ -121,8 +121,8 @@ class _ApertureState extends State<Aperture> with TickerProviderStateMixin {
       AgentState.thinking ||
       AgentState.streaming ||
       AgentState.working ||
-      AgentState.waiting => true,
-      AgentState.done || AgentState.failed => false,
+      AgentState.waiting || AgentState.loading => true,
+      AgentState.done || AgentState.failed || AgentState.offline || AgentState.rest => false,
     };
     if (context.reduceMotion) {
       _ambient.stop();
@@ -146,6 +146,9 @@ class _ApertureState extends State<Aperture> with TickerProviderStateMixin {
     AgentState.waiting => 0.24,
     AgentState.done => 0.38,
     AgentState.failed => 0.20,
+    AgentState.loading => 0.40,
+    AgentState.offline => 0.22,
+    AgentState.rest => 0.36,
   };
 
   static SpringDescription _springFor(AgentState state) => switch (state) {
@@ -207,6 +210,9 @@ class _ApertureState extends State<Aperture> with TickerProviderStateMixin {
     AgentState.waiting => 'Agent waiting for you',
     AgentState.done => 'Run finished',
     AgentState.failed => 'Run failed',
+    AgentState.loading => 'Connecting',
+    AgentState.offline => 'Gateway offline',
+    AgentState.rest => 'Run finished',
   };
 }
 

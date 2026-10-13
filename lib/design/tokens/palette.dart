@@ -54,6 +54,32 @@ enum AgentState {
 
   /// The run failed, or the connection is lost.
   failed,
+
+  /// Connecting, or reaching the gateway for the first time.
+  loading,
+
+  /// The gateway cannot be reached right now.
+  offline,
+
+  /// A finished conversation at rest, as opposed to a turn that just ended.
+  /// Kept apart from [done] so a list of old conversations does not light up
+  /// green: only the moment of completion earns the success colour.
+  rest;
+
+  /// The word shown beside the orb. These are the design's own labels, so the
+  /// header, the hero and the transcript all speak the same language.
+  String get label => switch (this) {
+    AgentState.idle => 'Ready',
+    AgentState.thinking => 'Thinking',
+    AgentState.streaming => 'Writing',
+    AgentState.working => 'Using tools',
+    AgentState.waiting => 'Needs you',
+    AgentState.done => 'Done',
+    AgentState.failed => 'Failed',
+    AgentState.loading => 'Connecting',
+    AgentState.offline => 'Offline',
+    AgentState.rest => 'Done',
+  };
 }
 
 /// Resolved colours for one skin in one brightness.
@@ -130,6 +156,44 @@ final class IrisPalette {
   final double neutralHue;
   final double chroma;
 
+  /// Aperture in dark: the Iris design's own colours, fixed rather than derived.
+  ///
+  /// The values come from the design file (`design/Iris App.dc.html`), where
+  /// they were chosen by eye against the orb. Deriving them from the skin's
+  /// three numbers gives a close but visibly different ground, and the orb's
+  /// glow is tuned against these exact tones. Changing one changes the look of
+  /// the app's signature screen, so change it deliberately.
+  ///
+  /// Contrast assertions in `contrast_test.dart` apply to these values too. If
+  /// one fails, nudge that single role and say why here; do not loosen the test.
+  ///
+  /// Nudged so far, each the smallest step that clears its floor:
+  /// - `surfaceRaised` #17161F to #1B1A24. Measured 1.03 against `surface`,
+  ///   under the 1.05 step the dark theme needs to lift a plane by tone alone.
+  /// - `line` #1E1E27 to #242430. The design's hairline (white at 5%) measured
+  ///   1.11 against `surface`, under the 1.18 needed for a divider to read as
+  ///   structure rather than decoration.
+  static const IrisPalette apertureDark = IrisPalette(
+    isDark: true,
+    canvas: Color(0xFF0B0B10),
+    surface: Color(0xFF13131A),
+    surfaceRaised: Color(0xFF1B1A24),
+    surfaceSunken: Color(0xFF07070A),
+    scrim: Color(0xA6050508),
+    ink: Color(0xFFECEBF2),
+    inkMuted: Color(0xFFA9A7B8),
+    inkFaint: Color(0xFF6E6C7E),
+    inkInverse: Color(0xFF14121F),
+    line: Color(0xFF242430),
+    lineStrong: Color(0xFF34333F),
+    accent: Color(0xFFC9C3FF),
+    accentInk: Color(0xFF14121F),
+    accentQuiet: Color(0xFF25223A),
+    accentHue: 296,
+    neutralHue: 292,
+    chroma: 0.165,
+  );
+
   /// A destructive action's fill, and its text.
   ///
   /// Separate from `colorFor(failed)` because they do different jobs. That one
@@ -158,19 +222,45 @@ final class IrisPalette {
     AgentState.waiting => 32,
     AgentState.done => 152,
     AgentState.failed => 16,
+    // The new states sit where the design's hexes put them. Offline and rest
+    // are near-neutral, so their hue only nudges [quietFor]'s tint.
+    AgentState.loading => 228,
+    AgentState.offline => 280,
+    AgentState.rest => 285,
   };
 
-  /// The colour for [state], at a lightness that stays legible on [canvas].
-  Color colorFor(AgentState state) {
-    final hue = hueFor(state);
-    // Dark grounds need a lighter, slightly less saturated tone to avoid
-    // vibrating against the background; light grounds need the opposite.
-    return Oklch(isDark ? 0.74 : 0.55, isDark ? 0.15 : 0.17, hue).toColor();
-  }
+  /// The colour for [state].
+  ///
+  /// In the dark, these are the design's hex values exactly, because they were
+  /// tuned against the design's ground and nobody should re-derive them. The
+  /// light values are darker versions of the same hues, adjusted until they
+  /// clear the contrast floor on a light canvas. [AgentState.idle] is the
+  /// exception: it stays the skin's own accent so every skin still looks like
+  /// itself when nothing is happening.
+  Color colorFor(AgentState state) => switch (state) {
+    AgentState.idle => accent,
+    AgentState.thinking => _stateColor(isDark, 0xFF9B7BFF, 0xFF6A4BE0),
+    AgentState.loading => _stateColor(isDark, 0xFF5CC8FF, 0xFF0A7FB8),
+    AgentState.working => _stateColor(isDark, 0xFFFFB547, 0xFFA86200),
+    AgentState.streaming => _stateColor(isDark, 0xFF4FE3C1, 0xFF0B8A70),
+    AgentState.done => _stateColor(isDark, 0xFF6EE787, 0xFF1F8A3B),
+    AgentState.failed => _stateColor(isDark, 0xFFFF6B6B, 0xFFD23A3A),
+    AgentState.offline => _stateColor(isDark, 0xFF6B6A78, 0xFF74737F),
+    AgentState.rest => _stateColor(isDark, 0xFF8E89AE, 0xFF6F6A90),
+    AgentState.waiting => _stateColor(isDark, 0xFFFF8A5C, 0xFFC2501C),
+  };
+
+  static Color _stateColor(bool dark, int darkArgb, int lightArgb) =>
+      Color(dark ? darkArgb : lightArgb);
 
   /// A tint of [state]'s colour, for the background of a status chip.
+  ///
+  /// The dark tint sits lower than it used to (0.30 to 0.21). The design's
+  /// `offline` grey is dim, and against a 0.30 tint it measured 2.6, under the
+  /// chip floor. A deeper tint keeps every state chip legible rather than
+  /// lightening the design's own colour.
   Color quietFor(AgentState state) => Oklch(
-    isDark ? 0.30 : 0.95,
+    isDark ? 0.21 : 0.95,
     isDark ? 0.055 : 0.045,
     hueFor(state),
   ).toColor();
@@ -317,13 +407,19 @@ enum IrisSkin {
     _ => 0.012,
   };
 
-  IrisPalette palette({required bool isDark}) => IrisPalette.derive(
-    isDark: isDark,
-    accentHue: accentHue,
-    neutralHue: neutralHue,
-    chroma: chroma,
-    neutralChroma: _neutralChroma,
-  );
+  IrisPalette palette({required bool isDark}) {
+    // Aperture dark is the design, so it is fixed. Every other combination
+    // still derives, which keeps the other nine skins and light mode as they
+    // were.
+    if (this == IrisSkin.aperture && isDark) return IrisPalette.apertureDark;
+    return IrisPalette.derive(
+      isDark: isDark,
+      accentHue: accentHue,
+      neutralHue: neutralHue,
+      chroma: chroma,
+      neutralChroma: _neutralChroma,
+    );
+  }
 
   /// Matches a skin name reported by the server, so the phone can follow the
   /// browser. Unknown names fall back to [aperture] rather than failing.
