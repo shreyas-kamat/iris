@@ -5114,7 +5114,7 @@ Create `dart_test.yaml` at the project root:
 
 ```yaml
 # Live tests reach a real server and need ~/.iris-live.json; run them with
-#   flutter test --tags live test/live
+#   flutter test --tags live --run-skipped test/live
 tags:
   live:
     skip: "live: run explicitly with --tags live"
@@ -5225,7 +5225,7 @@ Expected: `All tests passed!` with the two live tests reported as skipped.
 
 - [ ] **Step 4: Run it against the real server**
 
-Run: `flutter test --tags live test/live`
+Run: `flutter test --tags live --run-skipped test/live`
 Expected: both pass. The output shows `probe: password` (or `open`), a version, `commands.catalog` keys, and an event-type set containing `gateway.ready`.
 
 If the probe says `accessGate`, the token or its Service Auth policy is wrong (Step 1). If the link reaches `needsSignIn`, the username or password is wrong. **Record the actual version, the catalog keys and the event types in the commit message**; Phase 2 is written against them.

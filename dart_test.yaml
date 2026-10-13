@@ -1,0 +1,6 @@
+# Live tests reach a real server and need ~/.iris-live.json; run them with
+#   flutter test --tags live --run-skipped test/live
+# (a tag's skip applies even when the tag is selected, hence --run-skipped)
+tags:
+  live:
+    skip: "live: run explicitly with --tags live"
