@@ -1,0 +1,113 @@
+/// Markdown as the agent writes it, drawn with Iris's type.
+library;
+
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/design/components/markdown.dart';
+
+import '../support/harness.dart';
+
+List<TextSpan> spansOf(WidgetTester tester, Finder finder) {
+  final spans = <TextSpan>[];
+  tester.widget<Text>(finder).textSpan!.visitChildren((span) {
+    if (span is TextSpan && span.text != null) spans.add(span);
+    return true;
+  });
+  return spans;
+}
+
+void main() {
+  testWidgets('headings, emphasis and inline code', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const IrisMarkdown(
+          '# Plan\n\nDo **this** & *that* with `flutter test`.',
+        ),
+      ),
+    );
+    expect(find.text('Plan'), findsOneWidget);
+    const paragraph = 'Do this & that with flutter test.';
+    expect(find.text(paragraph), findsOneWidget);
+    final spans = spansOf(tester, find.text(paragraph));
+    expect(
+      spans.firstWhere((s) => s.text == 'this').style?.fontWeight,
+      FontWeight.w600,
+    );
+    expect(
+      spans.firstWhere((s) => s.text == 'that').style?.fontStyle,
+      FontStyle.italic,
+    );
+    expect(
+      spans.firstWhere((s) => s.text == 'flutter test').style?.backgroundColor,
+      isNotNull,
+    );
+  });
+
+  testWidgets('bulleted, numbered and task lists', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const IrisMarkdown(
+          '- one\n- two\n\n1. first\n2. second\n\n- [x] done\n- [ ] todo',
+        ),
+      ),
+    );
+    expect(find.text('one'), findsOneWidget);
+    expect(find.text('•'), findsNWidgets(4));
+    expect(find.text('1.'), findsOneWidget);
+    expect(find.text('2.'), findsOneWidget);
+    expect(find.textContaining('☑'), findsOneWidget);
+    expect(find.textContaining('☐'), findsOneWidget);
+  });
+
+  testWidgets('a fenced code block keeps its text', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('```dart\nvoid main() {}\n```')),
+    );
+    expect(find.text('void main() {}'), findsOneWidget);
+  });
+
+  testWidgets('a table becomes a table', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('| a | b |\n|---|---|\n| 1 | 2 |')),
+    );
+    expect(find.byType(Table), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('b'), findsOneWidget);
+  });
+
+  testWidgets('a quote and a rule render', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('> quoted\n\n---\n\nafter')),
+    );
+    expect(find.text('quoted'), findsOneWidget);
+    expect(find.byType(Divider), findsOneWidget);
+    expect(find.text('after'), findsOneWidget);
+  });
+
+  testWidgets('links report their target when tapped', (tester) async {
+    String? tapped;
+    await tester.pumpWidget(
+      themed(
+        IrisMarkdown(
+          'See [the docs](https://example.com) and https://auto.link',
+          onTapLink: (href) => tapped = href,
+        ),
+      ),
+    );
+    final spans = spansOf(tester, find.textContaining('See'));
+    final docs = spans.firstWhere((s) => s.text == 'the docs');
+    (docs.recognizer! as TapGestureRecognizer).onTap!();
+    expect(tapped, 'https://example.com');
+    final auto = spans.firstWhere((s) => s.text == 'https://auto.link');
+    (auto.recognizer! as TapGestureRecognizer).onTap!();
+    expect(tapped, 'https://auto.link');
+  });
+
+  testWidgets('unfinished markup still renders', (tester) async {
+    // Replies stream token by token, so half-written Markdown is normal.
+    await tester.pumpWidget(themed(const IrisMarkdown('**unclosed and `open')));
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('unclosed'), findsOneWidget);
+  });
+}

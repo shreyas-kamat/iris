@@ -1,13 +1,17 @@
 /// How each kind of transcript entry looks.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_models.dart';
+import '../../design/components/markdown.dart';
 import '../../design/components/primitives.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
+import 'links.dart';
 
 /// One entry, dispatched on its kind.
 class TranscriptEntry extends StatelessWidget {
@@ -85,10 +89,10 @@ class _AssistantBlock extends StatelessWidget {
             ),
           ),
         if (hasText)
-          SelectableText(
-            turn.text,
-            style: theme.typography.bodyLarge.copyWith(
-              color: theme.palette.ink,
+          SelectionArea(
+            child: IrisMarkdown(
+              turn.text,
+              onTapLink: (href) => unawaited(openLink(href)),
             ),
           )
         else if (turn.streaming)

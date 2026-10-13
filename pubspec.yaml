@@ -48,6 +48,8 @@ dependencies:
   collection: ^1.19.1
   sqlite3: ^3.5.2
   mobile_scanner: ^7.4.2
+  markdown: ^7.3.1
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
