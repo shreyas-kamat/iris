@@ -1,14 +1,16 @@
 # Iris
 
 A Flutter client for [Hermes Agent](https://github.com/NousResearch/hermes-agent), talking to
-your own self-hosted [hermes-webui](https://github.com/nesquena/hermes-webui) server.
+your own Hermes dashboard (the agent's built-in web dashboard, default port 9119).
 
 The phone is a control plane, not a compute plane. The agent, its tools and your data stay on
 your hardware. Iris connects directly to your server — no relay, no account, no analytics.
 
 ## Status
 
-Phases 0 (foundation) and 1 (design system) complete. `flutter run` opens the design gallery.
+Phases 0 (foundation), 1 (design system) and the dashboard transport are complete: Iris signs
+in (through Cloudflare Access when the dashboard sits behind it), holds a live JSON-RPC
+connection that reconnects by itself, and shows its state. Chat is next.
 
 ## The design language
 
@@ -41,7 +43,7 @@ lib/
   design/     tokens, theme, components, motion, platform adapters
   data/
     net/      dio client, failure translation, capability probe
-    sse/      SSE parser and resilient streaming client
+    rpc/      JSON-RPC over WebSocket: frames, client, live session
     db/       Drift schema — offline mirror and durable outbox
     models/   wire models, hand-decoded through Json
   features/   one folder per screen
@@ -52,7 +54,7 @@ lib/
 
 ### Three load-bearing decisions
 
-**Tolerant decoding.** hermes-webui ships fast and every user runs a different build, so no wire
+**Tolerant decoding.** The Hermes dashboard ships fast and every user runs a different build, so no wire
 field is trusted to exist or to have the type it had last week. Everything is read through
 `core/json.dart`, which never throws and coerces across the representations the server actually
 uses. An unknown SSE event becomes `UnknownEvent` and renders as a labelled chip rather than
@@ -63,8 +65,9 @@ not on a version string — version numbers lie about backported and locally-pat
 pinning would let an app update declare a user's own machine unsupported.
 
 **Reconnection is normal.** A phone loses its connection constantly while the agent keeps working.
-`SseClient` reconnects with backoff and resumes from `Last-Event-ID`; when the server cannot
-honour a cursor it sends `session_snapshot` and the chat layer resyncs.
+`DashboardSession` mints a fresh single-use ticket and reopens the socket with backoff,
+signing in again first if the session cookie expired. An access-proxy refusal or an untrusted
+certificate stops it instead, because retrying cannot fix either.
 
 ## What the design system guarantees
 
@@ -109,3 +112,6 @@ Regenerate after touching `lib/data/db/database.dart`.
   `compileSdkMinor`, which is a separate upgrade.
 - **`applicationId` is still `com.example.iris`.** It has to change before any store release and
   is permanent once published, so it is left for a deliberate choice rather than guessed at.
+- **Cloudflare Access.** A dashboard published behind Access needs a service token (Zero Trust
+  → Access → Service credentials) and a *Service Auth* policy on the application. Iris sends it
+  as `CF-Access-Client-Id` / `CF-Access-Client-Secret`, over HTTPS only.

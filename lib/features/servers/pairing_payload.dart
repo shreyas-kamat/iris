@@ -1,6 +1,6 @@
 /// What a pairing QR code contains, and how much of it to trust.
 ///
-/// hermes-webui does not define a pairing format, so Iris defines one and also
+/// The Hermes dashboard does not define a pairing format, so Iris defines one and also
 /// accepts the thing people will actually generate: a QR of the plain server
 /// address. Both paths end in the same review step.
 ///

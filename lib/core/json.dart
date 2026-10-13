@@ -1,6 +1,6 @@
 /// Tolerant JSON access.
 ///
-/// The Hermes WebUI server evolves quickly and its responses are not versioned
+/// The Hermes dashboard evolves quickly and its responses are not versioned
 /// per-field. A client that decodes strictly will crash, blank a screen, or drop
 /// data every time upstream adds, renames, or retypes something. So every wire
 /// value in Iris is read through [Json]: navigation never throws, missing keys
