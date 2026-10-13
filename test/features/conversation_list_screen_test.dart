@@ -51,8 +51,8 @@ void main() {
   testWidgets('the header names the server and the link', (tester) async {
     await tester.pumpWidget(home(const []));
     await settle(tester);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Connected'), findsOneWidget);
+    // The gateway line names the host of the server and the link headline.
+    expect(find.text('h.example · Connected'), findsOneWidget);
   });
 
   testWidgets('lists conversations with when and where they started', (tester) async {
@@ -73,10 +73,12 @@ void main() {
   });
 
   testWidgets('an empty profile invites a first conversation', (tester) async {
+    final handle = tester.ensureSemantics();
     await tester.pumpWidget(home(const []));
     await settle(tester);
     expect(find.text('No conversations yet'), findsOneWidget);
-    expect(find.text('New conversation'), findsOneWidget);
+    expect(find.bySemanticsLabel('New conversation'), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('tapping a conversation opens it', (tester) async {
@@ -109,7 +111,7 @@ void main() {
     expect(find.text('Show more'), findsNothing);
   });
 
-  testWidgets('with several profiles, the chip switches profile', (tester) async {
+  testWidgets('with several profiles, the pill switches profile', (tester) async {
     await tester.pumpWidget(
       home(
         const [],
@@ -120,8 +122,8 @@ void main() {
       ),
     );
     await settle(tester);
-    // IrisChip upper-cases its label.
-    await tester.tap(find.text('DEFAULT'));
+    // The pill shows the profile name as it is stored.
+    await tester.tap(find.text('default'));
     await tester.pump(const Duration(milliseconds: 400));
     await settle(tester);
     await tester.tap(find.text('ananta'));
@@ -131,10 +133,10 @@ void main() {
       tester.element(find.byType(ConversationListScreen)),
     );
     expect(container.read(activeProfileProvider), 'ananta');
-    expect(find.text('ANANTA'), findsOneWidget);
+    expect(find.text('ananta'), findsOneWidget);
   });
 
-  testWidgets('a single profile shows no chip', (tester) async {
+  testWidgets('a single profile shows no picker', (tester) async {
     await tester.pumpWidget(
       home(
         const [],
@@ -142,6 +144,7 @@ void main() {
       ),
     );
     await settle(tester);
-    expect(find.text('DEFAULT'), findsNothing);
+    // No picker means no chevron: the pill is a label only.
+    expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
   });
 }
