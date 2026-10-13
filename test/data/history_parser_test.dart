@@ -32,17 +32,23 @@ void main() {
       expect(row.startedAt, isNotNull);
     });
 
-    test('a row without a title falls back to its preview, then a placeholder', () {
-      final list = HistoryParser.conversations(
-        Json.of({
-          'sessions': [
-            {'id': 'a', 'title': '', 'preview': 'hello there'},
-            {'id': 'b'},
-          ],
-        }),
-      );
-      expect(list.map((c) => c.title), ['hello there', 'Untitled conversation']);
-    });
+    test(
+      'a row without a title falls back to its preview, then a placeholder',
+      () {
+        final list = HistoryParser.conversations(
+          Json.of({
+            'sessions': [
+              {'id': 'a', 'title': '', 'preview': 'hello there'},
+              {'id': 'b'},
+            ],
+          }),
+        );
+        expect(list.map((c) => c.title), [
+          'hello there',
+          'Untitled conversation',
+        ]);
+      },
+    );
 
     test('a row without an id is dropped, not fatal', () {
       final list = HistoryParser.conversations(
@@ -120,7 +126,10 @@ void main() {
       expect(call.arguments, '{"command":"ls"}');
       expect(call.output, 'a.txt');
       expect(call.status, ToolStatus.done);
-      expect(items[1], isA<AssistantTurn>().having((t) => t.text, 'text', 'Done.'));
+      expect(
+        items[1],
+        isA<AssistantTurn>().having((t) => t.text, 'text', 'Done.'),
+      );
     });
 
     test('a tool result with no matching call still shows', () {
@@ -154,7 +163,10 @@ void main() {
           {'id': 4, 'role': 'user', 'content': 'real'},
         ]),
       );
-      expect(items.single, isA<UserTurn>().having((t) => t.text, 'text', 'real'));
+      expect(
+        items.single,
+        isA<UserTurn>().having((t) => t.text, 'text', 'real'),
+      );
     });
 
     test('content as a list of parts is joined', () {
@@ -170,7 +182,10 @@ void main() {
           },
         ]),
       );
-      expect(items.single, isA<UserTurn>().having((t) => t.text, 'text', 'one\ntwo'));
+      expect(
+        items.single,
+        isA<UserTurn>().having((t) => t.text, 'text', 'one\ntwo'),
+      );
     });
 
     test('display_content wins over the stored content', () {
@@ -184,7 +199,104 @@ void main() {
           },
         ]),
       );
-      expect(items.single, isA<UserTurn>().having((t) => t.text, 'text', 'steer'));
+      expect(
+        items.single,
+        isA<UserTurn>().having((t) => t.text, 'text', 'steer'),
+      );
+    });
+  });
+
+  group('compaction scaffolding', () {
+    // Seen on the real server: a long conversation's oldest page opens with
+    // Hermes's model-facing handoff text. Conduit hides it; so does Iris.
+    Json rowsOf(List<Map<String, Object?>> rows) => Json.of({'messages': rows});
+
+    test('a standalone summary is dropped', () {
+      final items = HistoryParser.transcript(
+        rowsOf([
+          {
+            'id': 1,
+            'role': 'user',
+            'content': '  [CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns…',
+          },
+          {'id': 2, 'role': 'user', 'content': '[Context Summary]: x'},
+          {
+            'id': 3,
+            'role': 'assistant',
+            'content': '[recent summary (3 turns)] y',
+          },
+          {'id': 4, 'role': 'user', 'content': 'real'},
+        ]),
+      );
+      expect(
+        items.single,
+        isA<UserTurn>().having((t) => t.text, 'text', 'real'),
+      );
+    });
+
+    test('a merged row keeps only the genuine prompt before the delimiter', () {
+      final items = HistoryParser.transcript(
+        rowsOf([
+          {
+            'id': 1,
+            'role': 'user',
+            'content':
+                '[PRIOR CONTEXT — for reference only; not a new message]\n'
+                'Send the email now\n'
+                '[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]\n'
+                '[CONTEXT COMPACTION — REFERENCE ONLY] summary…',
+          },
+          {
+            'id': 2,
+            'role': 'user',
+            'content':
+                '[PRIOR CONTEXT — for reference only; not a new message]\n'
+                '[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]\n'
+                '[CONTEXT COMPACTION — REFERENCE ONLY] summary…',
+          },
+        ]),
+      );
+      expect(
+        items.single,
+        isA<UserTurn>().having((t) => t.text, 'text', 'Send the email now'),
+      );
+    });
+
+    test('a flagged summary with no merged form is dropped', () {
+      final items = HistoryParser.transcript(
+        rowsOf([
+          {
+            'id': 1,
+            'role': 'user',
+            'content': 'bookkeeping',
+            '_compressed_summary': true,
+          },
+          {
+            'id': 2,
+            'role': 'user',
+            'content': 'also bookkeeping',
+            'metadata': {'_compressed_summary': true},
+          },
+          {'id': 3, 'role': 'user', 'content': 'kept'},
+        ]),
+      );
+      expect(
+        items.single,
+        isA<UserTurn>().having((t) => t.text, 'text', 'kept'),
+      );
+    });
+
+    test('talking about compaction mid-message is kept', () {
+      final items = HistoryParser.transcript(
+        rowsOf([
+          {
+            'id': 1,
+            'role': 'user',
+            'content': 'Why did [context compaction] happen?',
+          },
+        ]),
+      );
+      expect(items.single, isA<UserTurn>());
     });
   });
 

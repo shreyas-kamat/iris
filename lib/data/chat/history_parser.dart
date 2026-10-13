@@ -26,9 +26,11 @@ abstract final class HistoryParser {
       id: id,
       title:
           firstText(row, const ['title', 'preview']) ?? 'Untitled conversation',
-      startedAt: row
-          .any(const ['last_active', 'updated_at', 'started_at'])
-          .dateTimeOrNull,
+      startedAt: row.any(const [
+        'last_active',
+        'updated_at',
+        'started_at',
+      ]).dateTimeOrNull,
       messageCount: row['message_count'].integer(),
       source: firstText(row, const ['source']),
       profile: firstText(row, const ['profile']),
@@ -45,8 +47,15 @@ abstract final class HistoryParser {
       // Model-facing scaffolding that Hermes marks as never shown.
       if (row['display_kind'].string().trim() == 'hidden') continue;
       final id = row['id'].stringOrNull ?? 'row-$index';
-      final content = contentOf(row);
-      switch (row['role'].string().trim().toLowerCase()) {
+      final role = row['role'].string().trim().toLowerCase();
+      // Tool output and Hermes's own display projection are shown as given;
+      // anything else may carry context-compaction scaffolding.
+      final visible = role == 'tool' || row['display_content'].hasValue
+          ? contentOf(row)
+          : withoutCompaction(row, contentOf(row));
+      if (visible == null) continue;
+      final content = visible;
+      switch (role) {
         case 'user':
           if (content.trim().isNotEmpty) {
             items.add(UserTurn(id: id, text: content));
@@ -55,7 +64,10 @@ abstract final class HistoryParser {
           final turn = AssistantTurn(
             id: id,
             text: content,
-            reasoning: row.any(const ['reasoning', 'reasoning_content']).string(),
+            reasoning: row.any(const [
+              'reasoning',
+              'reasoning_content',
+            ]).string(),
           );
           if (!turn.isEmpty) items.add(turn);
           for (final (n, call) in row['tool_calls'].list.indexed) {
@@ -113,6 +125,47 @@ abstract final class HistoryParser {
       if (text != null && text.isNotEmpty) parts.add(text);
     }
     return parts.join('\n');
+  }
+
+  /// Marks Hermes puts around model-facing context-compaction text, which a
+  /// person never wrote and should not read as a message. Matched as Hermes
+  /// Conduit does.
+  static const _compactionDelimiter =
+      '[END OF PRIOR CONTEXT — COMPACTION SUMMARY BELOW]';
+  static const _priorContextHeader =
+      '[PRIOR CONTEXT — for reference only; not a new message]';
+
+  /// [content] with compaction scaffolding removed, or null when nothing a
+  /// person said is left: a standalone summary, a merged row whose genuine
+  /// prompt is empty, or a row flagged as a summary.
+  static String? withoutCompaction(Json row, String content) {
+    if (_isSummary(content)) return null;
+    final cut = content.indexOf(_compactionDelimiter);
+    if (cut >= 0) {
+      // A merged row: the genuine prompt sits before the delimiter, behind an
+      // optional header that is stripped only when it leads.
+      var visible = content.substring(0, cut).trim();
+      if (visible.startsWith(_priorContextHeader)) {
+        visible = visible.substring(_priorContextHeader.length).trim();
+      }
+      return visible.isEmpty || _isSummary(visible) ? null : visible;
+    }
+    final flagged =
+        row['_compressed_summary'].boolean() ||
+        row['metadata']['_compressed_summary'].boolean();
+    return flagged ? null : content;
+  }
+
+  /// Whether [content] opens with one of Hermes's summary headers. Only the
+  /// start counts, so a person talking about compaction mid-message is kept.
+  static bool _isSummary(String content) {
+    final head = content.trimLeft();
+    final start = head
+        .substring(0, head.length < 32 ? head.length : 32)
+        .toLowerCase();
+    return start.startsWith('[context compaction') ||
+        start.startsWith('[context summary]:') ||
+        start.startsWith('[recent summary (');
   }
 
   /// The first of [keys] holding non-blank text, trimmed.
