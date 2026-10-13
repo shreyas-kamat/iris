@@ -8,14 +8,17 @@
 /// while a reply streams — parses as plain text and never throws.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../theme/iris_theme.dart';
 import '../tokens/metrics.dart';
+import 'primitives.dart';
 
 class IrisMarkdown extends StatefulWidget {
   const IrisMarkdown(this.data, {this.onTapLink, super.key});
@@ -113,9 +116,12 @@ final class _Renderer {
     }
     if (node is! md.Element) return null;
     return switch (node.tag) {
-      'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6' => _rich(
-        inline(node.children, _heading(node.tag)),
-      ),
+      'h1' ||
+      'h2' ||
+      'h3' ||
+      'h4' ||
+      'h5' ||
+      'h6' => _rich(inline(node.children, _heading(node.tag))),
       'ul' || 'ol' => list(node),
       'blockquote' => quote(node),
       'pre' => code(node),
@@ -307,25 +313,21 @@ final class _Renderer {
 
   Widget code(md.Element node) {
     final text = node.textContent.replaceFirst(RegExp(r'\n$'), '');
-    return SizedBox(
-      width: double.infinity,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.palette.surfaceSunken,
-          borderRadius: const BorderRadius.all(IrisRadius.xs),
-        ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.all(IrisSpace.sm),
-          child: Text(
-            text,
-            style: theme.typography.codeSmall.copyWith(
-              color: theme.palette.ink,
-            ),
-          ),
-        ),
-      ),
-    );
+    return _CodeBlock(code: text, language: _languageOf(node));
+  }
+
+  /// The fence's language, from the `language-xxx` class the parser puts on
+  /// the inner `code` element. Null for an unlabelled fence.
+  static String? _languageOf(md.Element pre) {
+    for (final child in pre.children ?? const <md.Node>[]) {
+      if (child is md.Element && child.tag == 'code') {
+        final cls = child.attributes['class'];
+        if (cls != null && cls.startsWith('language-')) {
+          return cls.substring('language-'.length);
+        }
+      }
+    }
+    return null;
   }
 
   Widget table(md.Element node) {
@@ -381,6 +383,117 @@ final class _Renderer {
               ],
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// A fenced code block: its language and a copy button above the code.
+///
+/// Stateful only for the copy confirmation. "Copied" shows for a moment and
+/// then reverts, and the timer is cancelled on dispose so a block that leaves
+/// the screen during that moment does not set state on a dead widget.
+class _CodeBlock extends StatefulWidget {
+  const _CodeBlock({required this.code, this.language});
+
+  final String code;
+  final String? language;
+
+  @override
+  State<_CodeBlock> createState() => _CodeBlockState();
+}
+
+class _CodeBlockState extends State<_CodeBlock> {
+  Timer? _resetCopied;
+  bool _copied = false;
+
+  void _copy() {
+    unawaited(Clipboard.setData(ClipboardData(text: widget.code)));
+    _resetCopied?.cancel();
+    setState(() => _copied = true);
+    _resetCopied = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _resetCopied?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.surfaceSunken,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.line, width: IrisStroke.hairline),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: palette.line,
+                    width: IrisStroke.hairline,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.language ?? 'code',
+                      style: type.codeSmall.copyWith(
+                        fontSize: 11,
+                        color: palette.inkFaint,
+                      ),
+                    ),
+                  ),
+                  IrisPressable(
+                    onTap: _copy,
+                    ensureTapTarget: false,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.copy, size: 13, color: palette.accent),
+                        const SizedBox(width: 5),
+                        Text(
+                          _copied ? 'Copied' : 'Copy',
+                          style: type.caption.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: palette.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                widget.code,
+                style: type.code.copyWith(
+                  fontSize: 12.5,
+                  height: 1.6,
+                  color: palette.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

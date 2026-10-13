@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/design/tokens/palette.dart';
 import 'package:iris/features/chat/composer.dart';
 import 'package:iris/features/chat/decision_cards.dart';
 import 'package:iris/features/chat/transcript_view.dart';
@@ -25,20 +26,29 @@ void main() {
       ),
     );
     expect(find.text('terminal'), findsOneWidget);
-    // IrisChip upper-cases its label.
-    expect(find.text('DONE'), findsOneWidget);
+    // The status is written in lower case, under the tool's name.
+    expect(find.text('done'), findsOneWidget);
+    // Output is held back until the card is opened, so a long list of tool
+    // calls stays scannable.
+    expect(find.text('a.txt'), findsNothing);
+    await tester.tap(find.text('terminal'));
+    await tester.pump();
     expect(find.text('a.txt'), findsOneWidget);
   });
 
-  testWidgets('a live reply with no text yet says it is thinking', (tester) async {
+  testWidgets('a live reply with no text yet says it is thinking', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       themed(
         const TranscriptEntry(
           AssistantTurn(id: 'a', text: '', streaming: true),
+          live: AgentState.thinking,
         ),
       ),
     );
-    expect(find.text('Thinking…'), findsOneWidget);
+    // The header meta says what the turn is doing, in the design's words.
+    expect(find.text('thinking'), findsOneWidget);
   });
 
   testWidgets('user and assistant text both render', (tester) async {
@@ -58,7 +68,9 @@ void main() {
     expect(find.text('Stopped.'), findsOneWidget);
   });
 
-  testWidgets('an approval card offers each choice and reports the pick', (tester) async {
+  testWidgets('an approval card offers each choice and reports the pick', (
+    tester,
+  ) async {
     String? picked;
     await tester.pumpWidget(
       themed(
@@ -80,7 +92,9 @@ void main() {
     expect(picked, 'deny');
   });
 
-  testWidgets('a clarify card answers with a choice or typed text', (tester) async {
+  testWidgets('a clarify card answers with a choice or typed text', (
+    tester,
+  ) async {
     final answers = <String>[];
     await tester.pumpWidget(
       themed(
@@ -108,7 +122,9 @@ void main() {
     expect(answers, ['q0=main', 'q0=dev']);
   });
 
-  testWidgets('the composer sends only with text, and stops while running', (tester) async {
+  testWidgets('the composer sends only with text, and stops while running', (
+    tester,
+  ) async {
     final text = TextEditingController();
     addTearDown(text.dispose);
     var sent = 0;
@@ -133,30 +149,33 @@ void main() {
     expect(stopped, 1);
   });
 
-  testWidgets('typing a slash suggests commands, and a pick fills the composer', (tester) async {
-    final text = TextEditingController();
-    addTearDown(text.dispose);
-    await tester.pumpWidget(
-      themed(
-        Composer(
-          controller: text,
-          running: false,
-          onSend: () {},
-          onStop: () {},
-          commands: const [
-            SlashCommand(name: '/model', description: 'Switch model'),
-            SlashCommand(name: '/new', description: 'Start a new session'),
-          ],
+  testWidgets(
+    'typing a slash suggests commands, and a pick fills the composer',
+    (tester) async {
+      final text = TextEditingController();
+      addTearDown(text.dispose);
+      await tester.pumpWidget(
+        themed(
+          Composer(
+            controller: text,
+            running: false,
+            onSend: () {},
+            onStop: () {},
+            commands: const [
+              SlashCommand(name: '/model', description: 'Switch model'),
+              SlashCommand(name: '/new', description: 'Start a new session'),
+            ],
+          ),
         ),
-      ),
-    );
-    await tester.enterText(find.byType(EditableText), '/mo');
-    await tester.pump();
-    expect(find.text('/model'), findsOneWidget);
-    expect(find.text('/new'), findsNothing);
-    await tester.tap(find.text('/model'));
-    await tester.pump();
-    expect(text.text, '/model ');
-    expect(find.text('Switch model'), findsNothing);
-  });
+      );
+      await tester.enterText(find.byType(EditableText), '/mo');
+      await tester.pump();
+      expect(find.text('/model'), findsOneWidget);
+      expect(find.text('/new'), findsNothing);
+      await tester.tap(find.text('/model'));
+      await tester.pump();
+      expect(text.text, '/model ');
+      expect(find.text('Switch model'), findsNothing);
+    },
+  );
 }

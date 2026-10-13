@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/design/components/markdown.dart';
 
@@ -109,5 +110,43 @@ void main() {
     await tester.pumpWidget(themed(const IrisMarkdown('**unclosed and `open')));
     expect(tester.takeException(), isNull);
     expect(find.textContaining('unclosed'), findsOneWidget);
+  });
+
+  testWidgets('a code block names its language and copies on tap', (
+    tester,
+  ) async {
+    // Clipboard is a platform channel. Capture what would have been copied so
+    // the test can assert on it rather than on the device's clipboard.
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('```yaml\nheartbeat:\n  interval: 30s\n```')),
+    );
+    expect(find.text('yaml'), findsOneWidget);
+    expect(find.text('Copy'), findsOneWidget);
+
+    await tester.tap(find.text('Copy'));
+    await tester.pump();
+    expect(copied.single, 'heartbeat:\n  interval: 30s');
+    expect(find.text('Copied'), findsOneWidget);
+
+    // The label reverts after 1.4s, and the timer is cancelled on dispose.
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.text('Copy'), findsOneWidget);
   });
 }

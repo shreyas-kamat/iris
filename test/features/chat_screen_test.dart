@@ -22,7 +22,9 @@ void main() {
   Future<void> settle(WidgetTester tester) =>
       tester.pump(const Duration(milliseconds: 50));
 
-  testWidgets('opens a stored conversation and shows its transcript', (tester) async {
+  testWidgets('opens a stored conversation and shows its transcript', (
+    tester,
+  ) async {
     backend.historyResult = const Ok([
       UserTurn(id: '1', text: 'hi'),
       AssistantTurn(id: '2', text: 'hello'),
@@ -60,7 +62,9 @@ void main() {
     expect(find.text('Send'), findsOneWidget);
   });
 
-  testWidgets('sending puts the message in the transcript and submits it', (tester) async {
+  testWidgets('sending puts the message in the transcript and submits it', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
     );
@@ -73,7 +77,9 @@ void main() {
     expect(find.text('Run the tests'), findsOneWidget);
   });
 
-  testWidgets('an approval shows above the composer and is answered', (tester) async {
+  testWidgets('an approval shows above the composer and is answered', (
+    tester,
+  ) async {
     backend.resumeResult = Ok(
       ResumedConversation(
         runtimeId: 'run-1',
@@ -102,7 +108,9 @@ void main() {
     expect(find.text('git push'), findsNothing);
   });
 
-  testWidgets('a conversation that cannot be read offers a retry', (tester) async {
+  testWidgets('a conversation that cannot be read offers a retry', (
+    tester,
+  ) async {
     backend.historyResult = const Err(
       IrisFailure(FailureKind.notFound, message: 'Session not found'),
     );
@@ -122,7 +130,7 @@ void main() {
   testWidgets('a new chat starts empty and is created on send', (tester) async {
     await tester.pumpWidget(themed(ChatScreen(backend: backend)));
     await settle(tester);
-    expect(find.text('Ask your agent anything.'), findsOneWidget);
+    expect(find.text('What should we\nwork on?'), findsOneWidget);
     await tester.enterText(find.byType(EditableText), 'hi');
     await tester.pump();
     await tester.tap(find.text('Send'));
@@ -131,7 +139,9 @@ void main() {
     expect(backend.submitted.single, ('run-new', 'hi'));
   });
 
-  testWidgets('replies sit at the left edge and the person at the right', (tester) async {
+  testWidgets('replies sit at the left edge and the person at the right', (
+    tester,
+  ) async {
     // On the emulator, short replies were centred: each entry shrank to its
     // own width inside the centred readable column.
     // A phone-sized surface; the default test surface is 800 wide.
@@ -157,7 +167,9 @@ void main() {
       ..historyResult = const Ok([UserTurn(id: '65', text: 'newest')])
       ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
       ..earlierResult = const Ok(
-        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+        HistoryPage(
+          items: [UserTurn(id: '1', text: 'oldest')],
+        ),
       );
     await tester.pumpWidget(
       themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
@@ -212,7 +224,9 @@ void main() {
       await settle(tester);
     }
 
-    testWidgets('the header shows it, and the picker switches it', (tester) async {
+    testWidgets('the header shows it, and the picker switches it', (
+      tester,
+    ) async {
       scriptModels();
       backend.switchResult = const Ok(ModelSwitch(model: 'gpt-6-luna'));
       await pickLuna(tester);
@@ -246,7 +260,9 @@ void main() {
     });
   });
 
-  testWidgets('a slash command is suggested, runs, and its output shows', (tester) async {
+  testWidgets('a slash command is suggested, runs, and its output shows', (
+    tester,
+  ) async {
     backend
       ..commandsResult = const Ok([
         SlashCommand(name: '/usage', description: 'Token usage'),
