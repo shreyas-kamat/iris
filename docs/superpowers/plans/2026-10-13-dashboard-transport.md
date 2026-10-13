@@ -3981,7 +3981,10 @@ void main() {
       label: 'H',
     );
     // The server list is a stream; until its first emission the active server
-    // resolves to null and no session is created.
+    // resolves to null and no session is created. Riverpod 3 pauses a provider
+    // nobody listens to, so listen as a screen would before awaiting it.
+    final servers = container.listen(serversProvider, (_, _) {});
+    addTearDown(servers.close);
     await container.read(serversProvider.future);
     container.read(activeServerIdProvider.notifier).select(added.valueOrNull!.id);
     // Keep the link alive the way a screen would.

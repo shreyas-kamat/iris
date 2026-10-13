@@ -5,6 +5,7 @@
 /// below; the benefit is that the graph is readable in one file.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -12,10 +13,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/result.dart';
 import '../data/db/database.dart';
+import '../data/net/capabilities.dart';
 import '../data/net/credentials.dart';
 import '../data/net/server_config.dart';
 import '../data/repositories/server_repository.dart';
+import '../data/rpc/dashboard_session.dart';
 
 /// The on-disk database.
 ///
@@ -85,13 +89,64 @@ final activeServerProvider = Provider<ServerConfig?>((ref) {
   return null;
 });
 
-/// Health and capabilities for the active server. Interim: reads the cached
-/// probe only, until the live link is wired in.
-final activeServerStateProvider = FutureProvider<ServerState?>((ref) async {
+/// The live link to the active server.
+///
+/// Started on first read and released when another server is chosen, so only
+/// the server on screen holds a socket open. [activeServerProvider] compares
+/// configs by id, so a rewrite of the same server's row — which every
+/// capability probe makes — does not restart the link.
+final activeSessionProvider = FutureProvider<DashboardSession?>((ref) async {
   final config = ref.watch(activeServerProvider);
   if (config == null) return null;
-  final capabilities = await ref
-      .watch(serverRepositoryProvider)
-      .cachedCapabilities(config.id);
-  return ServerState(config: config, capabilities: capabilities);
+  final repository = ref.watch(serverRepositoryProvider);
+  switch (await repository.sessionFor(config)) {
+    case Err(:final failure):
+      throw failure;
+    case Ok(:final value):
+      ref.onDispose(() => unawaited(repository.release(config.id)));
+      unawaited(value.start());
+      return value;
+  }
+});
+
+/// Where the active server's live link is.
+final activeLinkProvider = StreamProvider<LinkState>((ref) async* {
+  final session = await ref.watch(activeSessionProvider.future);
+  if (session == null) {
+    yield const LinkState(LinkPhase.idle);
+    return;
+  }
+  yield session.state;
+  yield* session.states;
+});
+
+/// What the active server was last found to support.
+final activeCapabilitiesProvider = StreamProvider<ServerCapabilities>((ref) {
+  final config = ref.watch(activeServerProvider);
+  if (config == null) return Stream.value(const ServerCapabilities.unknown());
+  return ref.watch(serverRepositoryProvider).watchCapabilities(config.id);
+});
+
+/// Health and capabilities for the active server, together.
+final activeServerStateProvider = Provider<AsyncValue<ServerState?>>((ref) {
+  final config = ref.watch(activeServerProvider);
+  if (config == null) return const AsyncData(null);
+  final capabilities =
+      ref.watch(activeCapabilitiesProvider).value ??
+      const ServerCapabilities.unknown();
+  return switch (ref.watch(activeLinkProvider)) {
+    AsyncData(:final value) => AsyncData(
+      ServerState(
+        config: config,
+        health: ServerHealth.fromLink(value),
+        capabilities: capabilities,
+        lastError: value.failure,
+      ),
+    ),
+    AsyncError(:final error, :final stackTrace) => AsyncError(
+      error,
+      stackTrace,
+    ),
+    _ => const AsyncLoading(),
+  };
 });
