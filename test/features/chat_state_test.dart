@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/features/chat/chat_state.dart';
@@ -183,5 +184,36 @@ void main() {
       expect(state.questions, isEmpty);
       expect(state.turn, TurnPhase.thinking);
     });
+  });
+
+  test('the model follows ModelChanged', () {
+    final state = ready.apply(
+      const ModelChanged('r', model: 'gpt-6-luna', provider: 'openai-codex'),
+    );
+    expect(state.model, 'gpt-6-luna');
+    expect(state.provider, 'openai-codex');
+  });
+
+  test('a notice keeps the turn; settled ends it', () {
+    final running = ready.withUserTurn('/usage').withNotice('Tokens: 12k');
+    expect(running.items.last, isA<Notice>().having((n) => n.text, 'text', 'Tokens: 12k'));
+    expect(running.turn, TurnPhase.thinking);
+    expect(running.settled().turn, TurnPhase.idle);
+    expect(ready.withNotice('   ').items, isEmpty);
+  });
+
+  test('an earlier page goes above, and the cursor moves', () {
+    const cursor = HistoryCursor(offset: 64, fromNewest: false);
+    final newest = ready.withNewestPage(
+      const [UserTurn(id: '65', text: 'newer')],
+      cursor,
+    );
+    expect(newest.earlier?.offset, 64);
+    final both = newest
+        .copyWith(loadingEarlier: true)
+        .withEarlierPage(const [UserTurn(id: '1', text: 'older')], null);
+    expect(both.items.map((i) => i.id), ['1', '65']);
+    expect(both.earlier, isNull);
+    expect(both.loadingEarlier, isFalse);
   });
 }

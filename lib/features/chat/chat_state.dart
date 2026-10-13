@@ -7,6 +7,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../core/failure.dart';
+import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
 
@@ -34,6 +35,11 @@ final class ChatState {
     this.questions = const [],
     this.title,
     this.failure,
+    this.earlier,
+    this.loadingEarlier = false,
+    this.model,
+    this.provider,
+    this.commands = const [],
   });
 
   final ChatPhase phase;
@@ -46,6 +52,18 @@ final class ChatState {
   /// Why the transcript could not be read, when [phase] is failed.
   final IrisFailure? failure;
 
+  /// Where the page before the oldest shown message starts; null when the
+  /// whole conversation is shown.
+  final HistoryCursor? earlier;
+  final bool loadingEarlier;
+
+  /// The model the conversation runs on, when known.
+  final String? model;
+  final String? provider;
+
+  /// The gateway's slash commands, once read.
+  final List<SlashCommand> commands;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -56,6 +74,11 @@ final class ChatState {
     List<ClarifyRequest>? questions,
     String? title,
     IrisFailure? failure,
+    HistoryCursor? earlier,
+    bool? loadingEarlier,
+    String? model,
+    String? provider,
+    List<SlashCommand>? commands,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
@@ -64,6 +87,11 @@ final class ChatState {
     questions: questions ?? this.questions,
     title: title ?? this.title,
     failure: failure ?? this.failure,
+    earlier: earlier ?? this.earlier,
+    loadingEarlier: loadingEarlier ?? this.loadingEarlier,
+    model: model ?? this.model,
+    provider: provider ?? this.provider,
+    commands: commands ?? this.commands,
   );
 
   /// The state after [event].
@@ -113,6 +141,10 @@ final class ChatState {
           ? copyWith(turn: turn == TurnPhase.idle ? TurnPhase.thinking : turn)
           : copyWith(items: _settled(items), turn: _waitingOr(TurnPhase.idle)),
     TitleChanged(:final title) => copyWith(title: title),
+    ModelChanged(:final model, :final provider) => copyWith(
+      model: model,
+      provider: provider,
+    ),
     ApprovalAsked(:final request) => withApproval(request),
     ClarifyAsked(:final request) => withQuestion(request),
     RequestWithdrawn(:final requestId) => _decided(
@@ -128,6 +160,41 @@ final class ChatState {
       ),
     ),
   };
+
+  /// The newest page of stored history, replacing whatever was shown.
+  ChatState withNewestPage(
+    List<TranscriptItem> page,
+    HistoryCursor? earlier,
+  ) => ChatState(
+    phase: ChatPhase.ready,
+    items: page,
+    turn: turn,
+    approvals: approvals,
+    questions: questions,
+    title: title,
+    earlier: earlier,
+    model: model,
+    provider: provider,
+    commands: commands,
+  );
+
+  /// An earlier page, above what is shown.
+  ChatState withEarlierPage(
+    List<TranscriptItem> page,
+    HistoryCursor? earlier,
+  ) => ChatState(
+    phase: phase,
+    items: [...page, ...items],
+    turn: turn,
+    approvals: approvals,
+    questions: questions,
+    title: title,
+    failure: failure,
+    earlier: earlier,
+    model: model,
+    provider: provider,
+    commands: commands,
+  );
 
   /// The person's message, shown at once.
   ChatState withUserTurn(String text) => copyWith(
@@ -146,6 +213,21 @@ final class ChatState {
     ],
     turn: _waitingOr(TurnPhase.idle),
   );
+
+  /// A line that is not a turn — a command's output, a model change. The
+  /// turn carries on as it was; blank text adds nothing.
+  ChatState withNotice(String text) => text.trim().isEmpty
+      ? this
+      : copyWith(
+          items: [
+            ..._settled(items),
+            Notice(id: 'notice-${items.length}', text: text.trim()),
+          ],
+        );
+
+  /// The turn is over as far as Iris knows, unless a decision is waiting.
+  ChatState settled() =>
+      copyWith(items: _settled(items), turn: _waitingOr(TurnPhase.idle));
 
   ChatState withApproval(ApprovalRequest request) => copyWith(
     approvals: [

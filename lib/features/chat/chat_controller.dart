@@ -1,5 +1,5 @@
-/// One open conversation: loads it, follows its live events, sends, stops and
-/// answers.
+/// One open conversation: loads it, follows its live events, sends, stops,
+/// answers, pages back, switches model and runs slash commands.
 ///
 /// A [ValueNotifier] rather than a provider: a conversation lives exactly as
 /// long as its screen, and the screen owns it.
@@ -32,9 +32,18 @@ final class ChatController extends ValueNotifier<ChatState> {
   StreamSubscription<ChatEvent>? _subscription;
   StreamSubscription<void>? _reconnects;
   bool _disposed = false;
+  bool _loadingCommands = false;
+
+  /// Called with text a slash command wants in the composer, for the person
+  /// to finish and send.
+  ValueChanged<String>? onPrefill;
 
   /// The stored id: given when opened, or set by a new chat's first send.
   String? get conversationId => _storedId;
+
+  /// Attached to the live socket, so live calls — sending, switching model —
+  /// can reach it.
+  bool get isLive => _runtimeId != null;
 
   /// Starts following events, then reads the transcript and attaches to it.
   Future<void> open() async {
@@ -42,13 +51,20 @@ final class ChatController extends ValueNotifier<ChatState> {
     _reconnects ??= _backend.reconnected.listen((_) => unawaited(_reattach()));
     final storedId = _storedId;
     if (storedId == null) return;
-    _update(ChatState(title: value.title));
+    _update(
+      ChatState(
+        title: value.title,
+        model: value.model,
+        provider: value.provider,
+        commands: value.commands,
+      ),
+    );
     switch (await _backend.history(storedId)) {
       case Err(:final failure):
         _update(value.copyWith(phase: ChatPhase.failed, failure: failure));
         return;
       case Ok(value: final page):
-        _update(value.copyWith(phase: ChatPhase.ready, items: page.items));
+        _update(value.withNewestPage(page.items, page.earlier));
     }
     if (_disposed) return;
     switch (await _backend.resume(storedId)) {
@@ -60,6 +76,8 @@ final class ChatController extends ValueNotifier<ChatState> {
         _runtimeId = resumed.runtimeId;
         var next = value.copyWith(
           turn: resumed.running ? TurnPhase.thinking : null,
+          model: resumed.model,
+          provider: resumed.provider,
         );
         for (final event in resumed.pending) {
           next = next.apply(event);
@@ -78,7 +96,7 @@ final class ChatController extends ValueNotifier<ChatState> {
     final history = await _backend.history(storedId);
     if (_disposed) return;
     if (history case Ok(value: final page)) {
-      _update(value.copyWith(phase: ChatPhase.ready, items: page.items));
+      _update(value.withNewestPage(page.items, page.earlier));
     }
     final resumed = await _backend.resume(storedId);
     if (_disposed) return;
@@ -94,6 +112,8 @@ final class ChatController extends ValueNotifier<ChatState> {
               : TurnPhase.idle,
           approvals: const [],
           questions: const [],
+          model: again.model,
+          provider: again.provider,
         );
         for (final event in again.pending) {
           next = next.apply(event);
@@ -102,16 +122,108 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
+  /// Reads the page before the oldest message shown.
+  Future<void> loadEarlier() async {
+    final storedId = _storedId;
+    final cursor = value.earlier;
+    if (storedId == null || cursor == null || value.loadingEarlier) return;
+    _update(value.copyWith(loadingEarlier: true));
+    final page = await _backend.history(storedId, before: cursor);
+    switch (page) {
+      case Err(:final failure):
+        _update(
+          value
+              .copyWith(loadingEarlier: false)
+              .withNotice(
+                'Could not load earlier messages: ${describe(failure)}',
+              ),
+        );
+      case Ok(value: final earlier):
+        _update(value.withEarlierPage(earlier.items, earlier.earlier));
+    }
+  }
+
+  /// Reads the slash-command catalogue once, the first time it is wanted —
+  /// when the person types a slash — rather than with every conversation.
+  Future<void> loadCommands() async {
+    if (value.commands.isNotEmpty || _loadingCommands) return;
+    _loadingCommands = true;
+    final result = await _backend.commands();
+    _loadingCommands = false;
+    if (result case Ok(value: final commands)) {
+      _update(value.copyWith(commands: commands));
+    }
+  }
+
   /// Sends [text], creating the conversation first if this is a new chat.
+  /// Text that starts with a slash runs as a command.
   Future<void> send(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty || value.running) return;
     _update(value.withUserTurn(trimmed));
     final runtimeId = _runtimeId ?? await _create();
     if (runtimeId == null) return;
-    final sent = await _backend.submit(runtimeId, trimmed);
+    if (trimmed.startsWith('/') && trimmed.length > 1) {
+      await _slash(runtimeId, trimmed, depth: 0);
+    } else {
+      await _submit(runtimeId, trimmed);
+    }
+  }
+
+  Future<void> _submit(String runtimeId, String text) async {
+    final sent = await _backend.submit(runtimeId, text);
     if (sent case Err(:final failure)) {
       _update(value.withError(describe(failure)));
+    }
+  }
+
+  /// Runs a slash command and does what it asks: show output, send a prompt,
+  /// fill the composer, or follow an alias — at most three deep, so an alias
+  /// loop cannot spin forever.
+  Future<void> _slash(
+    String runtimeId,
+    String command, {
+    required int depth,
+  }) async {
+    final result = await _backend.runSlash(runtimeId, command);
+    if (_disposed) return;
+    switch (result) {
+      case Err(:final failure):
+        _update(value.withError(describe(failure)));
+      case Ok(value: final outcome):
+        switch (outcome.kind) {
+          case SlashKind.exec:
+            final output = outcome.text.trim();
+            _update(value.withNotice(output.isEmpty ? 'Done.' : output).settled());
+          case SlashKind.send:
+            final prompt = outcome.text.trim();
+            if (prompt.isEmpty) {
+              _update(value.settled());
+            } else {
+              _update(value.withUserTurn(prompt));
+              await _submit(runtimeId, prompt);
+            }
+          case SlashKind.prefill:
+            _update(value.withNotice(outcome.notice).settled());
+            if (outcome.text.isNotEmpty) onPrefill?.call(outcome.text);
+          case SlashKind.alias:
+            final target = outcome.target.trim();
+            if (target.isEmpty || depth >= 3) {
+              final output = outcome.text.trim();
+              _update(
+                value
+                    .withNotice(
+                      output.isEmpty ? 'That command points nowhere.' : output,
+                    )
+                    .settled(),
+              );
+              return;
+            }
+            final space = command.indexOf(' ');
+            final arguments = space < 0 ? '' : command.substring(space);
+            final next = target.startsWith('/') ? target : '/$target';
+            await _slash(runtimeId, '$next$arguments', depth: depth + 1);
+        }
     }
   }
 
@@ -123,6 +235,54 @@ final class ChatController extends ValueNotifier<ChatState> {
     if (result case Err(:final failure)) {
       _update(value.withError(describe(failure)));
     }
+  }
+
+  /// What this conversation can switch to.
+  Future<Result<ModelOptions>> modelOptions() =>
+      _backend.modelOptions(runtimeId: _runtimeId);
+
+  /// Switches this conversation's model. A switch Hermes wants confirmed
+  /// changes nothing and comes back with `confirmRequired`, for the screen to
+  /// ask and call again with [confirmed].
+  Future<Result<ModelSwitch>> switchModel(
+    String model,
+    String provider, {
+    required bool confirmed,
+  }) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) {
+      return const Err(
+        IrisFailure(
+          FailureKind.rejected,
+          message: 'Send a message first: a new conversation has no model yet.',
+        ),
+      );
+    }
+    final result = await _backend.switchModel(
+      runtimeId,
+      model: model,
+      provider: provider,
+      confirmed: confirmed,
+    );
+    switch (result) {
+      case Err(:final failure):
+        _update(
+          value.withNotice('Could not switch the model: ${describe(failure)}'),
+        );
+      case Ok(value: final change) when !change.confirmRequired:
+        _update(
+          value
+              .copyWith(model: change.model, provider: provider)
+              .withNotice(
+                change.deferred
+                    ? 'Switches to ${change.model} when this turn ends.'
+                    : 'Now using ${change.model}.',
+              ),
+        );
+      case Ok():
+        break;
+    }
+    return result;
   }
 
   /// Answers [request] with [choice]. The card goes at once and comes back if

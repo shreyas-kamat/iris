@@ -113,6 +113,15 @@ sealed class ChatEvent {
           'request_id',
         ]);
         return cancelled == null ? null : RequestWithdrawn(session, cancelled);
+      case 'session.info' || 'model.update':
+        final model = HistoryParser.firstText(payload, const ['model']);
+        return model == null
+            ? null
+            : ModelChanged(
+                session,
+                model: model,
+                provider: HistoryParser.firstText(payload, const ['provider']),
+              );
       default:
         return null;
     }
@@ -368,4 +377,12 @@ final class RequestWithdrawn extends ChatEvent {
   const RequestWithdrawn(super.sessionId, this.requestId);
 
   final String requestId;
+}
+
+/// The model the session runs on, as the gateway reports it.
+final class ModelChanged extends ChatEvent {
+  const ModelChanged(super.sessionId, {required this.model, this.provider});
+
+  final String model;
+  final String? provider;
 }

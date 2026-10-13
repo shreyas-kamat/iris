@@ -212,4 +212,147 @@ void main() {
       isA<AssistantTurn>().having((t) => t.text, 'text', 'more'),
     );
   });
+
+  test('a long conversation opens with a way to earlier messages', () async {
+    backend
+      ..historyResult = const Ok([UserTurn(id: '65', text: 'newest')])
+      ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
+      ..earlierResult = const Ok(
+        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+      );
+    final controller = controllerFor();
+    await controller.open();
+    expect(controller.value.earlier?.offset, 64);
+    await controller.loadEarlier();
+    expect(backend.calls, contains('earlier stored-1 64'));
+    expect(controller.value.items.map((i) => i.id), ['1', '65']);
+    expect(controller.value.earlier, isNull);
+  });
+
+  test('the model comes from the resume and follows the session', () async {
+    backend.resumeResult = const Ok(
+      ResumedConversation(
+        runtimeId: 'run-1',
+        model: 'gpt-6.1-sol',
+        provider: 'openai-codex',
+      ),
+    );
+    final controller = controllerFor();
+    await controller.open();
+    expect(controller.value.model, 'gpt-6.1-sol');
+    backend.emit(const ModelChanged('run-1', model: 'gpt-6-luna'));
+    await settle();
+    expect(controller.value.model, 'gpt-6-luna');
+  });
+
+  test('a switch that needs confirming changes nothing', () async {
+    backend.switchResult = const Ok(
+      ModelSwitch(model: 'big', confirmRequired: true, confirmMessage: 'Costly'),
+    );
+    final controller = controllerFor();
+    await controller.open();
+    final result = await controller.switchModel('big', 'p', confirmed: false);
+    expect(result.valueOrNull?.confirmRequired, isTrue);
+    expect(controller.value.model, isNull);
+    expect(controller.value.items, isEmpty);
+  });
+
+  test('a confirmed switch updates the model and says so', () async {
+    backend.switchResult = const Ok(ModelSwitch(model: 'gpt-6-luna'));
+    final controller = controllerFor();
+    await controller.open();
+    await controller.switchModel('gpt-6-luna', 'openai-codex', confirmed: true);
+    expect(backend.switches, ['gpt-6-luna@openai-codex confirmed']);
+    expect(controller.value.model, 'gpt-6-luna');
+    expect(
+      controller.value.items.last,
+      isA<Notice>().having((n) => n.text, 'text', 'Now using gpt-6-luna.'),
+    );
+  });
+
+  test('switching before the conversation exists says why', () async {
+    final controller = controllerFor(id: null);
+    await controller.open();
+    final result = await controller.switchModel('m', 'p', confirmed: false);
+    expect(result.isErr, isTrue);
+    expect(backend.switches, isEmpty);
+  });
+
+  test('slash output is shown and the turn ends', () async {
+    backend.slashResult = const Ok(
+      SlashOutcome(kind: SlashKind.exec, text: 'Tokens: 12k'),
+    );
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send('/usage');
+    expect(backend.slashes, ['/usage']);
+    expect(backend.submitted, isEmpty);
+    expect(
+      controller.value.items.map((i) => i.runtimeType),
+      [UserTurn, Notice],
+    );
+    expect(
+      controller.value.items.last,
+      isA<Notice>().having((n) => n.text, 'text', 'Tokens: 12k'),
+    );
+    expect(controller.value.turn, TurnPhase.idle);
+  });
+
+  test('a slash command that expands to a prompt sends it', () async {
+    backend.slashResult = const Ok(
+      SlashOutcome(kind: SlashKind.send, text: 'Plan the week'),
+    );
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send('/plan');
+    expect(backend.submitted.single, ('run-1', 'Plan the week'));
+    expect(
+      controller.value.items.last,
+      isA<UserTurn>().having((t) => t.text, 'text', 'Plan the week'),
+    );
+  });
+
+  test('a prefill goes to the composer', () async {
+    backend.slashResult = const Ok(
+      SlashOutcome(kind: SlashKind.prefill, text: 'Write a plan for '),
+    );
+    final controller = controllerFor();
+    String? prefilled;
+    controller.onPrefill = (text) => prefilled = text;
+    await controller.open();
+    await controller.send('/plan');
+    expect(prefilled, 'Write a plan for ');
+    expect(controller.value.turn, TurnPhase.idle);
+  });
+
+  test('an alias runs its target with the same arguments, three deep at most', () async {
+    backend.slashResult = const Ok(
+      SlashOutcome(kind: SlashKind.alias, target: 'new'),
+    );
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send('/n now');
+    expect(backend.slashes, ['/n now', '/new now', '/new now', '/new now']);
+    expect(
+      controller.value.items.last,
+      isA<Notice>().having(
+        (n) => n.text,
+        'text',
+        'That command points nowhere.',
+      ),
+    );
+  });
+
+  test('commands load once, on demand', () async {
+    backend.commandsResult = const Ok([
+      SlashCommand(name: '/new', description: 'Start'),
+    ]);
+    final controller = controllerFor();
+    await controller.open();
+    expect(backend.calls, isNot(contains('commands')));
+    await controller.loadCommands();
+    await controller.loadCommands();
+    expect(backend.calls.where((c) => c == 'commands'), hasLength(1));
+    expect(controller.value.commands.single.name, '/new');
+  });
 }

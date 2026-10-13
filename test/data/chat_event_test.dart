@@ -251,4 +251,17 @@ void main() {
       isNull,
     );
   });
+
+  test('the model in use arrives in session.info and model.update', () {
+    final info = ChatEvent.fromEvent(
+      event('session.info', payload: {'model': 'gpt-6.1-sol', 'provider': 'openai-codex'}),
+    );
+    expect(info, isA<ModelChanged>().having((e) => e.model, 'model', 'gpt-6.1-sol'));
+    expect((info! as ModelChanged).provider, 'openai-codex');
+    expect(
+      ChatEvent.fromEvent(event('model.update', payload: {'model': 'gpt-6-luna'})),
+      isA<ModelChanged>().having((e) => e.model, 'model', 'gpt-6-luna'),
+    );
+    expect(ChatEvent.fromEvent(event('session.info', payload: {'running': true})), isNull);
+  });
 }
