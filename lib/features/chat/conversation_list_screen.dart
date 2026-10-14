@@ -830,16 +830,35 @@ class _ConversationList extends StatelessWidget {
     ];
     // The bottom padding is the height of the floating bar plus its fade, so
     // the last row can be scrolled clear of it.
-    return NotificationListener<ScrollEndNotification>(
-      onNotification: snap,
-      child: RefreshIndicator(
-        color: context.palette.accent,
-        backgroundColor: context.palette.surfaceRaised,
-        onRefresh: onRefresh,
-        child: ListView(
-          controller: scroll,
-          padding: const EdgeInsets.only(bottom: _barClearance),
-          children: children,
+    /// A list too short to scroll the whole field away keeps it fully
+    /// visible: parked half-hidden at its small maximum extent, it would
+    /// look cut off.
+    bool keepVisible(ScrollMetricsNotification notification) {
+      final metrics = notification.metrics;
+      if (searching ||
+          metrics.maxScrollExtent >= searchFieldExtent ||
+          metrics.pixels <= 0) {
+        return false;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scroll.hasClients && scroll.offset > 0) scroll.jumpTo(0);
+      });
+      return false;
+    }
+
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: keepVisible,
+      child: NotificationListener<ScrollEndNotification>(
+        onNotification: snap,
+        child: RefreshIndicator(
+          color: context.palette.accent,
+          backgroundColor: context.palette.surfaceRaised,
+          onRefresh: onRefresh,
+          child: ListView(
+            controller: scroll,
+            padding: const EdgeInsets.only(bottom: _barClearance),
+            children: children,
+          ),
         ),
       ),
     );
