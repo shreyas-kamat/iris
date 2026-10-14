@@ -22,4 +22,13 @@ void main() {
   test('a time in the future reads as now', () {
     expect(relativeTime(now.add(const Duration(minutes: 3)), now), 'just now');
   });
+
+  test('time until a reset', () {
+    final now = DateTime(2026, 10, 14, 9);
+    expect(timeUntil(now.subtract(const Duration(minutes: 5)), now), 'now');
+    expect(timeUntil(now.add(const Duration(seconds: 30)), now), 'now');
+    expect(timeUntil(now.add(const Duration(minutes: 42)), now), 'in 42m');
+    expect(timeUntil(now.add(const Duration(hours: 2, minutes: 36)), now), 'in 2h 36m');
+    expect(timeUntil(now.add(const Duration(days: 5, hours: 20)), now), 'in 5d 20h');
+  });
 }
