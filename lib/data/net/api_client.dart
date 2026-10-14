@@ -100,6 +100,26 @@ final class ApiClient {
     ),
   );
 
+  /// PATCHes a JSON body to [path] and returns its response as tolerant JSON.
+  Future<Result<Json>> patch(
+    String path, {
+    Map<String, Object?>? body,
+    Map<String, Object?>? query,
+    CancelToken? cancelToken,
+  }) => _send(
+    path,
+    () => _dio.patch<String>(
+      path,
+      data: _clean(body),
+      queryParameters: _clean(query),
+      cancelToken: cancelToken,
+      options: Options(
+        responseType: ResponseType.plain,
+        contentType: Headers.jsonContentType,
+      ),
+    ),
+  );
+
   /// GETs [path] as raw bytes, for file previews and image attachments.
   Future<Result<List<int>>> bytes(
     String path, {

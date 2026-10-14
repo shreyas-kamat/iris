@@ -493,4 +493,139 @@ void main() {
     expect(reconnects, 1);
     expect(identical(socket, first), isFalse);
   });
+
+  group('phase 4', () {
+    test('a steer reaches the session; a rejection says so', () async {
+      final accepted = chat.steer('run-1', 'use the staging db');
+      final sent = await answer({'status': 'queued'});
+      expect(sent['method'].string(), 'session.steer');
+      expect(sent['params']['session_id'].string(), 'run-1');
+      expect(sent['params']['text'].string(), 'use the staging db');
+      expect((await accepted).valueOrNull, SteerOutcome.accepted);
+
+      final rejected = chat.steer('run-1', 'x');
+      await answer({'status': 'rejected'});
+      expect((await rejected).valueOrNull, SteerOutcome.rejected);
+    });
+
+    test('a sudo request is presented, not declined, and answered with a value', () async {
+      final asked = chat.events.firstWhere((e) => e is InputAsked);
+      socket.serverSends({
+        'jsonrpc': '2.0',
+        'id': 'srq-5',
+        'method': 'sudo',
+        'params': {'session_id': 'run-1', 'command': 'apt install jq'},
+      });
+      final event = await asked as InputAsked;
+      // Nothing was sent back: a decline would be an error frame.
+      expect(socket.sent.where((f) => f.contains('srq-5')), isEmpty);
+
+      expect((await chat.answerInput(event.request, 'hunter2')).isOk, isTrue);
+      final reply = socket.lastSent;
+      expect(reply['id'].string(), 'srq-5');
+      expect(reply['result']['value'].string(), 'hunter2');
+    });
+
+    test('answering an input without a live socket fails offline', () async {
+      // A session that was never started has no socket to answer on.
+      final idleConnection = ServerConnection.create(
+        const ServerConfig(id: 'idle', baseUrl: 'https://h.example', label: 'H'),
+        adapter: FakeHttp(),
+      );
+      final idleSession = DashboardSession(
+        http: idleConnection,
+        connector: (uri, headers) async => FakeWireSocket(),
+      );
+      final idle = DashboardChat(idleSession);
+      addTearDown(() async {
+        await idle.dispose();
+        await idleSession.dispose();
+        idleConnection.close();
+      });
+      final result = await idle.answerInput(
+        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.secret),
+        'value',
+      );
+      expect(result.failureOrNull?.kind, FailureKind.offline);
+    });
+
+    test('rename and archive patch the stored session', () async {
+      final bodies = <Object?>[];
+      http.on('PATCH', '/api/sessions/abc', (request) {
+        bodies.add(request.data);
+        return FakeReply.json({'ok': true});
+      });
+      expect((await chat.rename('abc', 'Deploy notes')).isOk, isTrue);
+      expect((await chat.setArchived('abc', archived: true)).isOk, isTrue);
+      expect(bodies, [
+        {'title': 'Deploy notes'},
+        {'archived': true},
+      ]);
+    });
+
+    test('a named profile carries itself in the patch body', () async {
+      final named = DashboardChat(session, profile: 'ananta');
+      addTearDown(named.dispose);
+      Object? body;
+      http.on('PATCH', '/api/sessions/abc', (request) {
+        body = request.data;
+        return FakeReply.json({'ok': true});
+      });
+      await named.setArchived('abc', archived: false);
+      expect(body, {'archived': false, 'profile': 'ananta'});
+    });
+
+    test('archived conversations ask for archived only', () async {
+      Map<String, String>? query;
+      http.on('GET', '/api/profiles/sessions', (request) {
+        query = request.uri.queryParameters;
+        return FakeReply.json({'sessions': [{'id': 'z', 'title': 'Old'}], 'total': 1});
+      });
+      final page = (await chat.archivedConversations(0)).valueOrNull!;
+      expect(page.items.single.id, 'z');
+      expect(query, containsPair('archived', 'only'));
+      expect(query, containsPair('profile', 'default'));
+    });
+
+    test('search names the profile and folds rows per conversation', () async {
+      Map<String, String>? query;
+      http.on('GET', '/api/sessions/search', (request) {
+        query = request.uri.queryParameters;
+        return FakeReply.json({
+          'results': [
+            {'session_id': 'a', 'title': 'Deploy', 'snippet': '>>>deploy<<< it'},
+            {'session_id': 'a', 'title': 'Deploy', 'snippet': 'again'},
+          ],
+        });
+      });
+      final hits = (await chat.search('deploy')).valueOrNull!;
+      expect(hits.single.storedId, 'a');
+      expect(query, containsPair('q', 'deploy'));
+      expect(query, containsPair('profile', 'default'));
+      expect(query, containsPair('limit', '${DashboardChat.searchLimit}'));
+    });
+
+    test('session.info reports the context window as an event', () async {
+      final context = chat.events.firstWhere((e) => e is ContextChanged);
+      socket.serverSends({
+        'jsonrpc': '2.0',
+        'method': 'event',
+        'params': {
+          'type': 'session.info',
+          'session_id': 'run-1',
+          'payload': {'model': 'm', 'context_percent': 0.25, 'context_max': 400},
+        },
+      });
+      expect(((await context) as ContextChanged).usage.percent, 25);
+    });
+
+    test('a resume carries the context window when it has one', () async {
+      final resumed = chat.resume('abc');
+      await answer({
+        'session_id': 'run-9',
+        'info': {'model': 'm', 'context_used': 30, 'context_max': 120},
+      });
+      expect((await resumed).valueOrNull?.context?.percent, 25);
+    });
+  });
 }
