@@ -50,6 +50,7 @@ dependencies:
   mobile_scanner: ^7.4.2
   markdown: ^7.3.1
   url_launcher: ^6.3.3
+  re_highlight: 0.0.3
 
 dev_dependencies:
   flutter_test:

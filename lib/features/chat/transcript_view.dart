@@ -184,6 +184,7 @@ class _AssistantBlock extends StatelessWidget {
           SelectionArea(
             child: IrisMarkdown(
               turn.text,
+              highlight: !streaming,
               onTapLink: (href) => unawaited(openLink(href)),
             ),
           ),
