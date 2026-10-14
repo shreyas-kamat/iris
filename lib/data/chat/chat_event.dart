@@ -10,6 +10,7 @@ import '../../core/json.dart';
 import '../rpc/rpc_frame.dart';
 import 'chat_models.dart';
 import 'history_parser.dart';
+import 'usage_parser.dart';
 
 sealed class ChatEvent {
   const ChatEvent(this.sessionId);
@@ -145,9 +146,39 @@ sealed class ChatEvent {
           requestId: request.id,
         );
         return clarify == null ? null : ClarifyAsked(clarify);
+      case 'sudo' || 'secret':
+        final input = parseInput(request);
+        return input == null ? null : InputAsked(input);
       default:
         return null;
     }
+  }
+
+  /// The context window from an event that carries it: `session.info`, or
+  /// the `session.usage` the gateway sends after each turn. Separate from
+  /// [fromEvent] because one `session.info` also reports the model.
+  static ContextChanged? contextFromEvent(RpcEvent event) {
+    if (event.type != 'session.info' && event.type != 'session.usage') {
+      return null;
+    }
+    final usage = UsageParser.context(event.payload);
+    return usage == null ? null : ContextChanged(event.sessionId ?? '', usage);
+  }
+
+  /// A sudo or secret request. Null without a session, which nothing could
+  /// answer.
+  static InputRequest? parseInput(RpcServerRequest request) {
+    final session = request.params['session_id'].string().trim();
+    if (session.isEmpty || request.id.isEmpty) return null;
+    String text(String key) => request.params[key].string().trim();
+    return InputRequest(
+      requestId: request.id,
+      sessionId: session,
+      kind: request.method == 'sudo' ? InputKind.sudo : InputKind.secret,
+      command: text('command'),
+      envVar: text('env_var'),
+      prompt: text('prompt'),
+    );
   }
 
   /// An approval from an `approval.request` payload or `approval` request
@@ -385,4 +416,18 @@ final class ModelChanged extends ChatEvent {
 
   final String model;
   final String? provider;
+}
+
+/// The agent needs a password or secret typed in.
+final class InputAsked extends ChatEvent {
+  InputAsked(this.request) : super(request.sessionId);
+
+  final InputRequest request;
+}
+
+/// How full the context window is now.
+final class ContextChanged extends ChatEvent {
+  const ContextChanged(super.sessionId, this.usage);
+
+  final ContextUsage usage;
 }

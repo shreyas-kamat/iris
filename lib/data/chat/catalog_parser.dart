@@ -8,6 +8,7 @@ library;
 import '../../core/json.dart';
 import 'chat_models.dart';
 import 'history_parser.dart';
+import 'usage_parser.dart';
 
 abstract final class CatalogParser {
   /// `GET /api/profiles`.
@@ -59,6 +60,7 @@ abstract final class CatalogParser {
       ],
       isCurrent: row['is_current'].boolean(),
       authenticated: row['authenticated'].boolOrNull ?? true,
+      usage: UsageParser.providerUsage(row['usage']),
     );
   }
 

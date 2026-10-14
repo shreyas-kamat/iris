@@ -216,4 +216,43 @@ void main() {
     expect(both.earlier, isNull);
     expect(both.loadingEarlier, isFalse);
   });
+
+  group('input prompts', () {
+    const sudo = InputRequest(
+      requestId: 'srq-1',
+      sessionId: 'run-1',
+      kind: InputKind.sudo,
+      command: 'apt install jq',
+    );
+
+    test('an input prompt waits for the person', () {
+      final next = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      expect(next.inputs.single.requestId, 'srq-1');
+      expect(next.turn, TurnPhase.waiting);
+    });
+
+    test('a withdrawn prompt goes, with a line saying so', () {
+      final asked = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final next = asked.apply(const RequestWithdrawn('run-1', 'srq-1'));
+      expect(next.inputs, isEmpty);
+      expect(next.turn, TurnPhase.thinking);
+      expect((next.items.last as Notice).text, 'Hermes stopped waiting for that.');
+    });
+
+    test('answering removes it and the turn carries on', () {
+      final asked = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final next = asked.withoutInput(sudo);
+      expect(next.inputs, isEmpty);
+      expect(next.turn, TurnPhase.thinking);
+    });
+  });
+
+  test('the context window follows the gateway', () {
+    final next = const ChatState().apply(
+      const ContextChanged('run-1', ContextUsage(percent: 18, used: 10, max: 55)),
+    );
+    expect(next.context?.percent, 18);
+    // A newer page of history keeps it.
+    expect(next.withNewestPage(const [], null).context?.percent, 18);
+  });
 }

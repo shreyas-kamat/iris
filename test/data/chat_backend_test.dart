@@ -221,7 +221,8 @@ void main() {
     expect(resumed.running, isTrue);
     expect(resumed.model, 'gpt-6.1-sol');
     expect(resumed.provider, 'openai-codex');
-    expect(resumed.pending.single, isA<ClarifyAsked>());
+    // Both the question and the secret prompt are shown; nothing is declined.
+    expect(resumed.pending, [isA<ClarifyAsked>(), isA<InputAsked>()]);
   });
 
   test('create returns both ids', () async {
