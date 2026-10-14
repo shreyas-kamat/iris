@@ -42,6 +42,7 @@ final class ChatState {
     this.provider,
     this.commands = const [],
     this.context,
+    this.retrying = false,
   });
 
   final ChatPhase phase;
@@ -72,6 +73,9 @@ final class ChatState {
   /// How full the context window is, once the gateway says.
   final ContextUsage? context;
 
+  /// A retry is on its way; the failed card shows it working.
+  final bool retrying;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -89,6 +93,7 @@ final class ChatState {
     String? provider,
     List<SlashCommand>? commands,
     ContextUsage? context,
+    bool? retrying,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
@@ -104,12 +109,13 @@ final class ChatState {
     provider: provider ?? this.provider,
     commands: commands ?? this.commands,
     context: context ?? this.context,
+    retrying: retrying ?? this.retrying,
   );
 
   /// The state after [event].
   ChatState apply(ChatEvent event) => switch (event) {
     MessageStarted() => copyWith(
-      items: _withLive(items),
+      items: _withLive(retrying ? _withoutRetry(items) : items),
       turn: TurnPhase.thinking,
     ),
     TextDelta(:final text) => copyWith(
@@ -140,7 +146,7 @@ final class ChatState {
       items: _toolDone(items, done),
       turn: _waitingOr(TurnPhase.thinking),
     ),
-    TurnFailed(:final message) => withError(message),
+    TurnFailed(:final message) => withFailure(message),
     TurnInterrupted() => copyWith(
       items: [
         ..._settled(items),
@@ -211,6 +217,39 @@ final class ChatState {
     ],
     turn: TurnPhase.thinking,
   );
+
+  /// The person steered the running turn. The reply so far is finished, so
+  /// what the agent says next starts below the steer, and the turn carries on.
+  ChatState withSteer(String text) => copyWith(
+    items: [
+      ..._settled(items),
+      UserTurn(id: 'local-${items.length}', text: text, steered: true),
+    ],
+  );
+
+  /// The turn failed. Only the newest failure can be retried: retrying an
+  /// older one would ask Hermes to repeat something it has moved past.
+  ChatState withFailure(String message) => copyWith(
+    items: [
+      ..._withoutRetry(_settled(items)),
+      Notice(
+        id: 'notice-${items.length}',
+        text: message,
+        isError: true,
+        retryable: true,
+      ),
+    ],
+    turn: _waitingOr(TurnPhase.idle),
+    retrying: false,
+  );
+
+  static List<TranscriptItem> _withoutRetry(List<TranscriptItem> items) => [
+    for (final item in items)
+      if (item is Notice && item.retryable)
+        item.copyWith(retryable: false)
+      else
+        item,
+  ];
 
   /// A failure, shown inline; the turn ends unless a decision is waiting.
   ChatState withError(String message) => copyWith(

@@ -34,9 +34,16 @@ final class ChatController extends ValueNotifier<ChatState> {
   bool _disposed = false;
   bool _loadingCommands = false;
 
+  /// A retry ran; read the newest page once the new turn settles.
+  bool _reloadWhenIdle = false;
+
   /// Called with text a slash command wants in the composer, for the person
   /// to finish and send.
   ValueChanged<String>? onPrefill;
+
+  /// Called with steer text Hermes could not take, so the screen can put it
+  /// back in the composer.
+  ValueChanged<String>? onSteerReturned;
 
   /// The stored id: given when opened, or set by a new chat's first send.
   String? get conversationId => _storedId;
@@ -78,6 +85,7 @@ final class ChatController extends ValueNotifier<ChatState> {
           turn: resumed.running ? TurnPhase.thinking : null,
           model: resumed.model,
           provider: resumed.provider,
+          context: resumed.context,
         );
         for (final event in resumed.pending) {
           next = next.apply(event);
@@ -114,6 +122,7 @@ final class ChatController extends ValueNotifier<ChatState> {
           questions: const [],
           model: again.model,
           provider: again.provider,
+          context: again.context,
         );
         for (final event in again.pending) {
           next = next.apply(event);
@@ -156,10 +165,15 @@ final class ChatController extends ValueNotifier<ChatState> {
   }
 
   /// Sends [text], creating the conversation first if this is a new chat.
-  /// Text that starts with a slash runs as a command.
+  /// Text that starts with a slash runs as a command. During a run, text
+  /// steers the turn instead; a command cannot steer, so it waits.
   Future<void> send(String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || value.running) return;
+    if (trimmed.isEmpty) return;
+    if (value.running) {
+      if (!trimmed.startsWith('/')) await _steer(trimmed);
+      return;
+    }
     _update(value.withUserTurn(trimmed));
     final runtimeId = _runtimeId ?? await _create();
     if (runtimeId == null) return;
@@ -174,6 +188,90 @@ final class ChatController extends ValueNotifier<ChatState> {
     final sent = await _backend.submit(runtimeId, text);
     if (sent case Err(:final failure)) {
       _update(value.withError(describe(failure)));
+    }
+  }
+
+  Future<void> _steer(String text) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return;
+    final result = await _backend.steer(runtimeId, text);
+    if (_disposed) return;
+    switch (result) {
+      case Ok(value: SteerOutcome.accepted):
+        _update(value.withSteer(text));
+      case Ok() when !value.running:
+        // The turn ended while the steer was on its way: it becomes a prompt.
+        _update(value.withUserTurn(text));
+        await _submit(runtimeId, text);
+      case Ok():
+        onSteerReturned?.call(text);
+        _update(
+          value.withNotice(
+            "Hermes couldn't take that mid-turn — send it when the turn ends.",
+          ),
+        );
+      case Err(:final failure):
+        onSteerReturned?.call(text);
+        _update(value.withNotice('Could not steer: ${describe(failure)}'));
+    }
+  }
+
+  /// Asks Hermes to run the failed turn again. Hermes replaces the failed
+  /// exchange itself, so once the new turn settles the newest page is read
+  /// again, and the transcript shows what Hermes now holds rather than the
+  /// failure and the retry side by side.
+  Future<void> retry() async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null || value.running || value.retrying) return;
+    _update(value.copyWith(retrying: true, turn: TurnPhase.thinking));
+    await _slash(runtimeId, '/retry', depth: 0);
+    if (_disposed) return;
+    if (value.running) {
+      _reloadWhenIdle = true;
+    } else {
+      await _reloadNewest();
+    }
+  }
+
+  Future<void> _reloadNewest() async {
+    _reloadWhenIdle = false;
+    final storedId = _storedId;
+    if (storedId == null) return;
+    final page = await _backend.history(storedId);
+    if (_disposed) return;
+    _update(switch (page) {
+      Ok(value: final newest) => value.withNewestPage(
+        newest.items,
+        newest.earlier,
+      ),
+      Err() => value.copyWith(retrying: false),
+    });
+  }
+
+  /// Answers a sudo or secret prompt; an empty [answer] skips it. The card
+  /// goes at once. The answer is passed straight to the backend and kept
+  /// nowhere, not even in the notice that records it was sent.
+  Future<void> answerInput(InputRequest request, String answer) async {
+    _update(value.withoutInput(request));
+    final result = await _backend.answerInput(request, answer);
+    if (_disposed) return;
+    switch (result) {
+      case Ok():
+        _update(
+          value.withNotice(
+            answer.isEmpty
+                ? 'Skipped.'
+                : request.kind == InputKind.sudo
+                ? 'Sent your sudo password.'
+                : 'Sent.',
+          ),
+        );
+      case Err(:final failure):
+        _update(
+          value
+              .withInput(request)
+              .withError('Could not send that: ${describe(failure)}'),
+        );
     }
   }
 
@@ -345,6 +443,7 @@ final class ChatController extends ValueNotifier<ChatState> {
     final id = event.sessionId;
     if (id.isEmpty || (id != _runtimeId && id != _storedId)) return;
     _update(value.apply(event));
+    if (_reloadWhenIdle && !value.running) unawaited(_reloadNewest());
   }
 
   void _update(ChatState next) {
