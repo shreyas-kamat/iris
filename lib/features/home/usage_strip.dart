@@ -171,8 +171,10 @@ class _ProviderRowState extends State<_ProviderRow>
                 SpringBuilder(
                   value: _open ? .5 : 0,
                   spring: IrisSprings.snappy,
-                  builder: (context, turns, child) =>
-                      Transform.rotate(angle: turns * 2 * math.pi, child: child),
+                  builder: (context, turns, child) => Transform.rotate(
+                    angle: turns * 2 * math.pi,
+                    child: child,
+                  ),
                   child: Icon(
                     Icons.keyboard_arrow_down,
                     size: 16,
@@ -183,7 +185,11 @@ class _ProviderRowState extends State<_ProviderRow>
             ),
             if (tightest != null) ...[
               const SizedBox(height: IrisSpace.sm),
-              IrisGauge(value: tightest.usedPercent / 100, width: null),
+              IrisGauge(
+                value: tightest.leftPercent / 100,
+                heatOf: tightest.usedPercent / 100,
+                width: null,
+              ),
             ],
             IrisAnimatedSize(
               child: _open && details.isNotEmpty
@@ -264,7 +270,11 @@ class _WindowLine extends StatelessWidget {
             ],
           ),
           const SizedBox(height: IrisSpace.xs),
-          IrisGauge(value: window.usedPercent / 100, width: null),
+          IrisGauge(
+            value: window.leftPercent / 100,
+            heatOf: window.usedPercent / 100,
+            width: null,
+          ),
         ],
       ),
     );

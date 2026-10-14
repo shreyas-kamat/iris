@@ -468,7 +468,7 @@ class _FailedCard extends StatelessWidget {
                       ),
                       child: Text(
                         'Retry',
-                        style: type.label.copyWith(
+                        style: type.body.copyWith(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                           color: palette.inkInverse,

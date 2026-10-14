@@ -13,15 +13,21 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/app/theme_controller.dart';
+import 'package:iris/app/usage.dart';
 import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/chat_backend.dart';
+import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/palette.dart';
+import 'package:iris/features/chat/archived_screen.dart';
 import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
+import 'package:iris/features/chat/conversation_search.dart';
 import 'package:iris/features/settings/settings_screen.dart';
+import 'package:iris/features/settings/usage_settings_screen.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/fonts.dart';
@@ -171,6 +177,71 @@ final _exchange = <TranscriptItem>[
   ),
 ];
 
+final _usageRows = [
+  UsageRow(
+    slug: 'openai-codex',
+    name: 'OpenAI Codex',
+    usage: ProviderUsage(
+      windows: [
+        UsageWindow(
+          label: 'Session',
+          usedPercent: 73,
+          resetsAt: _now.add(const Duration(hours: 2, minutes: 36)),
+        ),
+        UsageWindow(
+          label: 'Weekly',
+          usedPercent: 48,
+          resetsAt: _now.add(const Duration(days: 5, hours: 20)),
+        ),
+      ],
+    ),
+  ),
+  UsageRow(
+    slug: 'anthropic',
+    name: 'Anthropic',
+    usage: ProviderUsage(
+      windows: [
+        UsageWindow(
+          label: 'Current week',
+          usedPercent: 87,
+          resetsAt: _now.add(const Duration(days: 2, hours: 21)),
+        ),
+      ],
+    ),
+  ),
+];
+
+const _reportingUsage = ProviderUsage(
+  windows: [UsageWindow(label: 'S', usedPercent: 1)],
+);
+
+const _reportingOptions = ModelOptions(
+  provider: 'openai-codex',
+  providers: [
+    ModelProvider(
+      slug: 'openai-codex',
+      name: 'OpenAI Codex',
+      models: ['m'],
+      usage: _reportingUsage,
+    ),
+    ModelProvider(
+      slug: 'anthropic',
+      name: 'Anthropic',
+      models: ['m'],
+      usage: _reportingUsage,
+    ),
+  ],
+);
+
+class _ThreeProviders extends UsageSelection {
+  @override
+  List<String> build() => const [
+    usageFollowsProfile,
+    'anthropic',
+    'openai-codex',
+  ];
+}
+
 void main() {
   setUpAll(loadIrisFonts);
 
@@ -188,6 +259,7 @@ void main() {
     required bool isDark,
     required List<Override> overrides,
     required String name,
+    Future<void> Function()? after,
   }) async {
     await tester.binding.setSurfaceSize(_phone);
     tester.view
@@ -199,6 +271,7 @@ void main() {
       _framed(screen, isDark: isDark, overrides: overrides),
     );
     await settle(tester);
+    await after?.call();
 
     await expectLater(
       find.byType(MaterialApp),
@@ -277,6 +350,169 @@ void main() {
           ),
         ],
         name: 'settings',
+      );
+    });
+
+    testWidgets('home with usage rows and the search open, $mode', (
+      tester,
+    ) async {
+      final backend = FakeChatBackend()
+        ..conversationsResult = Ok(_conversations)
+        ..searchResult = const Ok([
+          SearchHit(
+            storedId: 'h1',
+            title: 'Investigate worker heartbeat gaps',
+            snippet: [
+              SnippetRun('the '),
+              SnippetRun('heartbeat', matched: true),
+              SnippetRun(' misses its 30s window'),
+            ],
+          ),
+          SearchHit(
+            storedId: 'h2',
+            title: 'Nightly backup to cold storage',
+            snippet: [
+              SnippetRun('disk saturates during the '),
+              SnippetRun('heartbeat', matched: true),
+              SnippetRun(' write'),
+            ],
+          ),
+        ]);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const ConversationListScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          providerUsageProvider.overrideWithValue(AsyncData(_usageRows)),
+          conversationsProvider.overrideWith(
+            (ref) async => ConversationPage(items: _conversations, total: 7),
+          ),
+        ],
+        name: 'home_usage_search',
+        after: () async {
+          await tester.drag(find.byType(Scrollable).first, const Offset(0, 80));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.descendant(
+              of: find.byType(SearchField),
+              matching: find.byType(EditableText),
+            ),
+            'heartbeat',
+          );
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+
+    testWidgets('chat with context and a password prompt, $mode', (
+      tester,
+    ) async {
+      final backend = FakeChatBackend()
+        ..historyResult = Ok(_exchange)
+        ..resumeResult = const Ok(
+          ResumedConversation(
+            runtimeId: 'run-1',
+            model: 'gpt-6.1-sol',
+            context: ContextUsage(percent: 64, used: 174080, max: 272000),
+          ),
+        );
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Investigate worker heartbeat gaps',
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_prompt',
+        after: () async {
+          backend.emit(
+            InputAsked(
+              const InputRequest(
+                requestId: 'srq-1',
+                sessionId: 'run-1',
+                kind: InputKind.sudo,
+                command: 'apt-get install -y jq',
+              ),
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+        },
+      );
+    });
+
+    testWidgets('chat with a failed turn, $mode', (tester) async {
+      final backend = FakeChatBackend()..historyResult = Ok(_exchange);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Investigate worker heartbeat gaps',
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_failed',
+        after: () async {
+          backend.emit(const TurnFailed('run-1', 'Gateway timed out'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+        },
+      );
+    });
+
+    testWidgets('archived, $mode', (tester) async {
+      final backend = FakeChatBackend()
+        ..archivedResult = Ok([
+          ConversationSummary(
+            id: 'z1',
+            title: 'Old migration notes',
+            startedAt: _now.subtract(const Duration(days: 30)),
+            messageCount: 40,
+          ),
+          ConversationSummary(
+            id: 'z2',
+            title: 'Holiday planning',
+            startedAt: _now.subtract(const Duration(days: 45)),
+            messageCount: 12,
+          ),
+          ConversationSummary(
+            id: 'z3',
+            title: 'Prototype: voice mode',
+            startedAt: _now.subtract(const Duration(days: 60)),
+            messageCount: 8,
+          ),
+        ]);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ArchivedScreen(backend: backend),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'archived',
+      );
+    });
+
+    testWidgets('usage settings, $mode', (tester) async {
+      final backend = FakeChatBackend();
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const UsageSettingsScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          usageOptionsProvider.overrideWith((ref) async => _reportingOptions),
+          usageSelectionProvider.overrideWith(_ThreeProviders.new),
+        ],
+        name: 'usage_settings',
       );
     });
   }

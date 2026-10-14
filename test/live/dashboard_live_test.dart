@@ -180,4 +180,44 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 90)),
   );
+
+  test(
+    'usage, search and the archived list read cleanly',
+    () async {
+      final connection = ServerConnection.create(config, secrets: secrets);
+      final session = DashboardSession(http: connection);
+      final chat = DashboardChat(session);
+      addTearDown(() async {
+        await chat.dispose();
+        await session.dispose();
+        connection.close();
+      });
+      await session.start();
+
+      // The usage cache may be cold on the first ask; the second finds it.
+      await chat.modelOptions();
+      await Future<void>.delayed(const Duration(seconds: 6));
+      final options = (await chat.modelOptions()).valueOrNull!;
+      final reporting = options.providers
+          .where((p) => p.usage != null)
+          .toList();
+      stdout.writeln(
+        'usage from: ${reporting.map((p) => '${p.slug}(${p.usage!.windows.length + p.usage!.accounts.length})').toList()}',
+      );
+      expect(reporting, isNotEmpty);
+
+      final hits = (await chat.search('the')).valueOrNull!;
+      stdout.writeln(
+        'search hits: ${hits.length}, titled: ${hits.where((h) => h.title.isNotEmpty).length}',
+      );
+      expect(hits.map((h) => h.storedId).toSet().length, hits.length);
+
+      final archived = await chat.archivedConversations(0);
+      stdout.writeln(
+        'archived: ${archived.valueOrNull?.total ?? archived.failureOrNull?.kind}',
+      );
+      expect(archived.isOk, isTrue);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 }
