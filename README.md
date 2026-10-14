@@ -110,8 +110,8 @@ Regenerate after touching `lib/data/db/database.dart`.
   against the plain `android-37` hash it looks for. `flutter_secure_storage` warns that it was
   compiled against 37; the build and app work at 36. Resolving it properly means AGP 8.13+ and
   `compileSdkMinor`, which is a separate upgrade.
-- **`applicationId` is still `com.example.iris`.** It has to change before any store release and
-  is permanent once published, so it is left for a deliberate choice rather than guessed at.
+- **The application ID is `com.iflotech.iris`** on Android and iOS, and is permanent once
+  published. Signing, build and store-asset notes are in [`docs/release.md`](docs/release.md).
 - **Cloudflare Access.** A dashboard published behind Access needs a service token (Zero Trust
   → Access → Service credentials) and a *Service Auth* policy on the application. Iris sends it
   as `CF-Access-Client-Id` / `CF-Access-Client-Secret`, over HTTPS only.

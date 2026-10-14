@@ -1,4 +1,4 @@
-package com.example.iris
+package com.iflotech.iris
 
 import io.flutter.embedding.android.FlutterActivity
 
