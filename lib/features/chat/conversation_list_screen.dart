@@ -21,6 +21,8 @@ import '../../data/rpc/dashboard_session.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/sheet.dart';
+import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
 import '../../design/platform/platform_feel.dart';
@@ -30,7 +32,11 @@ import '../../design/tokens/palette.dart';
 import '../home/link_status_screen.dart';
 import '../home/usage_strip.dart';
 import '../settings/settings_screen.dart';
+import 'archived_screen.dart';
+import 'chat_controller.dart';
 import 'chat_screen.dart';
+import 'conversation_actions.dart';
+import 'conversation_row.dart';
 import 'profile_picker.dart';
 import 'relative_time.dart';
 
@@ -46,6 +52,12 @@ class _ConversationListScreenState
     extends ConsumerState<ConversationListScreen> {
   /// Pages loaded after the first, which the provider holds.
   final List<ConversationSummary> _more = [];
+
+  /// Titles changed here, shown before the server's list catches up.
+  final Map<String, String> _titles = {};
+
+  /// Rows archived here, folded out of the list.
+  final Set<String> _gone = {};
   bool _loadingMore = false;
 
   Future<void> _open(
@@ -68,6 +80,77 @@ class _ConversationListScreenState
       ..invalidate(usageOptionsProvider);
   }
 
+  Future<void> _actions(
+    ChatBackend chat,
+    ConversationSummary conversation,
+  ) async {
+    final title = _titles[conversation.id] ?? conversation.title;
+    final action = await showConversationActions(context, title);
+    if (!mounted) return;
+    switch (action) {
+      case ConversationAction.rename:
+        final next = await showRenameSheet(context, title);
+        if (next == null || !mounted) return;
+        unawaited(IrisHaptics.commit());
+        setState(() => _titles[conversation.id] = next);
+        final result = await chat.rename(conversation.id, next);
+        if (!mounted) return;
+        if (result case Err(:final failure)) {
+          setState(() => _titles[conversation.id] = title);
+          showIrisToast(
+            context,
+            message: 'Could not rename: ${ChatController.describe(failure)}',
+          );
+        }
+      case ConversationAction.archive:
+        await _archive(chat, conversation.id);
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _archive(ChatBackend chat, String id) async {
+    unawaited(IrisHaptics.commit());
+    setState(() => _gone.add(id));
+    final result = await chat.setArchived(id, archived: true);
+    if (!mounted) return;
+    switch (result) {
+      case Ok():
+        showIrisToast(
+          context,
+          message: 'Archived',
+          actionLabel: 'Undo',
+          onAction: () => unawaited(_undoArchive(chat, id)),
+        );
+      case Err(:final failure):
+        setState(() => _gone.remove(id));
+        showIrisToast(
+          context,
+          message: 'Could not archive: ${ChatController.describe(failure)}',
+        );
+    }
+  }
+
+  Future<void> _undoArchive(ChatBackend chat, String id) async {
+    setState(() => _gone.remove(id));
+    final result = await chat.setArchived(id, archived: false);
+    if (!mounted) return;
+    if (result case Err(:final failure)) {
+      setState(() => _gone.add(id));
+      showIrisToast(
+        context,
+        message: 'Could not undo: ${ChatController.describe(failure)}',
+      );
+    }
+  }
+
+  Future<void> _openArchived(ChatBackend chat) async {
+    await Navigator.of(
+      context,
+    ).push(IrisPageRoute<void>(builder: (_) => ArchivedScreen(backend: chat)));
+    if (mounted) ref.invalidate(conversationsProvider);
+  }
+
   Future<void> _loadMore(ChatBackend chat, int offset) async {
     if (_loadingMore) return;
     setState(() => _loadingMore = true);
@@ -82,7 +165,11 @@ class _ConversationListScreenState
   @override
   Widget build(BuildContext context) {
     // A refreshed first page starts the list over.
-    ref.listen(conversationsProvider, (_, _) => _more.clear());
+    ref.listen(conversationsProvider, (_, _) {
+      _more.clear();
+      _titles.clear();
+      _gone.clear();
+    });
     final server = ref.watch(activeServerProvider);
     final link =
         ref.watch(activeLinkProvider).value ??
@@ -154,6 +241,15 @@ class _ConversationListScreenState
                   conversations: conversations,
                   more: _more,
                   loadingMore: _loadingMore,
+                  titles: _titles,
+                  gone: _gone,
+                  onActions: chat == null
+                      ? null
+                      : (conversation) =>
+                            unawaited(_actions(chat, conversation)),
+                  onArchived: chat == null
+                      ? null
+                      : () => unawaited(_openArchived(chat)),
                   onOpen: chat == null
                       ? null
                       : (conversation) =>
@@ -496,6 +592,10 @@ class _ConversationList extends StatelessWidget {
     required this.more,
     required this.loadingMore,
     required this.onOpen,
+    required this.titles,
+    required this.gone,
+    required this.onActions,
+    required this.onArchived,
     required this.onMore,
     required this.onRetry,
     required this.onRefresh,
@@ -506,6 +606,10 @@ class _ConversationList extends StatelessWidget {
   final List<ConversationSummary> more;
   final bool loadingMore;
   final ValueChanged<ConversationSummary>? onOpen;
+  final Map<String, String> titles;
+  final Set<String> gone;
+  final ValueChanged<ConversationSummary>? onActions;
+  final VoidCallback? onArchived;
 
   /// Loads the next page from an offset; null when none can load.
   final ValueChanged<int>? onMore;
@@ -575,8 +679,27 @@ class _ConversationList extends StatelessWidget {
       onRefresh: onRefresh,
       child: ListView.builder(
         padding: const EdgeInsets.only(bottom: _barClearance),
-        itemCount: list.length + 1 + (hasMore ? 1 : 0),
+        itemCount: list.length + 2 + (hasMore ? 1 : 0),
         itemBuilder: (context, index) {
+          if (index == list.length + 1 + (hasMore ? 1 : 0)) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, 0),
+              child: IrisListRow(
+                title: 'Archived',
+                leading: Icon(
+                  Icons.archive_outlined,
+                  size: IrisSize.icon,
+                  color: context.palette.inkMuted,
+                ),
+                trailing: Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: context.palette.lineStrong,
+                ),
+                onTap: onArchived,
+              ),
+            );
+          }
           if (index == 0) {
             return Padding(
               padding: EdgeInsets.fromLTRB(
@@ -603,13 +726,19 @@ class _ConversationList extends StatelessWidget {
             );
           }
           final conversation = list[rowIndex];
-          return Padding(
-            padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
-            child: _ConversationRow(
-              key: ValueKey(conversation.id),
-              title: conversation.title,
-              subtitle: _subtitle(conversation, now),
-              onTap: open == null ? null : () => open(conversation),
+          return Leaving(
+            key: ValueKey(conversation.id),
+            gone: gone.contains(conversation.id),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+              child: ConversationRow(
+                title: titles[conversation.id] ?? conversation.title,
+                subtitle: _subtitle(conversation, now),
+                onTap: open == null ? null : () => open(conversation),
+                onLongPress: onActions == null
+                    ? null
+                    : () => onActions!(conversation),
+              ),
             ),
           );
         },
@@ -619,84 +748,4 @@ class _ConversationList extends StatelessWidget {
 
   /// Floating bar height plus the fade above it, so the last row clears it.
   static const double _barClearance = 130;
-}
-
-/// One conversation: a tile holding the resting orb, the title and its
-/// metadata. Rows carry no fill at rest, so the list reads as text on the page.
-class _ConversationRow extends StatelessWidget {
-  const _ConversationRow({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    super.key,
-  });
-
-  final String title;
-  final String? subtitle;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    final type = context.type;
-    return IrisPressable(
-      onTap: onTap,
-      ensureTapTarget: false,
-      semanticLabel: title,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: palette.surfaceSunken,
-                borderRadius: const BorderRadius.all(IrisRadius.md),
-              ),
-              child: const IrisOrb(
-                state: AgentState.rest,
-                size: 30,
-                glow: false,
-              ),
-            ),
-            const SizedBox(width: IrisSpace.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: type.body.copyWith(
-                      fontSize: 14,
-                      height: 1.25,
-                      color: palette.ink,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: IrisSpace.xs - 1),
-                    Text(
-                      subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: type.codeSmall.copyWith(
-                        fontSize: 11,
-                        color: palette.inkFaint,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: IrisSpace.sm),
-            Icon(Icons.chevron_right, size: 16, color: palette.lineStrong),
-          ],
-        ),
-      ),
-    );
-  }
 }

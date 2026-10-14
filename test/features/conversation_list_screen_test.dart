@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/providers.dart';
+import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/net/server_config.dart';
@@ -166,5 +167,82 @@ void main() {
     await tester.pumpWidget(home(const []));
     await tester.pumpAndSettle();
     expect(find.text('OpenAI Codex'), findsOneWidget);
+  });
+
+  group('managing conversations', () {
+    final rows = [
+      const ConversationSummary(id: 'a', title: 'Fix the build'),
+      const ConversationSummary(id: 'b', title: 'Plan the week'),
+    ];
+
+    testWidgets('rename from a long press', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText).last, 'Fix CI');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(backend.renames, [('a', 'Fix CI')]);
+      expect(find.text('Fix CI'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('a refused rename puts the old title back', (tester) async {
+      backend.renameResult = const Err(IrisFailure(FailureKind.rejected, message: 'nope'));
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText).last, 'Fix CI');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+      expect(find.textContaining('Could not rename'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('archive hides the row; undo brings it back', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      expect(backend.archives, [('a', true)]);
+      expect(find.text('Fix the build'), findsNothing);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(backend.archives, [('a', true), ('a', false)]);
+      expect(find.text('Fix the build'), findsOneWidget);
+    });
+
+    testWidgets('a refused archive brings the row back', (tester) async {
+      backend.archiveResult = const Err(IrisFailure(FailureKind.offline));
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('Archived opens the archived screen', (tester) async {
+      backend.archivedResult = const Ok([ConversationSummary(id: 'z', title: 'Old notes')]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.scrollUntilVisible(find.text('Archived'), 200);
+      await tester.tap(find.text('Archived'));
+      await tester.pumpAndSettle();
+      expect(find.text('Old notes'), findsOneWidget);
+    });
   });
 }
