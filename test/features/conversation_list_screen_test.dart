@@ -2,6 +2,8 @@
 /// which profile.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +33,11 @@ void main() {
   }) => ProviderScope(
     overrides: [
       activeServerProvider.overrideWithValue(
-        const ServerConfig(id: 's', baseUrl: 'https://h.example', label: 'Home'),
+        const ServerConfig(
+          id: 's',
+          baseUrl: 'https://h.example',
+          label: 'Home',
+        ),
       ),
       activeLinkProvider.overrideWith(
         (ref) => Stream.value(const LinkState(LinkPhase.live)),
@@ -58,7 +64,9 @@ void main() {
     expect(find.text('h.example · Connected'), findsOneWidget);
   });
 
-  testWidgets('lists conversations with when and where they started', (tester) async {
+  testWidgets('lists conversations with when and where they started', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       home([
         ConversationSummary(
@@ -114,7 +122,9 @@ void main() {
     expect(find.text('Show more'), findsNothing);
   });
 
-  testWidgets('with several profiles, the pill switches profile', (tester) async {
+  testWidgets('with several profiles, the pill switches profile', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       home(
         const [],
@@ -151,7 +161,9 @@ void main() {
     expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
   });
 
-  testWidgets('the usage strip sits under the hero when a provider reports', (tester) async {
+  testWidgets('the usage strip sits under the hero when a provider reports', (
+    tester,
+  ) async {
     backend.modelOptionsResult = const Ok(
       ModelOptions(
         provider: 'openai-codex',
@@ -161,7 +173,9 @@ void main() {
             name: 'OpenAI Codex',
             models: ['m'],
             isCurrent: true,
-            usage: ProviderUsage(windows: [UsageWindow(label: 'Session', usedPercent: 10)]),
+            usage: ProviderUsage(
+              windows: [UsageWindow(label: 'Session', usedPercent: 10)],
+            ),
           ),
         ],
       ),
@@ -173,13 +187,18 @@ void main() {
 
   group('the bar folds in the hero', () {
     final rows = [
-      for (var i = 0; i < 20; i++) ConversationSummary(id: '$i', title: 'Conversation $i'),
+      for (var i = 0; i < 20; i++)
+        ConversationSummary(id: '$i', title: 'Conversation $i'),
     ];
 
-    double offset(WidgetTester tester) =>
-        tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+    double offset(WidgetTester tester) => tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position
+        .pixels;
 
-    testWidgets('scrolling the hero away shows the link in the bar', (tester) async {
+    testWidgets('scrolling the hero away shows the link in the bar', (
+      tester,
+    ) async {
       await tester.pumpWidget(home(rows));
       await settle(tester);
       // The bar's own link is not built while the hero is in view.
@@ -203,14 +222,21 @@ void main() {
       expect(find.text('Connected'), findsNothing);
     });
 
-    testWidgets('past halfway, it settles into the compact bar', (tester) async {
+    testWidgets('past halfway, it settles into the compact bar', (
+      tester,
+    ) async {
       await tester.pumpWidget(home(rows));
       await settle(tester);
       await tester.drag(find.byType(Scrollable).first, const Offset(0, -100));
       await tester.pumpAndSettle();
       // Fully folded: the bar's link at full strength, not partway in.
       final link = tester.widget<Opacity>(
-        find.ancestor(of: find.text('Connected'), matching: find.byType(Opacity)).first,
+        find
+            .ancestor(
+              of: find.text('Connected'),
+              matching: find.byType(Opacity),
+            )
+            .first,
       );
       expect(link.opacity, 1);
     });
@@ -251,7 +277,9 @@ void main() {
     });
 
     testWidgets('a refused rename puts the old title back', (tester) async {
-      backend.renameResult = const Err(IrisFailure(FailureKind.rejected, message: 'nope'));
+      backend.renameResult = const Err(
+        IrisFailure(FailureKind.rejected, message: 'nope'),
+      );
       await tester.pumpWidget(home(rows));
       await settle(tester);
       await tester.longPress(find.text('Fix the build'));
@@ -294,8 +322,137 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
 
+    testWidgets('show more skips past the rows archived here', (tester) async {
+      // The server no longer counts 'a', so the next page starts one earlier.
+      backend.conversationsResult = const Ok([
+        ConversationSummary(id: 'c', title: 'Third'),
+      ]);
+      await tester.pumpWidget(home(rows, total: 3));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show more'));
+      await tester.pumpAndSettle();
+      expect(backend.calls, contains('conversations 1'));
+      expect(find.text('Third'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets(
+      'a refresh in flight keeps archived and renamed rows as they were',
+      (tester) async {
+        final reload = Completer<void>();
+        var asks = 0;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              activeServerProvider.overrideWithValue(
+                const ServerConfig(
+                  id: 's',
+                  baseUrl: 'https://h.example',
+                  label: 'Home',
+                ),
+              ),
+              activeLinkProvider.overrideWith(
+                (ref) => Stream.value(const LinkState(LinkPhase.live)),
+              ),
+              activeChatProvider.overrideWith((ref) async => backend),
+              conversationsProvider.overrideWith((ref) async {
+                if (asks++ > 0) await reload.future;
+                return ConversationPage(items: rows, total: rows.length);
+              }),
+              profilesProvider.overrideWith((ref) async => const []),
+            ],
+            child: themed(const ConversationListScreen()),
+          ),
+        );
+        await settle(tester);
+        await tester.longPress(find.text('Fix the build'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Archive'));
+        await tester.pumpAndSettle();
+        await tester.longPress(find.text('Plan the week'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Rename'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byType(EditableText).last,
+          'Plan next week',
+        );
+        await tester.pump();
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+        // Pull down: the list starts loading again, still holding the old rows.
+        await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(asks, 2);
+        expect(find.text('Fix the build'), findsNothing);
+        expect(find.text('Plan next week'), findsOneWidget);
+        reload.complete();
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 5));
+      },
+    );
+
+    testWidgets('undo after a refresh brings the conversation back', (
+      tester,
+    ) async {
+      var served = List.of(rows);
+      backend.onArchived = (id, {required archived}) {
+        if (archived) {
+          served = [
+            for (final r in served)
+              if (r.id != id) r,
+          ];
+        } else {
+          served = List.of(rows);
+        }
+      };
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            activeServerProvider.overrideWithValue(
+              const ServerConfig(
+                id: 's',
+                baseUrl: 'https://h.example',
+                label: 'Home',
+              ),
+            ),
+            activeLinkProvider.overrideWith(
+              (ref) => Stream.value(const LinkState(LinkPhase.live)),
+            ),
+            activeChatProvider.overrideWith((ref) async => backend),
+            conversationsProvider.overrideWith(
+              (ref) async =>
+                  ConversationPage(items: served, total: served.length),
+            ),
+            profilesProvider.overrideWith((ref) async => const []),
+          ],
+          child: themed(const ConversationListScreen()),
+        ),
+      );
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      // The list is fetched again before Undo is tapped: it no longer holds 'a'.
+      await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+      expect(served.length, 1);
+      expect(find.text('Fix the build'), findsNothing);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+    });
+
     testWidgets('Archived opens the archived screen', (tester) async {
-      backend.archivedResult = const Ok([ConversationSummary(id: 'z', title: 'Old notes')]);
+      backend.archivedResult = const Ok([
+        ConversationSummary(id: 'z', title: 'Old notes'),
+      ]);
       await tester.pumpWidget(home(rows));
       await settle(tester);
       await tester.scrollUntilVisible(
@@ -318,18 +475,27 @@ void main() {
 
     Future<void> search(WidgetTester tester, String query) async {
       await tester.enterText(
-        find.descendant(of: find.byType(SearchField), matching: find.byType(EditableText)),
+        find.descendant(
+          of: find.byType(SearchField),
+          matching: find.byType(EditableText),
+        ),
         query,
       );
       await tester.pump();
     }
 
-    testWidgets('typing filters at once, then the server answers', (tester) async {
+    testWidgets('typing filters at once, then the server answers', (
+      tester,
+    ) async {
       backend.searchResult = const Ok([
         SearchHit(
           storedId: 'c',
           title: 'Deploy notes',
-          snippet: [SnippetRun('the '), SnippetRun('build', matched: true), SnippetRun(' broke')],
+          snippet: [
+            SnippetRun('the '),
+            SnippetRun('build', matched: true),
+            SnippetRun(' broke'),
+          ],
         ),
       ]);
       await tester.pumpWidget(home(rows));
@@ -359,7 +525,9 @@ void main() {
       expect(find.text('No matches'), findsOneWidget);
     });
 
-    testWidgets('a failed server search keeps the local matches', (tester) async {
+    testWidgets('a failed server search keeps the local matches', (
+      tester,
+    ) async {
       backend.searchResult = const Err(IrisFailure(FailureKind.offline));
       await tester.pumpWidget(home(rows));
       await settle(tester);
@@ -368,6 +536,49 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Plan the week'), findsOneWidget);
       expect(find.text("Couldn't search the server"), findsOneWidget);
+    });
+
+    testWidgets('a conversation archived here is left out of the matches', (
+      tester,
+    ) async {
+      backend.searchResult = const Ok([
+        SearchHit(storedId: 'a', title: 'Fix the build'),
+        SearchHit(storedId: 'c', title: 'Build notes'),
+      ]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      await search(tester, 'build');
+      // Local matches first, then the server's hits (which still list 'a').
+      expect(find.text('Fix the build'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Build notes'), findsOneWidget);
+      expect(find.text('Fix the build'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('a title changed here is what search matches and shows', (
+      tester,
+    ) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText).last, 'Ship the app');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      await search(tester, 'ship');
+      expect(find.text('Ship the app'), findsOneWidget);
+      await search(tester, 'build');
+      expect(find.text('Ship the app'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('clearing the field brings the list back', (tester) async {
