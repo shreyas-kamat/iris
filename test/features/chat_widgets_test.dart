@@ -4,8 +4,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/design/components/controls.dart';
 import 'package:iris/design/tokens/palette.dart';
 import 'package:iris/features/chat/composer.dart';
+import 'package:iris/features/chat/context_sheet.dart';
 import 'package:iris/features/chat/decision_cards.dart';
 import 'package:iris/features/chat/transcript_view.dart';
 
@@ -180,4 +182,96 @@ void main() {
       expect(find.text('Switch model'), findsNothing);
     },
   );
+
+  group('composer, phase 4', () {
+    Widget composer({
+      required TextEditingController text,
+      bool running = false,
+      ContextUsage? usage,
+      VoidCallback? onSend,
+      VoidCallback? onContext,
+    }) => themed(
+      Align(
+        alignment: Alignment.bottomCenter,
+        child: Composer(
+          controller: text,
+          running: running,
+          onSend: onSend ?? () {},
+          onStop: () {},
+          contextUsage: usage,
+          onContext: onContext,
+        ),
+      ),
+    );
+
+    testWidgets('during a run, text offers a steer beside stop', (tester) async {
+      final text = TextEditingController();
+      var sent = 0;
+      await tester.pumpWidget(composer(text: text, running: true, onSend: () => sent++));
+      expect(find.bySemanticsLabel('Steer'), findsNothing);
+      expect(find.bySemanticsLabel('Stop'), findsOneWidget);
+
+      text.text = 'use staging';
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Steer'), findsOneWidget);
+      expect(find.bySemanticsLabel('Stop'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Steer'));
+      expect(sent, 1);
+    });
+
+    testWidgets('a slash command offers no steer', (tester) async {
+      final text = TextEditingController(text: '/model');
+      await tester.pumpWidget(composer(text: text, running: true));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Steer'), findsNothing);
+    });
+
+    testWidgets('the context ring shows once known and opens its sheet', (tester) async {
+      final text = TextEditingController();
+      var opened = 0;
+      await tester.pumpWidget(composer(text: text));
+      expect(find.byType(IrisRing), findsNothing);
+      await tester.pumpWidget(
+        composer(
+          text: text,
+          usage: const ContextUsage(percent: 18, used: 48210, max: 272000),
+          onContext: () => opened++,
+        ),
+      );
+      expect(find.bySemanticsLabel('Context window, 18 percent'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel('Context window, 18 percent'));
+      expect(opened, 1);
+    });
+
+    testWidgets('the context sheet reads the numbers out', (tester) async {
+      await tester.pumpWidget(
+        themed(
+          Builder(
+            builder: (context) => Center(
+              child: IrisButton(
+                label: 'Open',
+                onPressed: () => showContextSheet(
+                  context,
+                  const ContextUsage(percent: 18, used: 48210, max: 272000),
+                  model: 'gpt-6.1-sol',
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.text('18%'), findsOneWidget);
+      expect(find.text('48,210 of 272,000 tokens'), findsOneWidget);
+      expect(find.text('gpt-6.1-sol'), findsOneWidget);
+    });
+
+    test('numbers group by thousands', () {
+      expect(groupedNumber(0), '0');
+      expect(groupedNumber(999), '999');
+      expect(groupedNumber(48210), '48,210');
+      expect(groupedNumber(1272000), '1,272,000');
+    });
+  });
 }

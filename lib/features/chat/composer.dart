@@ -6,11 +6,15 @@
 /// itself says what the agent is doing.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_models.dart';
+import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
@@ -27,12 +31,14 @@ class Composer extends StatelessWidget {
     this.model,
     this.onModel,
     this.state = AgentState.idle,
+    this.contextUsage,
+    this.onContext,
     super.key,
   });
 
   final TextEditingController controller;
 
-  /// A turn is in progress: the action becomes Stop.
+  /// A turn is in progress: the action becomes Stop, and text steers the turn.
   final bool running;
   final VoidCallback onSend;
   final VoidCallback onStop;
@@ -51,6 +57,13 @@ class Composer extends StatelessWidget {
 
   /// The turn's current state. Tints the border and the stop orb while running.
   final AgentState state;
+
+  /// How full the context window is; null hides the ring until the gateway
+  /// first says, which it does after a turn.
+  final ContextUsage? contextUsage;
+
+  /// Opens the context sheet.
+  final VoidCallback? onContext;
 
   /// At most this many suggestions show, so they never hide the transcript.
   static const suggestions = 5;
@@ -85,6 +98,10 @@ class Composer extends StatelessWidget {
       builder: (context, value, _) {
         final matching = _matching(value.text);
         final canSend = enabled && value.text.trim().isNotEmpty;
+        // Text during a run steers it. A slash command is not a steer, so it
+        // gets no button.
+        final canSteer =
+            running && canSend && !value.text.trimLeft().startsWith('/');
         final border = running
             ? palette.colorFor(state).withValues(alpha: .33)
             : palette.line;
@@ -181,7 +198,38 @@ class Composer extends StatelessWidget {
                           _ModelChip(model: model, onTap: onModel),
                           const SizedBox(width: IrisSpace.xs),
                         ],
+                        if (contextUsage case final usage?)
+                          _ContextRing(usage: usage, onTap: onContext),
                         const Spacer(),
+                        AnimatedSwitcher(
+                          duration: context.reduceMotion
+                              ? Duration.zero
+                              : IrisDurations.normal,
+                          switchInCurve: IrisCurves.standard,
+                          switchOutCurve: IrisCurves.exit,
+                          transitionBuilder: (child, animation) =>
+                              FadeTransition(
+                                opacity: animation,
+                                child: ScaleTransition(
+                                  scale: Tween(
+                                    begin: .8,
+                                    end: 1.0,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              ),
+                          child: canSteer
+                              ? Padding(
+                                  key: const ValueKey('steer'),
+                                  padding: const EdgeInsets.only(
+                                    right: IrisSpace.sm,
+                                  ),
+                                  child: _SteerButton(onTap: onSend),
+                                )
+                              : const SizedBox.shrink(
+                                  key: ValueKey('no-steer'),
+                                ),
+                        ),
                         // Send and Stop share one slot, so the action changes
                         // in place rather than the row reflowing.
                         AnimatedSwitcher(
@@ -347,6 +395,66 @@ class _StopButton extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Steer: a ring of the thinking hue around a turning arrow. It sits beside
+/// Stop rather than replacing it, because during a run both are real choices.
+class _SteerButton extends StatelessWidget {
+  const _SteerButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final thinking = context.palette.colorFor(AgentState.thinking);
+    return IrisPressable(
+      onTap: () {
+        unawaited(IrisHaptics.commit());
+        onTap();
+      },
+      semanticLabel: 'Steer',
+      scale: .92,
+      ensureTapTarget: false,
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: thinking.withValues(alpha: .14),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: thinking.withValues(alpha: .4),
+            width: IrisStroke.hairline,
+          ),
+        ),
+        child: Icon(Icons.subdirectory_arrow_right, size: 18, color: thinking),
+      ),
+    );
+  }
+}
+
+/// The context window as a ring beside the model chip. Tapping it opens the
+/// numbers.
+class _ContextRing extends StatelessWidget {
+  const _ContextRing({required this.usage, this.onTap});
+
+  final ContextUsage usage;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = usage.percent.round();
+    return IrisPressable(
+      onTap: onTap,
+      semanticLabel: 'Context window, $percent percent',
+      child: ExcludeSemantics(
+        child: IrisRing(
+          value: usage.percent / 100,
+          semanticLabel: 'Context window, $percent percent',
         ),
       ),
     );
