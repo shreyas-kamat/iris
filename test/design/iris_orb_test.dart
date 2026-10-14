@@ -69,6 +69,22 @@ void main() {
     expect(SchedulerBinding.instance.transientCallbackCount, 0);
   });
 
+  testWidgets('an orb that never animated can be removed', (tester) async {
+    // A resting orb with motion allowed is settled from its first frame, so
+    // it never needs a ticker. Removing it must not create one: dispose runs
+    // while the element is inactive, and a new ticker looks up TickerMode.
+    await tester.pumpWidget(
+      themed(
+        const MediaQuery(
+          data: MediaQueryData(),
+          child: Center(child: IrisOrb(state: AgentState.rest)),
+        ),
+      ),
+    );
+    await tester.pumpWidget(themed(const SizedBox()));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('semantics describe each state in words', (tester) async {
     final handle = tester.ensureSemantics();
     const labels = {
