@@ -15,8 +15,7 @@ import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 
-/// The field's row height, including its breathing room: how far the list
-/// starts scrolled, so the field waits just above the first row.
+/// The field's row height, including its breathing room.
 const double searchFieldExtent = 64;
 
 /// The server's hits for a query, one per conversation.
@@ -121,9 +120,7 @@ class SearchField extends StatelessWidget {
                           style: type.body.copyWith(color: palette.ink),
                           cursorColor: palette.accent,
                           backgroundCursorColor: palette.inkFaint,
-                          selectionColor: palette.accent.withValues(
-                            alpha: .28,
-                          ),
+                          selectionColor: palette.accent.withValues(alpha: .28),
                           textInputAction: TextInputAction.search,
                         ),
                       ],

@@ -306,6 +306,45 @@ void main() {
       );
     });
 
+    testWidgets('home scrolled, the hero folded into the bar, $mode', (
+      tester,
+    ) async {
+      // Enough rows that the hero can scroll all the way under the bar.
+      final rows = [
+        for (final round in [1, 2])
+          for (final row in _conversations)
+            ConversationSummary(
+              id: '${row.id}-$round',
+              title: row.title,
+              startedAt: row.startedAt,
+              messageCount: row.messageCount,
+              source: row.source,
+            ),
+      ];
+      final backend = FakeChatBackend()..conversationsResult = Ok(rows);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const ConversationListScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          providerUsageProvider.overrideWithValue(AsyncData(_usageRows)),
+          conversationsProvider.overrideWith(
+            (ref) async => ConversationPage(items: rows, total: rows.length),
+          ),
+        ],
+        name: 'home_compact',
+        after: () async {
+          await tester.drag(
+            find.byType(Scrollable).first,
+            const Offset(0, -400),
+          );
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+
     testWidgets('chat with a reply, a tool and code, $mode', (tester) async {
       final backend = FakeChatBackend()
         ..historyResult = Ok(_exchange);
@@ -392,8 +431,6 @@ void main() {
         ],
         name: 'home_usage_search',
         after: () async {
-          await tester.drag(find.byType(Scrollable).first, const Offset(0, 80));
-          await tester.pumpAndSettle();
           await tester.enterText(
             find.descendant(
               of: find.byType(SearchField),

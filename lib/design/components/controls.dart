@@ -394,16 +394,11 @@ class IrisGauge extends StatelessWidget {
     required this.value,
     this.label,
     this.width = 56,
-    this.heatOf,
     super.key,
   });
 
   /// Fill from 0 to 1.
   final double value;
-
-  /// What decides the colour, when it is not [value]: a bar showing what is
-  /// *left* still heats up as the quota is *used*.
-  final double? heatOf;
   final String? label;
 
   /// Null stretches the bar to the width it is given.
@@ -436,12 +431,7 @@ class IrisGauge extends StatelessWidget {
                     child: FractionallySizedBox(
                       widthFactor: shown,
                       heightFactor: 1,
-                      child: ColoredBox(
-                        color: gaugeTint(
-                          palette,
-                          (heatOf ?? shown).clamp(0.0, 1.0),
-                        ),
-                      ),
+                      child: ColoredBox(color: gaugeTint(palette, shown)),
                     ),
                   );
                 },

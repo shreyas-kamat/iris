@@ -42,12 +42,12 @@ void main() {
     expect(tester.getSize(find.byType(UsageStrip)).height, 0);
   });
 
-  testWidgets('a provider shows its tightest window as what is left', (tester) async {
+  testWidgets('a provider shows its tightest window as what is used', (tester) async {
     await tester.pumpWidget(_strip(AsyncData([codex])));
     await tester.pumpAndSettle();
     expect(find.text('OpenAI Codex'), findsOneWidget);
     // The collapsed caption is rich text: the figure is weighted.
-    expect(find.text('27% left · resets in 2h 36m', findRichText: true), findsOneWidget);
+    expect(find.text('73% used · resets in 2h 36m', findRichText: true), findsOneWidget);
     expect(find.text('Weekly'), findsNothing);
   });
 
@@ -58,7 +58,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Session'), findsOneWidget);
     expect(find.text('Weekly'), findsOneWidget);
-    expect(find.text('52% left · resets in 5d 20h'), findsOneWidget);
+    expect(find.text('48% used · resets in 5d 20h'), findsOneWidget);
     await tester.tap(find.text('OpenAI Codex'));
     await tester.pumpAndSettle();
     expect(find.text('Weekly'), findsNothing);
@@ -77,7 +77,7 @@ void main() {
     );
     await tester.pumpWidget(_strip(const AsyncData([pool])));
     await tester.pumpAndSettle();
-    expect(find.text('70% left', findRichText: true), findsOneWidget);
+    expect(find.text('30% used', findRichText: true), findsOneWidget);
     await tester.tap(find.text('Anthropic'));
     await tester.pumpAndSettle();
     // Account names are section labels, which are set in capitals.

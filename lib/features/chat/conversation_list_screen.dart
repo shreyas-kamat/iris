@@ -2,12 +2,16 @@
 ///
 /// The top bar picks the profile and opens settings. The hero carries the
 /// agent's state in the iris orb, with a line for the gateway that opens the
-/// link detail. Below it, the conversations; over them, a floating bar that
-/// starts a new one.
+/// link detail. Below it, the usage strip, the search field and the
+/// conversations, all in one scroll; as the hero scrolls away, the link folds
+/// into the bar. Over everything, a floating bar that starts a new
+/// conversation.
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -63,10 +67,15 @@ class _ConversationListScreenState
 
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
+  final _scroll = ScrollController();
 
-  /// Starts scrolled just past the search field, so it waits above the first
-  /// row and a pull reveals it. A list too short to scroll simply shows it.
-  final _scroll = ScrollController(initialScrollOffset: searchFieldExtent);
+  /// How far the hero has scrolled under the bar: 0 in full view, 1 gone.
+  final _collapse = ValueNotifier<double>(0);
+  final _heroKey = GlobalKey();
+
+  /// The hero's height when last laid out. Kept, because the list drops the
+  /// hero once it is scrolled far enough away.
+  double _heroHeight = 140;
 
   /// The query the server is asked, settled 250 ms after the last keystroke.
   String _serverQuery = '';
@@ -79,6 +88,46 @@ class _ConversationListScreenState
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
     });
+    _scroll.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    final hero = _heroKey.currentContext?.findRenderObject();
+    if (hero is RenderBox && hero.hasSize && hero.size.height > 0) {
+      _heroHeight = hero.size.height;
+    }
+    _collapse.value = (_scroll.offset / _heroHeight).clamp(0.0, 1.0);
+  }
+
+  /// Settles a half-collapsed hero to open or closed, so the bar is never
+  /// left between its two forms.
+  bool _snap(ScrollEndNotification notification) {
+    // Only the list itself: text fields hold scrollables of their own.
+    if (notification.depth != 0 || _searchFocus.hasFocus) return false;
+    final metrics = notification.metrics;
+    final offset = metrics.pixels;
+    if (offset <= 0 || offset >= _heroHeight) return false;
+    final target = offset < _heroHeight / 2
+        ? 0.0
+        : math.min(_heroHeight, metrics.maxScrollExtent);
+    if (target == offset) return false;
+    // After the current frame: a scroll cannot start inside its own end
+    // notification.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      if (context.reduceMotion) {
+        _scroll.jumpTo(target);
+      } else {
+        unawaited(
+          _scroll.animateTo(
+            target,
+            duration: IrisDurations.normal,
+            curve: IrisCurves.standard,
+          ),
+        );
+      }
+    });
+    return false;
   }
 
   void _onQuery() {
@@ -99,6 +148,7 @@ class _ConversationListScreenState
     _search.dispose();
     _searchFocus.dispose();
     _scroll.dispose();
+    _collapse.dispose();
     super.dispose();
   }
 
@@ -226,98 +276,94 @@ class _ConversationListScreenState
     final (linkState, headline, _) = describeLink(link);
     final live = link.phase == LinkPhase.live;
     final now = ref.read(clockProvider)();
-    final gutter = context.window.gutter;
+    // The orb shows the agent as idle while the link is up. Only a broken
+    // link changes it, so a healthy home does not look busy.
+    final orbState = live ? AgentState.idle : linkState;
+    void openGateway() => unawaited(
+      Navigator.of(
+        context,
+      ).push(IrisPageRoute<void>(builder: (_) => const LinkStatusScreen())),
+    );
 
     return IrisScaffold(
-      header: Padding(
-        padding: EdgeInsets.fromLTRB(
-          gutter,
-          IrisSpace.sm,
-          gutter,
-          IrisSpace.sm,
+      header: _HomeBar(
+        collapse: _collapse,
+        profile: profile,
+        // The pill only opens something when there is a choice to make.
+        onProfile: profiles.length > 1
+            ? () => unawaited(showProfilePicker(context, ref))
+            : null,
+        onSettings: () => unawaited(
+          Navigator.of(
+            context,
+          ).push(IrisPageRoute<void>(builder: (_) => const SettingsScreen())),
         ),
-        child: Row(
-          children: [
-            _ProfilePill(
-              name: profile,
-              // The pill only opens something when there is a choice to make.
-              onTap: profiles.length > 1
-                  ? () => unawaited(showProfilePicker(context, ref))
-                  : null,
-            ),
-            const Spacer(),
-            IrisCircleButton(
-              icon: Icons.tune,
-              semanticLabel: 'Settings',
-              onPressed: () => unawaited(
-                Navigator.of(context).push(
-                  IrisPageRoute<void>(builder: (_) => const SettingsScreen()),
-                ),
-              ),
-            ),
-          ],
-        ),
+        linkState: linkState,
+        headline: headline,
+        onGateway: openGateway,
       ),
       body: Stack(
         children: [
-          Column(
-            children: [
-              _Hero(
-                // The orb shows the agent as idle while the link is up. Only a
-                // broken link changes it, so a healthy home does not look busy.
-                orbState: live ? AgentState.idle : linkState,
-                linkState: linkState,
-                headline: headline,
-                host: server == null ? '' : _hostOf(server.baseUrl),
-                total: conversations.value?.total,
-                now: now,
-                onGateway: () => unawaited(
-                  Navigator.of(context).push(
-                    IrisPageRoute<void>(
-                      builder: (_) => const LinkStatusScreen(),
+          NotificationListener<ScrollEndNotification>(
+            onNotification: _snap,
+            child: _ConversationList(
+              top: [
+                // Fades as it scrolls under the bar, where the compact link
+                // takes over.
+                ValueListenableBuilder<double>(
+                  valueListenable: _collapse,
+                  builder: (context, t, child) => Opacity(
+                    opacity: (1 - t * 1.4).clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                  child: KeyedSubtree(
+                    key: _heroKey,
+                    child: _Hero(
+                      orbState: orbState,
+                      linkState: linkState,
+                      headline: headline,
+                      host: server == null ? '' : _hostOf(server.baseUrl),
+                      total: conversations.value?.total,
+                      now: now,
+                      onGateway: openGateway,
                     ),
                   ),
                 ),
-              ),
-              const UsageStrip(),
-              Expanded(
-                child: _ConversationList(
-                  conversations: conversations,
-                  more: _more,
-                  loadingMore: _loadingMore,
-                  scroll: _scroll,
-                  search: _search,
-                  searchFocus: _searchFocus,
-                  serverHits: _serverQuery.isEmpty
-                      ? null
-                      : ref.watch(conversationSearchProvider(_serverQuery)),
-                  titles: _titles,
-                  gone: _gone,
-                  onActions: chat == null
-                      ? null
-                      : (conversation) =>
-                            unawaited(_actions(chat, conversation)),
-                  onArchived: chat == null
-                      ? null
-                      : () => unawaited(_openArchived(chat)),
-                  onOpen: chat == null
-                      ? null
-                      : (conversation) =>
-                            unawaited(_open(chat, conversation: conversation)),
-                  onMore: chat == null
-                      ? null
-                      : (offset) => unawaited(_loadMore(chat, offset)),
-                  onRetry: () => ref.invalidate(conversationsProvider),
-                  onRefresh: () async {
-                    ref
-                      ..invalidate(conversationsProvider)
-                      ..invalidate(usageOptionsProvider);
-                    await ref.read(conversationsProvider.future);
-                  },
-                  now: now,
-                ),
-              ),
-            ],
+                const UsageStrip(),
+              ],
+              conversations: conversations,
+              more: _more,
+              loadingMore: _loadingMore,
+              scroll: _scroll,
+              search: _search,
+              searchFocus: _searchFocus,
+              serverHits: _serverQuery.isEmpty
+                  ? null
+                  : ref.watch(conversationSearchProvider(_serverQuery)),
+              titles: _titles,
+              gone: _gone,
+              onActions: chat == null
+                  ? null
+                  : (conversation) => unawaited(_actions(chat, conversation)),
+              onArchived: chat == null
+                  ? null
+                  : () => unawaited(_openArchived(chat)),
+              onOpen: chat == null
+                  ? null
+                  : (conversation) =>
+                        unawaited(_open(chat, conversation: conversation)),
+              onMore: chat == null
+                  ? null
+                  : (offset) => unawaited(_loadMore(chat, offset)),
+              onRetry: () => ref.invalidate(conversationsProvider),
+              onRefresh: () async {
+                ref
+                  ..invalidate(conversationsProvider)
+                  ..invalidate(usageOptionsProvider);
+                await ref.read(conversationsProvider.future);
+              },
+              now: now,
+            ),
           ),
           Positioned(
             left: 0,
@@ -340,6 +386,146 @@ class _ConversationListScreenState
   static String _hostOf(String baseUrl) {
     final host = Uri.tryParse(baseUrl)?.host ?? '';
     return host.isEmpty ? baseUrl : host;
+  }
+}
+
+/// The bar pinned above the list. The profile and settings are always there;
+/// once the hero has scrolled under it, the link joins them, so the
+/// connection stays in view.
+class _HomeBar extends StatelessWidget {
+  const _HomeBar({
+    required this.collapse,
+    required this.profile,
+    required this.onProfile,
+    required this.onSettings,
+    required this.linkState,
+    required this.headline,
+    required this.onGateway,
+  });
+
+  /// 0 with the hero in full view, 1 once it is under the bar.
+  final ValueListenable<double> collapse;
+  final String profile;
+  final VoidCallback? onProfile;
+  final VoidCallback onSettings;
+  final AgentState linkState;
+  final String headline;
+  final VoidCallback onGateway;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final gutter = context.window.gutter;
+    final pill = _ProfilePill(name: profile, onTap: onProfile);
+    final settings = IrisCircleButton(
+      icon: Icons.tune,
+      semanticLabel: 'Settings',
+      onPressed: onSettings,
+    );
+    return ValueListenableBuilder<double>(
+      valueListenable: collapse,
+      builder: (context, t, _) {
+        // The compact link arrives over the second half of the collapse, as
+        // the hero's own fades out beneath it.
+        final shown = ((t - .5) / .5).clamp(0.0, 1.0);
+        return DecoratedBox(
+          // A hairline appears under the bar once rows pass beneath it.
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: palette.line.withValues(alpha: palette.line.a * t),
+                width: IrisStroke.hairline,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              IrisSpace.sm,
+              gutter,
+              IrisSpace.sm,
+            ),
+            child: Row(
+              children: [
+                pill,
+                Expanded(
+                  child: shown == 0
+                      ? const SizedBox.shrink()
+                      : IgnorePointer(
+                          ignoring: shown < .5,
+                          child: ExcludeSemantics(
+                            excluding: shown < .5,
+                            child: Opacity(
+                              opacity: shown,
+                              child: Transform.translate(
+                                offset: Offset(0, (1 - shown) * 8),
+                                child: Center(
+                                  child: _CompactLink(
+                                    linkState: linkState,
+                                    headline: headline,
+                                    onTap: onGateway,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+                settings,
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The hero folded into the bar: the link's dot and headline.
+class _CompactLink extends StatelessWidget {
+  const _CompactLink({
+    required this.linkState,
+    required this.headline,
+    required this.onTap,
+  });
+
+  final AgentState linkState;
+  final String headline;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    return IrisPressable(
+      onTap: onTap,
+      semanticLabel: 'Connection: $headline',
+      ensureTapTarget: false,
+      child: ExcludeSemantics(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: palette.colorFor(linkState),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: IrisSpace.xs + 2),
+            Flexible(
+              child: Text(
+                headline,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: type.caption.copyWith(color: palette.inkMuted),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -637,6 +823,7 @@ class _NewChatBar extends StatelessWidget {
 
 class _ConversationList extends StatelessWidget {
   const _ConversationList({
+    required this.top,
     required this.now,
     required this.conversations,
     required this.more,
@@ -655,6 +842,8 @@ class _ConversationList extends StatelessWidget {
     required this.onRefresh,
   });
 
+  /// What scrolls in above the rows: the hero and the usage strip.
+  final List<Widget> top;
   final Future<void> Function() onRefresh;
   final AsyncValue<ConversationPage?> conversations;
   final List<ConversationSummary> more;
@@ -690,77 +879,86 @@ class _ConversationList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gutter = context.window.gutter;
     final page = conversations.value;
-    if (page == null) {
-      if (conversations.error case final error?) {
-        return IrisEmptyState(
+    return RefreshIndicator(
+      color: context.palette.accent,
+      backgroundColor: context.palette.surfaceRaised,
+      onRefresh: onRefresh,
+      child: ListView(
+        controller: scroll,
+        // A short list still pulls to refresh.
+        physics: const AlwaysScrollableScrollPhysics(),
+        // The bottom padding is the height of the floating bar plus its
+        // fade, so the last row can be scrolled clear of it.
+        padding: const EdgeInsets.only(bottom: _barClearance),
+        children: [
+          ...top,
+          if (page == null)
+            ..._placeholder(context)
+          else
+            ..._rows(context, page),
+        ],
+      ),
+    );
+  }
+
+  /// Before the first page: what went wrong, or placeholders where rows will
+  /// be while it loads or the link comes up.
+  List<Widget> _placeholder(BuildContext context) {
+    final gutter = context.window.gutter;
+    if (conversations.error case final error?) {
+      return [
+        IrisEmptyState(
           title: 'Could not load conversations',
           message: error is IrisFailure
               ? error.message ?? error.kind.name
               : '$error',
           action: IrisButton(label: 'Try again', onPressed: onRetry),
-        );
-      }
-      // Loading, or waiting for the link: placeholders where rows will be.
-      return ListView(
+        ),
+      ];
+    }
+    return [
+      Padding(
         padding: EdgeInsets.symmetric(
           horizontal: gutter,
           vertical: IrisSpace.md,
         ),
-        children: [
-          for (var i = 0; i < 6; i++) ...[
-            const IrisSkeleton(width: 220, height: 16),
-            const SizedBox(height: IrisSpace.xs),
-            const IrisSkeleton(width: 120, height: 12),
-            const SizedBox(height: IrisSpace.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < 6; i++) ...[
+              const IrisSkeleton(width: 220, height: 16),
+              const SizedBox(height: IrisSpace.xs),
+              const IrisSkeleton(width: 120, height: 12),
+              const SizedBox(height: IrisSpace.lg),
+            ],
           ],
-        ],
-      );
-    }
+        ),
+      ),
+    ];
+  }
+
+  /// The search field, then the rows or what the search found.
+  List<Widget> _rows(BuildContext context, ConversationPage page) {
+    final gutter = context.window.gutter;
     final list = [...page.items, ...more];
     if (list.isEmpty) {
-      return const IrisEmptyState(
-        title: 'No conversations yet',
-        message:
-            'Start one below. It will show here and in every other '
-            'client of this agent.',
-      );
+      return const [
+        IrisEmptyState(
+          title: 'No conversations yet',
+          message:
+              'Start one below. It will show here and in every other '
+              'client of this agent.',
+        ),
+      ];
     }
     final hasMore = list.length < page.total;
     final now = this.now;
     final open = onOpen;
     final next = onMore;
-    final query = search.text.trim();
-    final searching = query.isNotEmpty;
+    final searching = search.text.trim().isNotEmpty;
 
-    /// Snaps a half-revealed field to open or closed, so it is never left
-    /// cut in half.
-    bool snap(ScrollEndNotification _) {
-      final offset = scroll.hasClients ? scroll.offset : 0.0;
-      if (searching || searchFocus.hasFocus) return false;
-      if (offset <= 0 || offset >= searchFieldExtent) return false;
-      final target = offset < searchFieldExtent / 2 ? 0.0 : searchFieldExtent;
-      // After the current frame: a scroll cannot start inside its own end
-      // notification.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!scroll.hasClients) return;
-        if (context.reduceMotion) {
-          scroll.jumpTo(target);
-        } else {
-          unawaited(
-            scroll.animateTo(
-              target,
-              duration: IrisDurations.normal,
-              curve: IrisCurves.standard,
-            ),
-          );
-        }
-      });
-      return false;
-    }
-
-    final children = <Widget>[
+    return [
       Padding(
         padding: EdgeInsets.symmetric(horizontal: gutter),
         child: SearchField(
@@ -828,40 +1026,6 @@ class _ConversationList extends StatelessWidget {
         ),
       ],
     ];
-    // The bottom padding is the height of the floating bar plus its fade, so
-    // the last row can be scrolled clear of it.
-    /// A list too short to scroll the whole field away keeps it fully
-    /// visible: parked half-hidden at its small maximum extent, it would
-    /// look cut off.
-    bool keepVisible(ScrollMetricsNotification notification) {
-      final metrics = notification.metrics;
-      if (searching ||
-          metrics.maxScrollExtent >= searchFieldExtent ||
-          metrics.pixels <= 0) {
-        return false;
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (scroll.hasClients && scroll.offset > 0) scroll.jumpTo(0);
-      });
-      return false;
-    }
-
-    return NotificationListener<ScrollMetricsNotification>(
-      onNotification: keepVisible,
-      child: NotificationListener<ScrollEndNotification>(
-        onNotification: snap,
-        child: RefreshIndicator(
-          color: context.palette.accent,
-          backgroundColor: context.palette.surfaceRaised,
-          onRefresh: onRefresh,
-          child: ListView(
-            controller: scroll,
-            padding: const EdgeInsets.only(bottom: _barClearance),
-            children: children,
-          ),
-        ),
-      ),
-    );
   }
 
   /// What shows under the field while a query is typed: the server's hits

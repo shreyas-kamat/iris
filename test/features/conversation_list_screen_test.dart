@@ -13,6 +13,7 @@ import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
+import 'package:iris/features/home/link_status_screen.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/harness.dart';
@@ -170,6 +171,63 @@ void main() {
     expect(find.text('OpenAI Codex'), findsOneWidget);
   });
 
+  group('the bar folds in the hero', () {
+    final rows = [
+      for (var i = 0; i < 20; i++) ConversationSummary(id: '$i', title: 'Conversation $i'),
+    ];
+
+    double offset(WidgetTester tester) =>
+        tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+
+    testWidgets('scrolling the hero away shows the link in the bar', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      // The bar's own link is not built while the hero is in view.
+      expect(find.text('Connected'), findsNothing);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsOneWidget);
+      // Back to the top, and it leaves again.
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 600));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsNothing);
+    });
+
+    testWidgets('a short pull settles back to the full hero', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -30));
+      await tester.pumpAndSettle();
+      expect(offset(tester), 0);
+      expect(find.text('Connected'), findsNothing);
+    });
+
+    testWidgets('past halfway, it settles into the compact bar', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -100));
+      await tester.pumpAndSettle();
+      // Fully folded: the bar's link at full strength, not partway in.
+      final link = tester.widget<Opacity>(
+        find.ancestor(of: find.text('Connected'), matching: find.byType(Opacity)).first,
+      );
+      expect(link.opacity, 1);
+    });
+
+    testWidgets('the compact link opens the link detail', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connected'));
+      // The push, then the route transition.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(LinkStatusScreen), findsOneWidget);
+    });
+  });
+
   group('managing conversations', () {
     final rows = [
       const ConversationSummary(id: 'a', title: 'Fix the build'),
@@ -240,7 +298,12 @@ void main() {
       backend.archivedResult = const Ok([ConversationSummary(id: 'z', title: 'Old notes')]);
       await tester.pumpWidget(home(rows));
       await settle(tester);
-      await tester.scrollUntilVisible(find.text('Archived'), 200);
+      await tester.scrollUntilVisible(
+        find.text('Archived'),
+        200,
+        // The list, not the search field's own scrollable.
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Archived'));
       await tester.pumpAndSettle();
       expect(find.text('Old notes'), findsOneWidget);
@@ -254,9 +317,6 @@ void main() {
     ];
 
     Future<void> search(WidgetTester tester, String query) async {
-      // Far enough to reveal the field, not far enough to pull to refresh.
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, 80));
-      await tester.pumpAndSettle();
       await tester.enterText(
         find.descendant(of: find.byType(SearchField), matching: find.byType(EditableText)),
         query,

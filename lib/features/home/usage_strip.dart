@@ -1,4 +1,4 @@
-/// How much of each chosen provider's subscription is left, under the hero.
+/// How much of each chosen provider's subscription is used, under the hero.
 ///
 /// Ambient: it never shows an error and never a spinner. It is hidden until
 /// there is something to show, then grows in, because a skeleton for a strip
@@ -60,11 +60,11 @@ class UsageStrip extends ConsumerWidget {
   }
 }
 
-/// "27% left · resets in 2h 36m": what is left, and when it comes back.
+/// "73% used · resets in 2h 36m": what is used, and when it comes back.
 String _caption(UsageWindow window, DateTime now) {
-  final left = '${window.leftPercent.round()}% left';
+  final used = '${window.usedPercent.round()}% used';
   final reset = window.resetsAt;
-  return reset == null ? left : '$left · resets ${timeUntil(reset, now)}';
+  return reset == null ? used : '$used · resets ${timeUntil(reset, now)}';
 }
 
 class _ProviderRow extends StatefulWidget {
@@ -166,7 +166,7 @@ class _ProviderRowState extends State<_ProviderRow>
                   ),
                 ),
                 if (tightest != null)
-                  _LeftCaption(window: tightest, now: widget.now),
+                  _UsedCaption(window: tightest, now: widget.now),
                 const SizedBox(width: IrisSpace.xs),
                 SpringBuilder(
                   value: _open ? .5 : 0,
@@ -185,11 +185,7 @@ class _ProviderRowState extends State<_ProviderRow>
             ),
             if (tightest != null) ...[
               const SizedBox(height: IrisSpace.sm),
-              IrisGauge(
-                value: tightest.leftPercent / 100,
-                heatOf: tightest.usedPercent / 100,
-                width: null,
-              ),
+              IrisGauge(value: tightest.usedPercent / 100, width: null),
             ],
             IrisAnimatedSize(
               child: _open && details.isNotEmpty
@@ -212,9 +208,9 @@ class _ProviderRowState extends State<_ProviderRow>
   }
 }
 
-/// The left figure in ink and medium weight, the reset after it muted.
-class _LeftCaption extends StatelessWidget {
-  const _LeftCaption({required this.window, required this.now});
+/// The used figure in ink and medium weight, the reset after it muted.
+class _UsedCaption extends StatelessWidget {
+  const _UsedCaption({required this.window, required this.now});
 
   final UsageWindow window;
   final DateTime now;
@@ -228,7 +224,7 @@ class _LeftCaption extends StatelessWidget {
       TextSpan(
         children: [
           TextSpan(
-            text: '${window.leftPercent.round()}% left',
+            text: '${window.usedPercent.round()}% used',
             style: TextStyle(color: palette.ink, fontWeight: FontWeight.w500),
           ),
           if (reset != null)
@@ -270,11 +266,7 @@ class _WindowLine extends StatelessWidget {
             ],
           ),
           const SizedBox(height: IrisSpace.xs),
-          IrisGauge(
-            value: window.leftPercent / 100,
-            heatOf: window.usedPercent / 100,
-            width: null,
-          ),
+          IrisGauge(value: window.usedPercent / 100, width: null),
         ],
       ),
     );
