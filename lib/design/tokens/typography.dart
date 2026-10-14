@@ -29,12 +29,16 @@ import 'package:flutter/widgets.dart';
 abstract final class IrisFonts {
   static const String sans = 'Geist';
   static const String mono = 'GeistMono';
+  static const String serif = 'InstrumentSerif';
 
   /// Fallbacks if an asset fails to load. Deliberately platform-specific: a
   /// missing bundled font should degrade to something native rather than to
   /// whatever Flutter picks first.
   static const List<String> sansFallback = ['SF Pro Text', 'Roboto'];
   static const List<String> monoFallback = ['SF Mono', 'Roboto Mono'];
+
+  /// Georgia is the closest system serif to Instrument Serif's proportions.
+  static const List<String> serifFallback = ['Georgia', 'serif'];
 }
 
 /// Every text style in Iris.
@@ -56,6 +60,7 @@ final class IrisTypography {
     required this.code,
     required this.codeSmall,
     required this.numeric,
+    required this.serif,
   });
 
   /// Builds the scale in [color].
@@ -133,6 +138,20 @@ final class IrisTypography {
         FontWeight.w500,
         1.2,
       ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+
+      // Instrument Serif, italic only. Its tight proportions read as a voice
+      // rather than as an interface, which is why it is kept to greetings and
+      // screen titles.
+      serif: TextStyle(
+        fontFamily: IrisFonts.serif,
+        fontFamilyFallback: IrisFonts.serifFallback,
+        fontSize: 32,
+        fontWeight: FontWeight.w400,
+        fontStyle: FontStyle.italic,
+        height: 1.05,
+        letterSpacing: -0.3,
+        color: color,
+      ),
     );
   }
 
@@ -155,8 +174,14 @@ final class IrisTypography {
   /// Tabular mono for figures that change in place.
   final TextStyle numeric;
 
+  /// The design's serif voice: greetings, screen titles and the empty-state
+  /// prompt. This is the only place the serif appears, so a screen that wants
+  /// it should take it from here and resize with `copyWith`, not add a new role.
+  final TextStyle serif;
+
   /// Every style, for the gallery and for golden coverage.
   Map<String, TextStyle> get all => {
+    'serif': serif,
     'displayLarge': displayLarge,
     'display': display,
     'title': title,

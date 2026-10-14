@@ -9,6 +9,7 @@ import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/data/db/database.dart';
+import 'package:iris/data/prefs/preferences_store.dart';
 
 void main() {
   test('a v1 database upgrades in place', () async {
@@ -44,6 +45,11 @@ CREATE TABLE servers (
     expect(row.serverVersion, isNull);
     expect(row.capabilitiesJson, '[]');
     expect(row.probedAt, isNull);
+
+    // v3 adds the preferences table on the way up.
+    final prefs = DriftPreferencesStore(db);
+    await prefs.write('', PreferenceKeys.mode, 'light');
+    expect(await prefs.loadAll(), {('', 'theme.mode'): 'light'});
   });
 
   test('a fresh database has the new columns', () async {

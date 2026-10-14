@@ -106,4 +106,15 @@ void main() {
       expect(ApiClient.isAccessGate(302, location: '/login'), isFalse);
     });
   });
+
+  test('patch sends a JSON body and reads the reply', () async {
+    http.on('PATCH', '/api/sessions/a', (request) {
+      expect(request.data, {'title': 'New'});
+      return FakeReply.json({'ok': true, 'title': 'New'});
+    });
+    final result = await connect(
+      'https://h.example',
+    ).client.patch('/api/sessions/a', body: {'title': 'New'});
+    expect(result.valueOrNull?['ok'].boolean(), isTrue);
+  });
 }

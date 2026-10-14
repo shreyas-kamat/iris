@@ -23,8 +23,8 @@ import '../../core/result.dart';
 import '../../data/net/credentials.dart';
 import '../../data/net/dashboard_auth.dart';
 import '../../data/net/server_config.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
@@ -211,7 +211,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(height: window.isCramped ? IrisSpace.lg : IrisSpace.huge),
-              Aperture(
+              IrisOrb(
                 state: switch (_step) {
                   _Step.address => AgentState.idle,
                   _Step.probing => AgentState.thinking,

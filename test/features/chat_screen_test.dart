@@ -9,6 +9,7 @@ import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/features/chat/chat_screen.dart';
+import 'package:iris/features/chat/decision_cards.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/harness.dart';
@@ -22,7 +23,9 @@ void main() {
   Future<void> settle(WidgetTester tester) =>
       tester.pump(const Duration(milliseconds: 50));
 
-  testWidgets('opens a stored conversation and shows its transcript', (tester) async {
+  testWidgets('opens a stored conversation and shows its transcript', (
+    tester,
+  ) async {
     backend.historyResult = const Ok([
       UserTurn(id: '1', text: 'hi'),
       AssistantTurn(id: '2', text: 'hello'),
@@ -44,6 +47,7 @@ void main() {
   });
 
   testWidgets('a streamed reply appears as it arrives', (tester) async {
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(
       themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
     );
@@ -54,26 +58,33 @@ void main() {
       ..emit(const TextDelta('run-1', 'lo'));
     await settle(tester);
     expect(find.text('Hello'), findsOneWidget);
-    expect(find.text('Stop'), findsOneWidget);
+    expect(find.bySemanticsLabel('Stop'), findsOneWidget);
     backend.emit(const MessageCompleted('run-1'));
     await settle(tester);
-    expect(find.text('Send'), findsOneWidget);
+    expect(find.bySemanticsLabel('Send'), findsOneWidget);
+    semantics.dispose();
   });
 
-  testWidgets('sending puts the message in the transcript and submits it', (tester) async {
+  testWidgets('sending puts the message in the transcript and submits it', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(
       themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
     );
     await settle(tester);
     await tester.enterText(find.byType(EditableText), 'Run the tests');
     await tester.pump();
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.bySemanticsLabel('Send'));
     await settle(tester);
     expect(backend.submitted.single, ('run-1', 'Run the tests'));
     expect(find.text('Run the tests'), findsOneWidget);
+    semantics.dispose();
   });
 
-  testWidgets('an approval shows above the composer and is answered', (tester) async {
+  testWidgets('an approval shows above the composer and is answered', (
+    tester,
+  ) async {
     backend.resumeResult = Ok(
       ResumedConversation(
         runtimeId: 'run-1',
@@ -102,7 +113,9 @@ void main() {
     expect(find.text('git push'), findsNothing);
   });
 
-  testWidgets('a conversation that cannot be read offers a retry', (tester) async {
+  testWidgets('a conversation that cannot be read offers a retry', (
+    tester,
+  ) async {
     backend.historyResult = const Err(
       IrisFailure(FailureKind.notFound, message: 'Session not found'),
     );
@@ -120,18 +133,22 @@ void main() {
   });
 
   testWidgets('a new chat starts empty and is created on send', (tester) async {
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(themed(ChatScreen(backend: backend)));
     await settle(tester);
-    expect(find.text('Ask your agent anything.'), findsOneWidget);
+    expect(find.text('What should we\nwork on?'), findsOneWidget);
     await tester.enterText(find.byType(EditableText), 'hi');
     await tester.pump();
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.bySemanticsLabel('Send'));
     await settle(tester);
     expect(backend.calls, contains('create'));
     expect(backend.submitted.single, ('run-new', 'hi'));
+    semantics.dispose();
   });
 
-  testWidgets('replies sit at the left edge and the person at the right', (tester) async {
+  testWidgets('replies sit at the left edge and the person at the right', (
+    tester,
+  ) async {
     // On the emulator, short replies were centred: each entry shrank to its
     // own width inside the centred readable column.
     // A phone-sized surface; the default test surface is 800 wide.
@@ -157,7 +174,9 @@ void main() {
       ..historyResult = const Ok([UserTurn(id: '65', text: 'newest')])
       ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
       ..earlierResult = const Ok(
-        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+        HistoryPage(
+          items: [UserTurn(id: '1', text: 'oldest')],
+        ),
       );
     await tester.pumpWidget(
       themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
@@ -202,7 +221,7 @@ void main() {
       );
       await settle(tester);
       await settle(tester);
-      await tester.tap(find.text('gpt-6.1-sol ▾'));
+      await tester.tap(find.bySemanticsLabel('Model: gpt-6.1-sol'));
       await tester.pump(const Duration(milliseconds: 400));
       await settle(tester);
       // IrisLabel upper-cases its text.
@@ -212,12 +231,14 @@ void main() {
       await settle(tester);
     }
 
-    testWidgets('the header shows it, and the picker switches it', (tester) async {
+    testWidgets('the header shows it, and the picker switches it', (
+      tester,
+    ) async {
       scriptModels();
       backend.switchResult = const Ok(ModelSwitch(model: 'gpt-6-luna'));
       await pickLuna(tester);
       expect(backend.switches, ['gpt-6-luna@openai-codex']);
-      expect(find.text('gpt-6-luna ▾'), findsOneWidget);
+      expect(find.bySemanticsLabel('Model: gpt-6-luna'), findsOneWidget);
       expect(find.text('Now using gpt-6-luna.'), findsOneWidget);
     });
 
@@ -233,7 +254,7 @@ void main() {
       await pickLuna(tester);
       expect(find.text('This model is expensive.'), findsOneWidget);
       expect(backend.switches, ['gpt-6-luna@openai-codex']);
-      expect(find.text('gpt-6.1-sol ▾'), findsOneWidget);
+      expect(find.bySemanticsLabel('Model: gpt-6.1-sol'), findsOneWidget);
       backend.switchResult = const Ok(ModelSwitch(model: 'gpt-6-luna'));
       await tester.tap(find.text('Switch'));
       await tester.pump(const Duration(milliseconds: 400));
@@ -242,11 +263,14 @@ void main() {
         'gpt-6-luna@openai-codex',
         'gpt-6-luna@openai-codex confirmed',
       ]);
-      expect(find.text('gpt-6-luna ▾'), findsOneWidget);
+      expect(find.bySemanticsLabel('Model: gpt-6-luna'), findsOneWidget);
     });
   });
 
-  testWidgets('a slash command is suggested, runs, and its output shows', (tester) async {
+  testWidgets('a slash command is suggested, runs, and its output shows', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
     backend
       ..commandsResult = const Ok([
         SlashCommand(name: '/usage', description: 'Token usage'),
@@ -264,14 +288,16 @@ void main() {
     expect(find.text('Token usage'), findsOneWidget);
     await tester.tap(find.text('/usage'));
     await tester.pump();
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.bySemanticsLabel('Send'));
     await settle(tester);
     expect(backend.slashes, ['/usage']);
     expect(find.text('Tokens: 12k'), findsOneWidget);
-    expect(find.text('Send'), findsOneWidget);
+    expect(find.bySemanticsLabel('Send'), findsOneWidget);
+    semantics.dispose();
   });
 
   testWidgets('a prefill puts its text in the composer', (tester) async {
+    final semantics = tester.ensureSemantics();
     backend.slashResult = const Ok(
       SlashOutcome(kind: SlashKind.prefill, text: 'Write a plan for '),
     );
@@ -281,8 +307,64 @@ void main() {
     await settle(tester);
     await tester.enterText(find.byType(EditableText), '/plan');
     await tester.pump();
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.bySemanticsLabel('Send'));
     await settle(tester);
     expect(find.text('Write a plan for '), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('a sudo prompt shows its card and the answer reaches the backend', (tester) async {
+    await tester.pumpWidget(themed(ChatScreen(backend: backend, conversationId: 'stored-1')));
+    await settle(tester);
+    await settle(tester);
+    backend.emit(
+      InputAsked(
+        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.sudo),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Hermes needs your sudo password'), findsOneWidget);
+    await tester.enterText(
+      find.descendant(of: find.byType(InputCard), matching: find.byType(EditableText)),
+      'pw',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Submit'));
+    await tester.pumpAndSettle();
+    expect(backend.inputAnswers, [('srq-1', 'pw')]);
+    expect(find.byType(InputCard), findsNothing);
+  });
+
+  testWidgets('sending in an archived chat asks to unarchive first', (tester) async {
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1', archived: true)),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.enterText(find.byType(EditableText).last, 'hello');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unarchive this chat?'), findsOneWidget);
+    await tester.tap(find.text('Unarchive and send'));
+    await tester.pumpAndSettle();
+    expect(backend.archives, [('stored-1', false)]);
+    expect(backend.submitted.single.$2, 'hello');
+  });
+
+  testWidgets('declining to unarchive keeps the text and sends nothing', (tester) async {
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1', archived: true)),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.enterText(find.byType(EditableText).last, 'hello');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+    expect(backend.submitted, isEmpty);
+    expect(find.text('hello'), findsOneWidget);
   });
 }

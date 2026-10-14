@@ -95,8 +95,14 @@ final class DashboardSession {
     milliseconds: (math.min(5, math.pow(2, attempt)) * 1000).round(),
   );
 
-  /// The server requests Iris shows to a person; the rest are declined.
-  static const presentedServerRequests = {'approval', 'clarify'};
+  /// The server requests Iris shows to a person; the rest are declined, so
+  /// the tool waiting on one fails fast instead of waiting out its deadline.
+  static const presentedServerRequests = {
+    'approval',
+    'clarify',
+    'sudo',
+    'secret',
+  };
 
   static WireConnector _ioConnector(ServerConnection http) =>
       (uri, headers) => IoWireSocket.connect(

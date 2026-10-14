@@ -216,4 +216,75 @@ void main() {
     expect(both.earlier, isNull);
     expect(both.loadingEarlier, isFalse);
   });
+
+  group('input prompts', () {
+    const sudo = InputRequest(
+      requestId: 'srq-1',
+      sessionId: 'run-1',
+      kind: InputKind.sudo,
+      command: 'apt install jq',
+    );
+
+    test('an input prompt waits for the person', () {
+      final next = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      expect(next.inputs.single.requestId, 'srq-1');
+      expect(next.turn, TurnPhase.waiting);
+    });
+
+    test('a withdrawn prompt goes, with a line saying so', () {
+      final asked = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final next = asked.apply(const RequestWithdrawn('run-1', 'srq-1'));
+      expect(next.inputs, isEmpty);
+      expect(next.turn, TurnPhase.thinking);
+      expect((next.items.last as Notice).text, 'Hermes stopped waiting for that.');
+    });
+
+    test('answering removes it and the turn carries on', () {
+      final asked = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final next = asked.withoutInput(sudo);
+      expect(next.inputs, isEmpty);
+      expect(next.turn, TurnPhase.thinking);
+    });
+  });
+
+  test('the context window follows the gateway', () {
+    final next = const ChatState().apply(
+      const ContextChanged('run-1', ContextUsage(percent: 18, used: 10, max: 55)),
+    );
+    expect(next.context?.percent, 18);
+    // A newer page of history keeps it.
+    expect(next.withNewestPage(const [], null).context?.percent, 18);
+  });
+
+  group('steer and failure', () {
+    test('a steer lands as a marked user turn and the turn runs on', () {
+      final running = const ChatState(phase: ChatPhase.ready)
+          .apply(const MessageStarted('run-1'))
+          .apply(const TextDelta('run-1', 'Working'));
+      final next = running.withSteer('use staging');
+      final last = next.items.last as UserTurn;
+      expect(last.steered, isTrue);
+      expect(last.text, 'use staging');
+      expect(next.turn, running.turn);
+      // The reply before the steer is finished, so later text starts anew.
+      expect((next.items[next.items.length - 2] as AssistantTurn).streaming, isFalse);
+    });
+
+    test('only the newest failure can be retried', () {
+      final first = const ChatState(phase: ChatPhase.ready)
+          .apply(const TurnFailed('run-1', 'Gateway timed out'));
+      final second = first.apply(const TurnFailed('run-1', 'Again'));
+      final notices = second.items.whereType<Notice>().toList();
+      expect(notices.map((n) => n.retryable), [false, true]);
+      expect(second.turn, TurnPhase.idle);
+    });
+
+    test('a retry that starts streaming lets go of its button', () {
+      final failed = const ChatState(phase: ChatPhase.ready)
+          .apply(const TurnFailed('run-1', 'x'))
+          .copyWith(retrying: true);
+      final next = failed.apply(const MessageStarted('run-1'));
+      expect(next.items.whereType<Notice>().single.retryable, isFalse);
+    });
+  });
 }

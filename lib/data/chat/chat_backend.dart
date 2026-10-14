@@ -19,6 +19,7 @@ import 'catalog_parser.dart';
 import 'chat_event.dart';
 import 'chat_models.dart';
 import 'history_parser.dart';
+import 'usage_parser.dart';
 
 /// Where a page of stored history starts, in the server's own terms.
 final class HistoryCursor {
@@ -62,6 +63,7 @@ final class ResumedConversation {
     this.pending = const [],
     this.model,
     this.provider,
+    this.context,
   });
 
   final String runtimeId;
@@ -76,6 +78,10 @@ final class ResumedConversation {
   /// The model the conversation runs on, when the gateway says.
   final String? model;
   final String? provider;
+
+  /// How full the context window is, when the gateway says. A lazy, idle
+  /// session never does.
+  final ContextUsage? context;
 }
 
 abstract interface class ChatBackend {
@@ -132,6 +138,22 @@ abstract interface class ChatBackend {
 
   /// Runs [command] (with or without its leading slash) in the live session.
   Future<Result<SlashOutcome>> runSlash(String runtimeId, String command);
+
+  /// Steers the running turn with [text], without interrupting it.
+  Future<Result<SteerOutcome>> steer(String runtimeId, String text);
+
+  /// Answers a sudo or secret prompt. An empty [value] skips it.
+  Future<Result<void>> answerInput(InputRequest request, String value);
+
+  Future<Result<void>> rename(String storedId, String title);
+
+  Future<Result<void>> setArchived(String storedId, {required bool archived});
+
+  /// A page of this profile's archived conversations, newest first.
+  Future<Result<ConversationPage>> archivedConversations(int offset);
+
+  /// This profile's conversations matching [query], one hit per conversation.
+  Future<Result<List<SearchHit>>> search(String query);
 }
 
 final class DashboardChat implements ChatBackend {
@@ -141,6 +163,9 @@ final class DashboardChat implements ChatBackend {
     _linkSubscription = _session.states.listen(_onLink);
     _eventSubscription = _session.events.listen((event) {
       if (ChatEvent.fromEvent(event) case final parsed?) _events.add(parsed);
+      if (ChatEvent.contextFromEvent(event) case final context?) {
+        _events.add(context);
+      }
     });
     _requestSubscription = _session.serverRequests.listen((request) {
       if (ChatEvent.fromServerRequest(request) case final parsed?) {
@@ -154,6 +179,9 @@ final class DashboardChat implements ChatBackend {
 
   /// Conversations per list page.
   static const conversationPage = 50;
+
+  /// Conversations a search returns.
+  static const searchLimit = 30;
 
   /// Long enough for a busy gateway to accept a turn. The reply itself
   /// streams as events, not as this call's result.
@@ -191,20 +219,29 @@ final class DashboardChat implements ChatBackend {
       profile == 'default' ? values : {...values, 'profile': profile};
 
   @override
-  Future<Result<ConversationPage>> conversations(int offset) async =>
-      (await _session.connection.client.get(
-        '/api/profiles/sessions',
-        // Always named, even for the default: without it the route merges
-        // every profile's conversations.
-        query: {
-          'profile': profile,
-          'limit': conversationPage,
-          'offset': offset,
-          'min_messages': 1,
-          'archived': 'exclude',
-          'order': 'recent',
-        },
-      )).map(CatalogParser.conversationPage);
+  Future<Result<ConversationPage>> conversations(int offset) =>
+      _page(offset, archived: 'exclude');
+
+  @override
+  Future<Result<ConversationPage>> archivedConversations(int offset) =>
+      _page(offset, archived: 'only');
+
+  Future<Result<ConversationPage>> _page(
+    int offset, {
+    required String archived,
+  }) async => (await _session.connection.client.get(
+    '/api/profiles/sessions',
+    // Always named, even for the default: without it the route merges
+    // every profile's conversations.
+    query: {
+      'profile': profile,
+      'limit': conversationPage,
+      'offset': offset,
+      'min_messages': 1,
+      'archived': archived,
+      'order': 'recent',
+    },
+  )).map(CatalogParser.conversationPage);
 
   @override
   Future<Result<List<AgentProfile>>> profiles() async => (await _session
@@ -349,6 +386,7 @@ final class DashboardChat implements ChatBackend {
         pending: pending,
         model: HistoryParser.firstText(info, const ['model']),
         provider: HistoryParser.firstText(info, const ['provider']),
+        context: UsageParser.context(info),
       );
     });
   }
@@ -509,6 +547,57 @@ final class DashboardChat implements ChatBackend {
     }
     return result.map(CatalogParser.slashOutcome);
   }
+
+  @override
+  Future<Result<SteerOutcome>> steer(String runtimeId, String text) async =>
+      (await _session.call(
+        'session.steer',
+        params: {'session_id': runtimeId, 'text': text},
+      )).map(
+        (json) => json['status'].string() == 'rejected'
+            ? SteerOutcome.rejected
+            : SteerOutcome.accepted,
+      );
+
+  @override
+  Future<Result<void>> answerInput(InputRequest request, String value) async =>
+      // The value goes straight into the reply frame and is not kept or
+      // logged; the RPC layer logs method names, never results.
+      _session.replyToServerRequest(request.requestId, {'value': value})
+      ? const Ok(null)
+      : const Err(
+          IrisFailure.offline(message: 'Not connected to the dashboard.'),
+        );
+
+  @override
+  Future<Result<void>> rename(String storedId, String title) =>
+      _patchSession(storedId, {'title': title});
+
+  @override
+  Future<Result<void>> setArchived(
+    String storedId, {
+    required bool archived,
+  }) => _patchSession(storedId, {'archived': archived});
+
+  /// The owning profile goes in the body: the dashboard opens that
+  /// profile's database from it, and without it a named profile's write
+  /// lands on the default's (Hermes Desktop, `api/sessions.ts`).
+  Future<Result<void>> _patchSession(
+    String storedId,
+    Map<String, Object?> body,
+  ) async => (await _session.connection.client.patch(
+    '/api/sessions/${Uri.encodeComponent(storedId)}',
+    body: _scoped(body),
+  )).map((_) {});
+
+  @override
+  Future<Result<List<SearchHit>>> search(String query) async =>
+      (await _session.connection.client.get(
+        '/api/sessions/search',
+        // Named even for the default, as the list is: an unscoped search
+        // reads the gateway's launch profile, whatever is on screen.
+        query: {'q': query, 'limit': searchLimit, 'profile': profile},
+      )).map(UsageParser.searchHits);
 
   Future<void> dispose() async {
     await _eventSubscription.cancel();

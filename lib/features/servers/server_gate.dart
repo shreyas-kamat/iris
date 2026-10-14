@@ -11,8 +11,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/net/server_config.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/iris_scaffold.dart';
@@ -57,7 +57,7 @@ class _Booting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const IrisScaffold(
-    body: Center(child: Aperture(state: AgentState.thinking, size: 32)),
+    body: Center(child: IrisOrb(state: AgentState.thinking, size: 32)),
   );
 }
 
@@ -69,7 +69,7 @@ class _Unrecoverable extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IrisScaffold(
     body: IrisEmptyState(
-      icon: const Aperture(state: AgentState.failed, size: 40),
+      icon: const IrisOrb(state: AgentState.failed, size: 40),
       title: 'Iris could not start',
       message:
           'The local database would not open. Reinstalling the app will clear '
@@ -102,7 +102,7 @@ class _ChooseServer extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Aperture(state: AgentState.idle, size: 40),
+            const IrisOrb(state: AgentState.idle, size: 40),
             const SizedBox(height: IrisSpace.lg),
             Text(
               'Which agent?',

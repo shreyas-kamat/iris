@@ -13,8 +13,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme_controller.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
@@ -29,7 +29,7 @@ class DesignGallery extends ConsumerWidget {
   /// Sections, as builders rather than instances, so the sliver can build them
   /// lazily instead of constructing every showcase on first frame.
   static const List<(String, Widget)> _sections = [
-    ('Aperture', _ApertureShowcase()),
+    ('Iris orb', _OrbShowcase()),
     ('Type', _TypeShowcase()),
     ('Palette', _PaletteShowcase()),
     ('Ramp', _RampShowcase()),
@@ -89,7 +89,7 @@ class _GalleryHeader extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Aperture(state: AgentState.streaming),
+              const IrisOrb(state: AgentState.streaming),
               const SizedBox(width: IrisSpace.md),
               Expanded(
                 child: Text('Iris', style: theme.typography.displayLarge),
@@ -239,25 +239,33 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _ApertureShowcase extends StatelessWidget {
-  const _ApertureShowcase();
+class _OrbShowcase extends StatelessWidget {
+  const _OrbShowcase();
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: IrisSpace.xl,
-    runSpacing: IrisSpace.lg,
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      for (final state in AgentState.values)
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Aperture(state: state, size: 34),
-            const SizedBox(height: IrisSpace.sm),
-            IrisLabel(state.name, small: true),
-            const SizedBox(height: IrisSpace.xs),
-            Aperture(state: state, size: IrisSize.apertureSmall),
-          ],
-        ),
+      // One large orb to judge the mark at the size the hero uses.
+      const IrisOrb(state: AgentState.idle, size: 84),
+      const SizedBox(height: IrisSpace.lg),
+      Wrap(
+        spacing: IrisSpace.xl,
+        runSpacing: IrisSpace.lg,
+        children: [
+          for (final state in AgentState.values)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IrisOrb(state: state, size: 40),
+                const SizedBox(height: IrisSpace.sm),
+                IrisLabel(state.label, small: true),
+                const SizedBox(height: IrisSpace.xs),
+                IrisOrb(state: state, size: 20),
+              ],
+            ),
+        ],
+      ),
     ],
   );
 }
@@ -286,6 +294,7 @@ class _TypeShowcase extends StatelessWidget {
       'code': 'grep -rn stream_end api/streaming.py',
       'codeSmall': '0 */6 * * *',
       'numeric': '14,208 tokens · \$0.0412',
+      'serif': 'Good evening.',
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,7 +506,7 @@ class _SurfaceShowcase extends StatelessWidget {
           accent: theme.palette.colorFor(AgentState.failed),
           child: Row(
             children: [
-              Aperture(state: AgentState.failed, size: IrisSize.apertureSmall),
+              IrisOrb(state: AgentState.failed, size: IrisSize.orbSmall),
               const SizedBox(width: IrisSpace.sm),
               Expanded(
                 child: Text(
@@ -584,7 +593,7 @@ class _EmptyShowcase extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     height: 280,
     child: IrisEmptyState(
-      icon: const Aperture(state: AgentState.idle, size: 44),
+      icon: const IrisOrb(state: AgentState.idle, size: 44),
       title: 'No conversations yet',
       message: 'Your agent is connected and waiting. Ask it something.',
       action: IrisButton(

@@ -5,23 +5,30 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
-import '../../design/components/aperture.dart';
+import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/sheet.dart';
+import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
+import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
+import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import 'chat_controller.dart';
 import 'chat_state.dart';
 import 'composer.dart';
+import 'context_sheet.dart';
 import 'decision_cards.dart';
 import 'model_sheet.dart';
 import 'transcript_view.dart';
 
-/// The aperture state for what the agent is doing.
+/// The orb state for what the agent is doing.
 AgentState agentStateFor(TurnPhase turn) => switch (turn) {
   TurnPhase.idle => AgentState.idle,
   TurnPhase.thinking => AgentState.thinking,
@@ -30,11 +37,20 @@ AgentState agentStateFor(TurnPhase turn) => switch (turn) {
   TurnPhase.waiting => AgentState.waiting,
 };
 
+/// The three prompts on an empty conversation. They are the kinds of thing the
+/// app is for, so a new person sees what to ask before they have to think of it.
+const _suggestions = [
+  'Summarize what happened overnight',
+  'Draft a cron for a weekly audit',
+  'What can you do on this server?',
+];
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     required this.backend,
     this.conversationId,
     this.title,
+    this.archived = false,
     super.key,
   });
 
@@ -43,6 +59,10 @@ class ChatScreen extends StatefulWidget {
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
   final String? title;
+
+  /// The conversation is archived. Sending in it first asks to bring it back,
+  /// so a reply never lands somewhere the person cannot find it.
+  final bool archived;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -55,11 +75,13 @@ class _ChatScreenState extends State<ChatScreen> {
     title: widget.title,
   );
   final _text = TextEditingController();
+  bool _unarchived = false;
 
   @override
   void initState() {
     super.initState();
     _chat.onPrefill = _prefill;
+    _chat.onSteerReturned = _steerReturned;
     _text.addListener(_watchForSlash);
     unawaited(_chat.open());
   }
@@ -84,11 +106,64 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _send() {
+  /// A steer Hermes could not take goes back where it was typed.
+  void _steerReturned(String text) {
+    unawaited(IrisHaptics.failed());
+    _prefill(text);
+  }
+
+  Future<bool> _confirmUnarchive() async {
+    final id = _chat.conversationId;
+    if (!widget.archived || _unarchived || id == null) return true;
+    final confirmed = await showIrisSheet<bool>(
+      context: context,
+      builder: (sheetContext) => IrisSheet(
+        title: 'Unarchive this chat?',
+        subtitle:
+            'It moves back to your conversations, so the reply is easy to find.',
+        actions: IrisSheetActions(
+          secondary: IrisButton(
+            label: 'Not now',
+            onPressed: () => Navigator.of(sheetContext).pop(false),
+          ),
+          primary: IrisButton(
+            label: 'Unarchive and send',
+            tone: IrisButtonTone.primary,
+            onPressed: () => Navigator.of(sheetContext).pop(true),
+          ),
+        ),
+        child: const SizedBox.shrink(),
+      ),
+    );
+    if (confirmed != true || !mounted) return false;
+    switch (await widget.backend.setArchived(id, archived: false)) {
+      case Ok():
+        _unarchived = true;
+        return true;
+      case Err(:final failure):
+        if (mounted) {
+          showIrisToast(
+            context,
+            message: 'Could not unarchive: ${ChatController.describe(failure)}',
+          );
+        }
+        return false;
+    }
+  }
+
+  Future<void> _send() async {
     final text = _text.text;
     if (text.trim().isEmpty) return;
+    if (!await _confirmUnarchive()) return;
     _text.clear();
     unawaited(_chat.send(text));
+  }
+
+  /// A suggestion takes the same path as typing it and pressing send, so it
+  /// behaves identically, including clearing the field.
+  void _sendSuggestion(String text) {
+    _text.value = TextEditingValue(text: text);
+    unawaited(_send());
   }
 
   @override
@@ -98,43 +173,58 @@ class _ChatScreenState extends State<ChatScreen> {
       header: _ChatHeader(
         title: state.title ?? 'New conversation',
         turn: state.turn,
-        model: state.model,
-        onModel: _chat.isLive
-            ? () => unawaited(showModelPicker(context, _chat))
-            : null,
+        connecting: state.phase == ChatPhase.loading,
       ),
       body: _body(context, state),
       footer: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (state.approvals.isNotEmpty)
-            _Decision(
-              child: ApprovalCard(
-                request: state.approvals.first,
-                onChoose: (choice) =>
-                    unawaited(_chat.approve(state.approvals.first, choice)),
-              ),
-            )
-          else if (state.questions.isNotEmpty)
-            _Decision(
-              child: ClarifyCard(
-                key: ValueKey(
-                  '${state.questions.first.requestId}/'
-                  '${state.questions.first.questions.length}',
+          // One decision at a time, arriving on the standard curve and
+          // collapsing its height when answered, so the composer glides
+          // rather than jumping.
+          IrisAnimatedSize(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedSwitcher(
+              duration: context.reduceMotion
+                  ? Duration.zero
+                  : IrisDurations.normal,
+              switchInCurve: IrisCurves.standard,
+              switchOutCurve: IrisCurves.exit,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0, .08),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
                 ),
-                request: state.questions.first,
-                onAnswer: (question, answer) => unawaited(
-                  _chat.answer(state.questions.first, question, answer),
-                ),
               ),
+              child: _decision(state),
             ),
+          ),
           Composer(
             controller: _text,
             running: state.running,
             enabled: state.phase == ChatPhase.ready,
             commands: state.commands,
-            onSend: _send,
+            model: state.model,
+            onModel: _chat.isLive
+                ? () => unawaited(showModelPicker(context, _chat))
+                : null,
+            contextUsage: state.context,
+            onContext: state.context == null
+                ? null
+                : () => unawaited(
+                    showContextSheet(
+                      context,
+                      state.context!,
+                      model: state.model,
+                    ),
+                  ),
+            state: agentStateFor(state.turn),
+            onSend: () => unawaited(_send()),
             onStop: () => unawaited(_chat.stop()),
           ),
         ],
@@ -142,11 +232,48 @@ class _ChatScreenState extends State<ChatScreen> {
     ),
   );
 
+  Widget _decision(ChatState state) {
+    if (state.approvals.isNotEmpty) {
+      final request = state.approvals.first;
+      return _Decision(
+        key: ValueKey('approval-${request.serverRequestId ?? request.queueId}'),
+        child: ApprovalCard(
+          request: request,
+          onChoose: (choice) => unawaited(_chat.approve(request, choice)),
+        ),
+      );
+    }
+    if (state.questions.isNotEmpty) {
+      final request = state.questions.first;
+      return _Decision(
+        key: ValueKey(
+          'clarify-${request.requestId}/${request.questions.length}',
+        ),
+        child: ClarifyCard(
+          request: request,
+          onAnswer: (question, answer) =>
+              unawaited(_chat.answer(request, question, answer)),
+        ),
+      );
+    }
+    if (state.inputs.isNotEmpty) {
+      final request = state.inputs.first;
+      return _Decision(
+        key: ValueKey('input-${request.requestId}'),
+        child: InputCard(
+          request: request,
+          onAnswer: (value) => _chat.answerInput(request, value),
+        ),
+      );
+    }
+    return const SizedBox.shrink(key: ValueKey('none'));
+  }
+
   Widget _body(BuildContext context, ChatState state) {
     switch (state.phase) {
       case ChatPhase.loading:
         return const Center(
-          child: Aperture(state: AgentState.thinking, size: 32),
+          child: IrisOrb(state: AgentState.loading, size: 32),
         );
       case ChatPhase.failed:
         return IrisEmptyState(
@@ -161,23 +288,18 @@ class _ChatScreenState extends State<ChatScreen> {
       case ChatPhase.ready:
         final items = state.items;
         if (items.isEmpty) {
-          return const IrisEmptyState(
-            title: 'New conversation',
-            message: 'Ask your agent anything.',
-          );
+          return _EmptyConversation(onSuggestion: _sendSuggestion);
         }
         final hasEarlier = state.earlier != null;
+        final liveState = agentStateFor(state.turn);
         // Reversed, so the newest entry sits at the bottom and new output
         // appears where the eye already is; the way to earlier messages is
         // therefore the last item, at the top.
         return ListView.separated(
           reverse: true,
-          padding: EdgeInsets.symmetric(
-            horizontal: context.window.gutter,
-            vertical: IrisSpace.lg,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
           itemCount: items.length + (hasEarlier ? 1 : 0),
-          separatorBuilder: (_, _) => const SizedBox(height: IrisSpace.md),
+          separatorBuilder: (_, _) => const SizedBox(height: 22),
           itemBuilder: (context, index) {
             if (index == items.length) {
               return Center(
@@ -190,13 +312,26 @@ class _ChatScreenState extends State<ChatScreen> {
               );
             }
             final item = items[items.length - 1 - index];
+            // Only the turn still arriving carries the live state. Every other
+            // entry is finished and rests.
+            final live = item is AssistantTurn && item.streaming
+                ? liveState
+                : null;
             // Full readable width, so replies sit at the left edge and the
             // person's bubbles at the right, instead of each entry shrinking
             // to its own width inside the centred column.
             return ReadableColumn(
               child: SizedBox(
                 width: double.infinity,
-                child: TranscriptEntry(item, key: ValueKey(item.id)),
+                child: TranscriptEntry(
+                  item,
+                  live: live,
+                  onRetry: _chat.isLive && !state.running
+                      ? () => unawaited(_chat.retry())
+                      : null,
+                  retrying: state.retrying,
+                  key: ValueKey(item.id),
+                ),
               ),
             );
           },
@@ -205,48 +340,44 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+/// The header: back, the orb in the turn's state, the title and the state's
+/// word beneath it. The model no longer lives here; it moved to the composer.
 class _ChatHeader extends StatelessWidget {
   const _ChatHeader({
     required this.title,
     required this.turn,
-    this.model,
-    this.onModel,
+    required this.connecting,
   });
 
   final String title;
   final TurnPhase turn;
-  final String? model;
 
-  /// Opens the model picker; null while the conversation is not live.
-  final VoidCallback? onModel;
+  /// True while the conversation is being opened, before any turn exists.
+  final bool connecting;
+
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.iris;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        IrisSpace.xs,
-        IrisSpace.sm,
-        context.window.gutter,
-        IrisSpace.sm,
+    final palette = context.palette;
+    final type = context.type;
+    final state = connecting ? AgentState.loading : agentStateFor(turn);
+    return Container(
+      padding: EdgeInsets.fromLTRB(14, IrisSpace.sm, 14, IrisSpace.md),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: palette.line, width: IrisStroke.hairline),
+        ),
       ),
       child: Row(
         children: [
-          IrisPressable(
-            onTap: () => unawaited(Navigator.of(context).maybePop()),
+          IrisCircleButton(
+            icon: Icons.arrow_back_ios_new,
             semanticLabel: 'Back',
-            child: SizedBox.square(
-              dimension: IrisSize.minTapTarget,
-              child: Icon(
-                Icons.arrow_back_ios_new,
-                size: IrisSize.icon,
-                color: theme.palette.ink,
-              ),
-            ),
+            onPressed: () => unawaited(Navigator.of(context).maybePop()),
           ),
-          const SizedBox(width: IrisSpace.xs),
-          Aperture(state: agentStateFor(turn)),
-          const SizedBox(width: IrisSpace.sm),
+          const SizedBox(width: IrisSpace.md - 2),
+          IrisOrb(state: state, size: 34),
+          const SizedBox(width: IrisSpace.sm + 2),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,22 +387,27 @@ class _ChatHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.typography.heading,
-                ),
-                if (model case final model?)
-                  IrisPressable(
-                    onTap: onModel,
-                    semanticLabel: 'Model: $model',
-                    ensureTapTarget: false,
-                    child: Text(
-                      onModel == null ? model : '$model ▾',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.typography.caption.copyWith(
-                        color: theme.palette.inkMuted,
-                      ),
-                    ),
+                  style: type.body.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: palette.ink,
                   ),
+                ),
+                const SizedBox(height: 1),
+                // The colour animates with the state, so a change of state is
+                // seen as a change rather than a jump.
+                AnimatedDefaultTextStyle(
+                  duration: context.reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 400),
+                  curve: IrisCurves.standard,
+                  style: type.caption.copyWith(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: palette.colorFor(state),
+                  ),
+                  child: Text(connecting ? 'Connecting' : state.label),
+                ),
               ],
             ),
           ),
@@ -281,9 +417,82 @@ class _ChatHeader extends StatelessWidget {
   }
 }
 
+/// A new conversation: the orb, a prompt, and three things to ask.
+class _EmptyConversation extends StatelessWidget {
+  const _EmptyConversation({required this.onSuggestion});
+
+  final ValueChanged<String> onSuggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const IrisOrb(state: AgentState.idle, size: 110),
+            const SizedBox(height: 18),
+            Text(
+              'What should we\nwork on?',
+              textAlign: TextAlign.center,
+              style: type.serif.copyWith(fontSize: 30, height: 1.1),
+            ),
+            const SizedBox(height: IrisSpace.sm),
+            for (final text in _suggestions)
+              Padding(
+                padding: const EdgeInsets.only(top: IrisSpace.sm),
+                child: IrisPressable(
+                  onTap: () => onSuggestion(text),
+                  ensureTapTarget: false,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: IrisSpace.lg,
+                      vertical: 13,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: palette.line,
+                        width: IrisStroke.hairline,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            text,
+                            style: type.body.copyWith(
+                              fontSize: 14,
+                              color: palette.ink,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: IrisSpace.md),
+                        Icon(
+                          Icons.north_east,
+                          size: IrisSize.iconSmall,
+                          color: palette.inkFaint,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Room around a decision card above the composer.
 class _Decision extends StatelessWidget {
-  const _Decision({required this.child});
+  const _Decision({required this.child, super.key});
 
   final Widget child;
 

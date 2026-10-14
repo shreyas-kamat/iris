@@ -6,10 +6,8 @@
 /// Run with `--update-goldens` to regenerate, then open the PNGs.
 library;
 
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/theme_controller.dart';
@@ -17,30 +15,7 @@ import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/palette.dart';
 import 'package:iris/features/design_gallery/design_gallery.dart';
 
-/// Loads the bundled fonts so goldens show real type rather than Ahem boxes.
-///
-/// Without this every glyph renders as a filled rectangle and the images are
-/// useless for judging typography — which is most of what there is to judge.
-Future<void> loadIrisFonts() async {
-  Future<void> load(String family, List<String> files) async {
-    final loader = FontLoader(family);
-    for (final file in files) {
-      final bytes = await File('assets/fonts/$file').readAsBytes();
-      loader.addFont(Future.value(ByteData.sublistView(bytes)));
-    }
-    await loader.load();
-  }
-
-  await load('Geist', [
-    'Geist-Regular.ttf',
-    'Geist-Medium.ttf',
-    'Geist-SemiBold.ttf',
-  ]);
-  await load('GeistMono', [
-    'GeistMono-Regular.ttf',
-    'GeistMono-Medium.ttf',
-  ]);
-}
+import '../support/fonts.dart';
 
 /// Wraps the gallery with the theme it is being captured in.
 Widget harness({required IrisSkin skin, required bool isDark}) {

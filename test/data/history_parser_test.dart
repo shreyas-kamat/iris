@@ -320,4 +320,17 @@ void main() {
       expect(ApprovalRequest.labelFor('custom'), 'custom');
     });
   });
+
+  test('a stored steer is a user turn marked as steered', () {
+    final items = HistoryParser.transcript(
+      Json.of({
+        'messages': [
+          {'id': 1, 'role': 'user', 'content': 'go on', 'display_kind': 'steer'},
+          {'id': 2, 'role': 'user', 'content': 'hello'},
+        ],
+      }),
+    );
+    expect((items[0] as UserTurn).steered, isTrue);
+    expect((items[1] as UserTurn).steered, isFalse);
+  });
 }

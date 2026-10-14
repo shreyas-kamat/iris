@@ -9,8 +9,10 @@ library;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/prefs/preferences_store.dart';
 import '../design/theme/iris_theme.dart';
 import '../design/tokens/palette.dart';
+import 'preferences.dart';
 
 /// How brightness is decided.
 enum BrightnessMode {
@@ -85,14 +87,39 @@ final class ThemePreference {
 /// `overrideWith` without standing up persistence.
 class ThemeController extends Notifier<ThemePreference> {
   @override
-  ThemePreference build() => const ThemePreference();
+  ThemePreference build() {
+    // Read, not watched: the controller owns the theme from here on, and a
+    // rebuild on every saved setting would throw away what it holds.
+    final saved = ref.read(preferencesProvider);
+    String? at(String key) => saved[('', key)];
+    return ThemePreference(
+      skin: at(PreferenceKeys.skin) == null
+          ? IrisSkin.aperture
+          : IrisSkin.parse(at(PreferenceKeys.skin)),
+      mode:
+          BrightnessMode.values.asNameMap()[at(PreferenceKeys.mode)] ??
+          BrightnessMode.system,
+      followServerSkin: at(PreferenceKeys.followServerSkin) != 'false',
+    );
+  }
 
-  void setSkin(IrisSkin skin) => state = state.copyWith(skin: skin);
+  void setSkin(IrisSkin skin) {
+    state = state.copyWith(skin: skin);
+    _save(PreferenceKeys.skin, skin.name);
+  }
 
-  void setMode(BrightnessMode mode) => state = state.copyWith(mode: mode);
+  void setMode(BrightnessMode mode) {
+    state = state.copyWith(mode: mode);
+    _save(PreferenceKeys.mode, mode.name);
+  }
 
-  void setFollowServerSkin({required bool follow}) =>
-      state = state.copyWith(followServerSkin: follow);
+  void setFollowServerSkin({required bool follow}) {
+    state = state.copyWith(followServerSkin: follow);
+    _save(PreferenceKeys.followServerSkin, '$follow');
+  }
+
+  void _save(String key, String value) =>
+      ref.read(preferencesProvider.notifier).set('', key, value);
 
   /// Adopts a skin name the server reported, if the user has not opted out.
   ///

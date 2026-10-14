@@ -5,6 +5,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/json.dart';
 import 'package:iris/data/chat/chat_event.dart';
+import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/rpc/rpc_frame.dart';
 
 RpcEvent event(String type, {Map<String, Object?> payload = const {}}) =>
@@ -246,7 +247,7 @@ void main() {
     expect(ChatEvent.fromEvent(event('context.update')), isNull);
     expect(
       ChatEvent.fromServerRequest(
-        request('srq-5', 'secret', {'session_id': 'r1'}),
+        request('srq-5', 'vault.save_login', {'session_id': 'r1'}),
       ),
       isNull,
     );
@@ -263,5 +264,46 @@ void main() {
       isA<ModelChanged>().having((e) => e.model, 'model', 'gpt-6-luna'),
     );
     expect(ChatEvent.fromEvent(event('session.info', payload: {'running': true})), isNull);
+  });
+
+  test('sudo and secret requests become input prompts', () {
+    final sudo = ChatEvent.fromServerRequest(
+      request('srq-7', 'sudo', {'session_id': 'r1', 'command': 'apt install jq'}),
+    );
+    expect(
+      sudo,
+      isA<InputAsked>()
+          .having((e) => e.request.kind, 'kind', InputKind.sudo)
+          .having((e) => e.request.command, 'command', 'apt install jq')
+          .having((e) => e.request.requestId, 'id', 'srq-7')
+          .having((e) => e.sessionId, 'session', 'r1'),
+    );
+    final secret = ChatEvent.fromServerRequest(
+      request('srq-8', 'secret', {'session_id': 'r1', 'env_var': 'GITHUB_TOKEN', 'prompt': ''}),
+    );
+    expect(
+      (secret! as InputAsked).request.title,
+      'Hermes needs a value for GITHUB_TOKEN',
+    );
+  });
+
+  test('an input prompt without a session is not shown', () {
+    expect(
+      ChatEvent.fromServerRequest(request('srq-9', 'sudo', {'command': 'x'})),
+      isNull,
+    );
+  });
+
+  test('session.info and session.usage carry the context window', () {
+    final info = ChatEvent.contextFromEvent(
+      event('session.info', payload: {'model': 'm', 'context_percent': 0.5, 'context_max': 100}),
+    );
+    expect(info, isA<ContextChanged>().having((e) => e.usage.percent, 'percent', 50));
+    final usage = ChatEvent.contextFromEvent(
+      event('session.usage', payload: {'usage': {'context_used': 10, 'context_max': 40}}),
+    );
+    expect(usage?.usage.percent, 25);
+    expect(ChatEvent.contextFromEvent(event('message.delta', payload: {'text': 'x'})), isNull);
+    expect(ChatEvent.contextFromEvent(event('session.info', payload: {'model': 'm'})), isNull);
   });
 }

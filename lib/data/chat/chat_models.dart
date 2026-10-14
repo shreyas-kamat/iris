@@ -43,9 +43,13 @@ sealed class TranscriptItem {
 
 /// Something the person said.
 final class UserTurn extends TranscriptItem {
-  const UserTurn({required String id, required this.text}) : super(id);
+  const UserTurn({required String id, required this.text, this.steered = false})
+    : super(id);
 
   final String text;
+
+  /// Sent mid-turn to steer the agent, rather than as a prompt of its own.
+  final bool steered;
 }
 
 /// Something the agent said, possibly still arriving.
@@ -107,11 +111,26 @@ final class ToolCall extends TranscriptItem {
 
 /// A line that is not a turn: an error, a stop.
 final class Notice extends TranscriptItem {
-  const Notice({required String id, required this.text, this.isError = false})
-    : super(id);
+  const Notice({
+    required String id,
+    required this.text,
+    this.isError = false,
+    this.retryable = false,
+  }) : super(id);
 
   final String text;
   final bool isError;
+
+  /// The turn this notice reports failed, and asking Hermes to retry it makes
+  /// sense. Only the newest failure carries it.
+  final bool retryable;
+
+  Notice copyWith({bool? retryable}) => Notice(
+    id: id,
+    text: text,
+    isError: isError,
+    retryable: retryable ?? this.retryable,
+  );
 }
 
 /// The agent wants permission to run something.
@@ -253,6 +272,7 @@ final class ModelProvider {
     required this.models,
     this.isCurrent = false,
     this.authenticated = true,
+    this.usage,
   });
 
   /// What `config.set` names it by.
@@ -263,6 +283,9 @@ final class ModelProvider {
 
   /// Signed in, so its models can actually run.
   final bool authenticated;
+
+  /// How much of its subscription is spent, when the gateway knows.
+  final ProviderUsage? usage;
 }
 
 /// What the model picker offers.
@@ -350,3 +373,162 @@ final class SlashOutcome {
   /// The command an alias stands for.
   final String target;
 }
+
+/// What kind of value an input prompt wants.
+enum InputKind { sudo, secret }
+
+/// The agent needs a value typed in that must never be shown or kept: a sudo
+/// password, an API key. Answered once, then forgotten.
+@immutable
+final class InputRequest {
+  const InputRequest({
+    required this.requestId,
+    required this.sessionId,
+    required this.kind,
+    this.command = '',
+    this.envVar = '',
+    this.prompt = '',
+  });
+
+  /// The `srq-…` server request the answer is addressed to.
+  final String requestId;
+  final String sessionId;
+  final InputKind kind;
+
+  /// sudo: the command that needs the password, as Hermes redacted it.
+  final String command;
+
+  /// secret: the environment variable the value is stored under.
+  final String envVar;
+
+  /// secret: what Hermes says it needs.
+  final String prompt;
+
+  /// The card's headline.
+  String get title => switch (kind) {
+    InputKind.sudo => 'Hermes needs your sudo password',
+    InputKind.secret when prompt.isNotEmpty => prompt,
+    InputKind.secret when envVar.isNotEmpty =>
+      'Hermes needs a value for $envVar',
+    InputKind.secret => 'Hermes needs a secret value',
+  };
+}
+
+/// How full the conversation's context window is.
+@immutable
+final class ContextUsage {
+  const ContextUsage({required this.percent, this.used, this.max});
+
+  /// 0 to 100.
+  final double percent;
+
+  /// Tokens in the window and its size, when the gateway says.
+  final int? used;
+  final int? max;
+}
+
+/// One subscription window: a five-hour session, a week.
+@immutable
+final class UsageWindow {
+  const UsageWindow({
+    required this.label,
+    required this.usedPercent,
+    this.resetsAt,
+    this.accountScoped = true,
+  });
+
+  final String label;
+
+  /// 0 to 100.
+  final double usedPercent;
+  final DateTime? resetsAt;
+
+  /// False for a window that caps one model family only, which never means
+  /// the whole account is out.
+  final bool accountScoped;
+
+  double get leftPercent => (100 - usedPercent).clamp(0, 100).toDouble();
+}
+
+enum UsageAccountState { ready, limited, unavailable, unknown }
+
+/// One login of a provider that has several.
+@immutable
+final class UsageAccount {
+  const UsageAccount({
+    required this.label,
+    required this.state,
+    this.windows = const [],
+    this.resetsAt,
+  });
+
+  final String label;
+  final UsageAccountState state;
+  final List<UsageWindow> windows;
+  final DateTime? resetsAt;
+}
+
+/// How much of a provider's subscription is spent.
+@immutable
+final class ProviderUsage {
+  const ProviderUsage({this.windows = const [], this.accounts = const []});
+
+  /// For a single-account provider.
+  final List<UsageWindow> windows;
+
+  /// For a provider with a pool of accounts, one each.
+  final List<UsageAccount> accounts;
+
+  /// The window closest to its limit, which is what a collapsed row shows. For
+  /// a pool, the best account's tightest window: the pool keeps working while
+  /// any account does.
+  UsageWindow? get tightest {
+    UsageWindow? worst(List<UsageWindow> windows) => windows.isEmpty
+        ? null
+        : windows.reduce((a, b) => b.usedPercent > a.usedPercent ? b : a);
+    if (windows.isNotEmpty) return worst(windows);
+    UsageWindow? best;
+    for (final account in accounts) {
+      final candidate = worst(account.windows);
+      if (candidate != null &&
+          (best == null || candidate.usedPercent < best.usedPercent)) {
+        best = candidate;
+      }
+    }
+    return best;
+  }
+}
+
+/// A piece of a search snippet, matched or not.
+@immutable
+final class SnippetRun {
+  const SnippetRun(this.text, {this.matched = false});
+
+  final String text;
+  final bool matched;
+}
+
+/// A conversation a search found.
+@immutable
+final class SearchHit {
+  const SearchHit({
+    required this.storedId,
+    required this.title,
+    this.snippet = const [],
+    this.lastActive,
+    this.archived = false,
+    this.messageCount = 0,
+  });
+
+  final String storedId;
+  final String title;
+
+  /// The best matching message, with the matched words marked.
+  final List<SnippetRun> snippet;
+  final DateTime? lastActive;
+  final bool archived;
+  final int messageCount;
+}
+
+/// What became of a steer.
+enum SteerOutcome { accepted, rejected }

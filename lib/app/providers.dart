@@ -20,8 +20,10 @@ import '../data/db/database.dart';
 import '../data/net/capabilities.dart';
 import '../data/net/credentials.dart';
 import '../data/net/server_config.dart';
+import '../data/prefs/preferences_store.dart';
 import '../data/repositories/server_repository.dart';
 import '../data/rpc/dashboard_session.dart';
+import 'preferences.dart';
 
 /// The on-disk database.
 ///
@@ -155,8 +157,8 @@ final activeServerStateProvider = Provider<AsyncValue<ServerState?>>((ref) {
 
 /// The agent profile the conversation list and new chats belong to.
 ///
-/// Kept in memory and per server: a different server has different profiles,
-/// so each starts at its default.
+/// Remembered per server: a different server has different profiles, so each
+/// starts at its own last choice, or its default.
 final activeProfileProvider = NotifierProvider<ActiveProfile, String>(
   ActiveProfile.new,
 );
@@ -164,11 +166,26 @@ final activeProfileProvider = NotifierProvider<ActiveProfile, String>(
 class ActiveProfile extends Notifier<String> {
   @override
   String build() {
-    ref.watch(activeServerIdProvider);
-    return 'default';
+    final server = ref.watch(activeServerIdProvider);
+    if (server == null) return 'default';
+    return ref.read(preferencesProvider)[(server, PreferenceKeys.profile)] ??
+        'default';
   }
 
-  void select(String profile) => state = profile;
+  void select(String profile) {
+    state = profile;
+    final server = ref.read(activeServerIdProvider);
+    if (server == null) return;
+    // The default is stored as no key at all, so a server whose default is
+    // renamed still opens on its default.
+    ref
+        .read(preferencesProvider.notifier)
+        .set(
+          server,
+          PreferenceKeys.profile,
+          profile == 'default' ? null : profile,
+        );
+  }
 }
 
 /// The chat backend for the active server's live link, scoped to the active
@@ -211,8 +228,21 @@ final profilesProvider = FutureProvider<List<AgentProfile>?>((ref) async {
   if (!live) return null;
   final chat = await ref.watch(activeChatProvider.future);
   if (chat == null) return null;
-  return switch (await chat.profiles()) {
+  final profiles = switch (await chat.profiles()) {
     Ok(:final value) => value,
     Err(:final failure) => throw failure,
   };
+  // A profile remembered from an earlier launch may have been deleted on the
+  // server since. Falling back here, after the await, is safe: it is no
+  // longer this provider's build, so changing another provider is allowed.
+  final active = ref.read(activeProfileProvider);
+  if (profiles.isNotEmpty && !profiles.any((p) => p.name == active)) {
+    ref.read(activeProfileProvider.notifier).select('default');
+  }
+  return profiles;
 });
+
+/// The wall clock, as a provider so the time-of-day greeting and the relative
+/// times on screen can be fixed under test. Without this, a golden of the home
+/// screen would depend on what hour it was rendered.
+final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);

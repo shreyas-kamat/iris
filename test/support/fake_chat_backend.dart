@@ -54,6 +54,27 @@ final class FakeChatBackend implements ChatBackend {
   final List<String> switches = [];
   final List<String> slashes = [];
 
+  Result<SteerOutcome> steerResult = const Ok(SteerOutcome.accepted);
+  Result<void> renameResult = const Ok(null);
+  Result<void> archiveResult = const Ok(null);
+  Result<List<ConversationSummary>> archivedResult = const Ok([]);
+  Result<List<SearchHit>> searchResult = const Ok([]);
+
+  /// Held by a test to keep a steer in flight.
+  Completer<void>? steerGate;
+
+  final List<(String, String)> steers = [];
+  final List<(String, String)> inputAnswers = [];
+  final List<(String, String)> renames = [];
+  final List<(String, bool)> archives = [];
+
+  /// Queries searched, in order.
+  final List<String> searches = [];
+
+  /// Answered first, in order, before [modelOptionsResult]: a gateway whose
+  /// answer changes between two asks, such as a usage cache warming up.
+  final List<Result<ModelOptions>> modelOptionsQueue = [];
+
   /// Delivers [event] as if the gateway had sent it.
   void emit(ChatEvent event) => _events.add(event);
 
@@ -149,7 +170,9 @@ final class FakeChatBackend implements ChatBackend {
   @override
   Future<Result<ModelOptions>> modelOptions({String? runtimeId}) async {
     calls.add('models');
-    return modelOptionsResult;
+    return modelOptionsQueue.isNotEmpty
+        ? modelOptionsQueue.removeAt(0)
+        : modelOptionsResult;
   }
 
   @override
@@ -176,5 +199,47 @@ final class FakeChatBackend implements ChatBackend {
   ) async {
     slashes.add(command);
     return slashResult;
+  }
+
+  @override
+  Future<Result<SteerOutcome>> steer(String runtimeId, String text) async {
+    steers.add((runtimeId, text));
+    await steerGate?.future;
+    return steerResult;
+  }
+
+  @override
+  Future<Result<void>> answerInput(InputRequest request, String value) async {
+    inputAnswers.add((request.requestId, value));
+    return answerResult;
+  }
+
+  @override
+  Future<Result<void>> rename(String storedId, String title) async {
+    renames.add((storedId, title));
+    return renameResult;
+  }
+
+  @override
+  Future<Result<void>> setArchived(
+    String storedId, {
+    required bool archived,
+  }) async {
+    archives.add((storedId, archived));
+    return archiveResult;
+  }
+
+  @override
+  Future<Result<ConversationPage>> archivedConversations(int offset) async {
+    calls.add('archived $offset');
+    return archivedResult.map(
+      (items) => ConversationPage(items: items, total: items.length),
+    );
+  }
+
+  @override
+  Future<Result<List<SearchHit>>> search(String query) async {
+    searches.add(query);
+    return searchResult;
   }
 }

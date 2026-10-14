@@ -8,19 +8,36 @@
 /// while a reply streams — parses as plain text and never throws.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
 
 import '../theme/iris_theme.dart';
+import '../tokens/code_colors.dart';
 import '../tokens/metrics.dart';
+import '../tokens/motion.dart';
+import 'primitives.dart';
 
 class IrisMarkdown extends StatefulWidget {
-  const IrisMarkdown(this.data, {this.onTapLink, super.key});
+  const IrisMarkdown(
+    this.data, {
+    this.onTapLink,
+    this.highlight = true,
+    super.key,
+  });
 
   final String data;
+
+  /// Colour code blocks by language. Off while a reply is still arriving:
+  /// re-highlighting on every delta is wasted work, and a block that
+  /// recolours as it grows flickers.
+  final bool highlight;
 
   /// Called with a link's target when it is tapped. Without it, links are
   /// drawn but inert.
@@ -55,7 +72,12 @@ class _IrisMarkdownState extends State<IrisMarkdown> {
       extensionSet: md.ExtensionSet.gitHubFlavored,
       encodeHtml: false,
     ).parse(widget.data);
-    final renderer = _Renderer(context.iris, widget.onTapLink, _recognizers);
+    final renderer = _Renderer(
+      context.iris,
+      widget.onTapLink,
+      _recognizers,
+      highlight: widget.highlight,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -65,7 +87,14 @@ class _IrisMarkdownState extends State<IrisMarkdown> {
 }
 
 final class _Renderer {
-  _Renderer(this.theme, this.onTapLink, this.recognizers);
+  _Renderer(
+    this.theme,
+    this.onTapLink,
+    this.recognizers, {
+    required this.highlight,
+  });
+
+  final bool highlight;
 
   final IrisThemeData theme;
   final ValueChanged<String>? onTapLink;
@@ -113,9 +142,12 @@ final class _Renderer {
     }
     if (node is! md.Element) return null;
     return switch (node.tag) {
-      'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6' => _rich(
-        inline(node.children, _heading(node.tag)),
-      ),
+      'h1' ||
+      'h2' ||
+      'h3' ||
+      'h4' ||
+      'h5' ||
+      'h6' => _rich(inline(node.children, _heading(node.tag))),
       'ul' || 'ol' => list(node),
       'blockquote' => quote(node),
       'pre' => code(node),
@@ -307,25 +339,25 @@ final class _Renderer {
 
   Widget code(md.Element node) {
     final text = node.textContent.replaceFirst(RegExp(r'\n$'), '');
-    return SizedBox(
-      width: double.infinity,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.palette.surfaceSunken,
-          borderRadius: const BorderRadius.all(IrisRadius.xs),
-        ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.all(IrisSpace.sm),
-          child: Text(
-            text,
-            style: theme.typography.codeSmall.copyWith(
-              color: theme.palette.ink,
-            ),
-          ),
-        ),
-      ),
+    return _CodeBlock(
+      code: text,
+      language: _languageOf(node),
+      highlight: highlight,
     );
+  }
+
+  /// The fence's language, from the `language-xxx` class the parser puts on
+  /// the inner `code` element. Null for an unlabelled fence.
+  static String? _languageOf(md.Element pre) {
+    for (final child in pre.children ?? const <md.Node>[]) {
+      if (child is md.Element && child.tag == 'code') {
+        final cls = child.attributes['class'];
+        if (cls != null && cls.startsWith('language-')) {
+          return cls.substring('language-'.length);
+        }
+      }
+    }
+    return null;
   }
 
   Widget table(md.Element node) {
@@ -381,6 +413,195 @@ final class _Renderer {
               ],
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// The longest block worth highlighting. Past this the parse is slow enough
+/// to drop frames, and a block that long is read by scrolling, not by colour.
+const int maxHighlightLength = 20000;
+
+final Highlight _highlighter = Highlight()
+  ..registerLanguages(builtinAllLanguages);
+
+/// The names people write on fences, mapped to the grammar's.
+const _aliases = {
+  'sh': 'bash',
+  'zsh': 'bash',
+  'shell': 'bash',
+  'console': 'bash',
+  'py': 'python',
+  'ts': 'typescript',
+  'js': 'javascript',
+  'yml': 'yaml',
+  'md': 'markdown',
+  'kt': 'kotlin',
+  'rs': 'rust',
+  'golang': 'go',
+};
+
+/// The grammar for a fence's language, or null when there is none. There is
+/// no guessing: detection is slow and often wrong, and a wrongly coloured
+/// block reads worse than a plain one.
+String? highlightLanguage(String? fence) {
+  final name = fence?.trim().toLowerCase();
+  if (name == null || name.isEmpty) return null;
+  final resolved = _aliases[name] ?? name;
+  return _highlighter.getLanguage(resolved) == null ? null : resolved;
+}
+
+/// Highlighted spans, by palette, language and code. A transcript rebuilds
+/// often, and the parse is the expensive part.
+final Map<(IrisCodeColors, String, String), TextSpan> _spanCache = {};
+
+TextSpan? _highlighted(String code, String? fence, IrisCodeColors colors) {
+  final language = highlightLanguage(fence);
+  if (language == null || code.length > maxHighlightLength) return null;
+  final key = (colors, language, code);
+  final cached = _spanCache[key];
+  if (cached != null) return cached;
+  final renderer = TextSpanRenderer(null, colors.theme);
+  _highlighter.highlight(code: code, language: language).render(renderer);
+  final span = renderer.span;
+  if (span == null) return null;
+  // Bounded, so a long session does not hold every block it ever showed.
+  if (_spanCache.length > 200) _spanCache.clear();
+  return _spanCache[key] = span;
+}
+
+/// A fenced code block: its language and a copy button above the code.
+///
+/// Stateful only for the copy confirmation. "Copied" shows for a moment and
+/// then reverts, and the timer is cancelled on dispose so a block that leaves
+/// the screen during that moment does not set state on a dead widget.
+class _CodeBlock extends StatefulWidget {
+  const _CodeBlock({
+    required this.code,
+    this.language,
+    this.highlight = true,
+  });
+
+  final String code;
+  final String? language;
+  final bool highlight;
+
+  @override
+  State<_CodeBlock> createState() => _CodeBlockState();
+}
+
+class _CodeBlockState extends State<_CodeBlock> {
+  Timer? _resetCopied;
+  bool _copied = false;
+
+  void _copy() {
+    unawaited(Clipboard.setData(ClipboardData(text: widget.code)));
+    _resetCopied?.cancel();
+    setState(() => _copied = true);
+    _resetCopied = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  Widget _codeText(BuildContext context) {
+    final palette = context.palette;
+    final style = context.type.code.copyWith(
+      fontSize: 12.5,
+      height: 1.6,
+      color: palette.accent,
+    );
+    final colors = IrisCodeColors.of(palette);
+    final span = widget.highlight
+        ? _highlighted(widget.code, widget.language, colors)
+        : null;
+    if (span == null) {
+      return Text(widget.code, key: const ValueKey('plain'), style: style);
+    }
+    return Text.rich(
+      TextSpan(style: style.copyWith(color: colors.plain), children: [span]),
+      key: const ValueKey('highlighted'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _resetCopied?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.surfaceSunken,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.line, width: IrisStroke.hairline),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: palette.line,
+                    width: IrisStroke.hairline,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.language ?? 'code',
+                      style: type.codeSmall.copyWith(
+                        fontSize: 11,
+                        color: palette.inkFaint,
+                      ),
+                    ),
+                  ),
+                  IrisPressable(
+                    onTap: _copy,
+                    ensureTapTarget: false,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.copy, size: 13, color: palette.accent),
+                        const SizedBox(width: 5),
+                        Text(
+                          _copied ? 'Copied' : 'Copy',
+                          style: type.caption.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: palette.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(12),
+              child: AnimatedSwitcher(
+                // A finished reply's code cross-fades from plain to coloured
+                // once, instead of snapping.
+                duration: context.reduceMotion
+                    ? Duration.zero
+                    : IrisDurations.normal,
+                switchInCurve: IrisCurves.standard,
+                child: _codeText(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

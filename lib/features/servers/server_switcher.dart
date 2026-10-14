@@ -7,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/net/server_config.dart';
 import '../../data/repositories/server_repository.dart';
-import '../../design/components/aperture.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/theme/iris_theme.dart';
@@ -99,8 +99,8 @@ class _HealthDot extends StatelessWidget {
   final ServerHealth health;
 
   @override
-  Widget build(BuildContext context) => Aperture(
-    size: IrisSize.apertureSmall,
+  Widget build(BuildContext context) => IrisOrb(
+    size: IrisSize.orbSmall,
     semanticLabel: switch (health) {
       ServerHealth.online => 'Online',
       ServerHealth.checking => 'Checking',

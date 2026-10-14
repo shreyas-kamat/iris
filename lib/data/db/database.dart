@@ -176,6 +176,21 @@ class CachedDocuments extends Table {
   Set<Column<Object>> get primaryKey => {serverId, key};
 }
 
+/// Small choices the person made, kept across launches: the theme, the
+/// profile per server, which providers' usage home shows.
+///
+/// Key-value rather than a column per setting, because each phase adds a
+/// setting or two, and a column each would be a migration each.
+class Preferences extends Table {
+  /// `''` for app-wide settings, otherwise the server id they belong to.
+  TextColumn get scope => text()();
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {scope, key};
+}
+
 @DriftDatabase(
   tables: [
     Servers,
@@ -184,13 +199,14 @@ class CachedDocuments extends Table {
     Outbox,
     StreamCursors,
     CachedDocuments,
+    Preferences,
   ],
 )
 class IrisDatabase extends _$IrisDatabase {
   IrisDatabase(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -203,6 +219,9 @@ class IrisDatabase extends _$IrisDatabase {
         await customStatement(
           "UPDATE servers SET capabilities_json = '[]', probed_at = NULL",
         );
+      }
+      if (from < 3) {
+        await migrator.createTable(preferences);
       }
     },
     beforeOpen: (details) async {

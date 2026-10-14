@@ -2,6 +2,8 @@
 /// stopping and answering.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
@@ -355,4 +357,179 @@ void main() {
     expect(backend.calls.where((c) => c == 'commands'), hasLength(1));
     expect(controller.value.commands.single.name, '/new');
   });
+
+  group('steering', () {
+    Future<ChatController> running() async {
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(const MessageStarted('run-1'));
+      await settle();
+      expect(controller.value.running, isTrue);
+      return controller;
+    }
+
+    test('sending during a run steers it', () async {
+      final controller = await running();
+      await controller.send('use the staging db');
+      expect(backend.steers, [('run-1', 'use the staging db')]);
+      expect(backend.submitted, isEmpty);
+      final last = controller.value.items.last as UserTurn;
+      expect(last.steered, isTrue);
+      expect(controller.value.running, isTrue);
+    });
+
+    test('slash text during a run neither steers nor sends', () async {
+      final controller = await running();
+      await controller.send('/model');
+      expect(backend.steers, isEmpty);
+      expect(backend.submitted, isEmpty);
+      expect(backend.slashes, isEmpty);
+    });
+
+    test('a rejected steer comes back to the composer while the run goes on', () async {
+      backend.steerResult = const Ok(SteerOutcome.rejected);
+      final controller = await running();
+      String? returned;
+      controller.onSteerReturned = (text) => returned = text;
+      await controller.send('wait');
+      expect(returned, 'wait');
+      expect(controller.value.items.last, isA<Notice>());
+      expect(backend.submitted, isEmpty);
+    });
+
+    test('a rejected steer after the turn ended is sent as a prompt', () async {
+      backend
+        ..steerResult = const Ok(SteerOutcome.rejected)
+        ..steerGate = Completer<void>();
+      final controller = await running();
+      final sending = controller.send('one more thing');
+      backend.emit(const MessageCompleted('run-1', content: 'Done'));
+      await settle();
+      backend.steerGate!.complete();
+      await sending;
+      expect(backend.submitted, [('run-1', 'one more thing')]);
+      expect((controller.value.items.last as UserTurn).steered, isFalse);
+    });
+
+    test('a steer that fails to send comes back to the composer', () async {
+      backend.steerResult = const Err(IrisFailure(FailureKind.offline));
+      final controller = await running();
+      String? returned;
+      controller.onSteerReturned = (text) => returned = text;
+      await controller.send('later');
+      expect(returned, 'later');
+    });
+  });
+
+  group('retry', () {
+    test('runs /retry, then shows the transcript as Hermes now has it', () async {
+      backend.slashResult = const Ok(SlashOutcome(kind: SlashKind.send, text: 'hello'));
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(const TurnFailed('run-1', 'Gateway timed out'));
+      await settle();
+      expect(controller.value.items.whereType<Notice>().single.retryable, isTrue);
+
+      backend.historyResult = const Ok([UserTurn(id: '9', text: 'hello')]);
+      await controller.retry();
+      expect(backend.slashes, ['/retry']);
+      expect(controller.value.retrying, isTrue);
+
+      backend.emit(const MessageCompleted('run-1', content: 'Hi'));
+      await settle();
+      await settle();
+      expect(backend.calls.where((c) => c == 'history stored-1').length, 2);
+      expect(controller.value.retrying, isFalse);
+      expect(controller.value.items.single, isA<UserTurn>());
+    });
+
+    test('does nothing while a turn runs', () async {
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(const MessageStarted('run-1'));
+      await settle();
+      await controller.retry();
+      expect(backend.slashes, isEmpty);
+    });
+  });
+
+  group('input prompts', () {
+    const sudo = InputRequest(
+      requestId: 'srq-1',
+      sessionId: 'run-1',
+      kind: InputKind.sudo,
+      command: 'apt install jq',
+    );
+
+    test('an answer is sent once and never kept', () async {
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(InputAsked(sudo));
+      await settle();
+      expect(controller.value.inputs.single.requestId, 'srq-1');
+
+      await controller.answerInput(sudo, 'hunter2');
+      expect(backend.inputAnswers, [('srq-1', 'hunter2')]);
+      expect(controller.value.inputs, isEmpty);
+      expect((controller.value.items.last as Notice).text, 'Sent your sudo password.');
+      expect(_mentions(controller.value, 'hunter2'), isFalse);
+    });
+
+    test('an empty answer skips', () async {
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(InputAsked(sudo));
+      await settle();
+      await controller.answerInput(sudo, '');
+      expect(backend.inputAnswers, [('srq-1', '')]);
+      expect((controller.value.items.last as Notice).text, 'Skipped.');
+    });
+
+    test('a failed input answer brings the card back without the value', () async {
+      backend.answerResult = const Err(IrisFailure(FailureKind.offline));
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(InputAsked(sudo));
+      await settle();
+      await controller.answerInput(sudo, 'hunter2');
+      expect(controller.value.inputs.single.requestId, 'srq-1');
+      expect(controller.value.items.last, isA<Notice>().having((n) => n.isError, 'error', isTrue));
+      expect(_mentions(controller.value, 'hunter2'), isFalse);
+    });
+  });
+
+  test('a password card from before a reconnect goes; the resume re-announces', () async {
+    final controller = controllerFor();
+    await controller.open();
+    backend.emit(
+      InputAsked(
+        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.sudo),
+      ),
+    );
+    await settle();
+    expect(controller.value.inputs, isNotEmpty);
+    backend.reconnect();
+    await settle();
+    await settle();
+    expect(controller.value.inputs, isEmpty);
+  });
+
+  test('the context window from the resume shows at once', () async {
+    backend.resumeResult = const Ok(
+      ResumedConversation(runtimeId: 'run-1', context: ContextUsage(percent: 40, used: 4, max: 10)),
+    );
+    final controller = controllerFor();
+    await controller.open();
+    expect(controller.value.context?.percent, 40);
+  });
 }
+
+/// Whether [secret] appears anywhere the state could show or keep it.
+bool _mentions(ChatState state, String secret) => state.items.any(
+  (item) => switch (item) {
+    UserTurn(:final text) => text,
+    AssistantTurn(:final text) => text,
+    Notice(:final text) => text,
+    ToolCall(:final output) => output ?? '',
+  }.contains(secret),
+);

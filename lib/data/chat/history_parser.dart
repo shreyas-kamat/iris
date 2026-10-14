@@ -58,7 +58,13 @@ abstract final class HistoryParser {
       switch (role) {
         case 'user':
           if (content.trim().isNotEmpty) {
-            items.add(UserTurn(id: id, text: content));
+            items.add(
+              UserTurn(
+                id: id,
+                text: content,
+                steered: row['display_kind'].string().trim() == 'steer',
+              ),
+            );
           }
         case 'assistant':
           final turn = AssistantTurn(

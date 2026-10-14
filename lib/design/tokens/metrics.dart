@@ -193,11 +193,11 @@ abstract final class IrisSize {
   /// Compact controls inside a dense row.
   static const double controlSmall = 32;
 
-  /// The signature aperture at its usual size, in the chat header.
-  static const double aperture = 26;
+  /// The iris orb at its usual size, in the chat header.
+  static const double orb = 26;
 
-  /// The aperture shrunk to a status dot on a session row.
-  static const double apertureSmall = 10;
+  /// The orb shrunk to a status dot on a session row.
+  static const double orbSmall = 10;
 
   /// Avatar / provider mark.
   static const double avatar = 28;

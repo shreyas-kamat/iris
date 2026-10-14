@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/providers.dart';
+import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
+import 'package:iris/features/chat/conversation_search.dart';
+import 'package:iris/features/home/link_status_screen.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/harness.dart';
@@ -51,8 +54,8 @@ void main() {
   testWidgets('the header names the server and the link', (tester) async {
     await tester.pumpWidget(home(const []));
     await settle(tester);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Connected'), findsOneWidget);
+    // The gateway line names the host of the server and the link headline.
+    expect(find.text('h.example · Connected'), findsOneWidget);
   });
 
   testWidgets('lists conversations with when and where they started', (tester) async {
@@ -73,10 +76,12 @@ void main() {
   });
 
   testWidgets('an empty profile invites a first conversation', (tester) async {
+    final handle = tester.ensureSemantics();
     await tester.pumpWidget(home(const []));
     await settle(tester);
     expect(find.text('No conversations yet'), findsOneWidget);
-    expect(find.text('New conversation'), findsOneWidget);
+    expect(find.bySemanticsLabel('New conversation'), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('tapping a conversation opens it', (tester) async {
@@ -109,7 +114,7 @@ void main() {
     expect(find.text('Show more'), findsNothing);
   });
 
-  testWidgets('with several profiles, the chip switches profile', (tester) async {
+  testWidgets('with several profiles, the pill switches profile', (tester) async {
     await tester.pumpWidget(
       home(
         const [],
@@ -120,8 +125,8 @@ void main() {
       ),
     );
     await settle(tester);
-    // IrisChip upper-cases its label.
-    await tester.tap(find.text('DEFAULT'));
+    // The pill shows the profile name as it is stored.
+    await tester.tap(find.text('default'));
     await tester.pump(const Duration(milliseconds: 400));
     await settle(tester);
     await tester.tap(find.text('ananta'));
@@ -131,10 +136,10 @@ void main() {
       tester.element(find.byType(ConversationListScreen)),
     );
     expect(container.read(activeProfileProvider), 'ananta');
-    expect(find.text('ANANTA'), findsOneWidget);
+    expect(find.text('ananta'), findsOneWidget);
   });
 
-  testWidgets('a single profile shows no chip', (tester) async {
+  testWidgets('a single profile shows no picker', (tester) async {
     await tester.pumpWidget(
       home(
         const [],
@@ -142,6 +147,246 @@ void main() {
       ),
     );
     await settle(tester);
-    expect(find.text('DEFAULT'), findsNothing);
+    // No picker means no chevron: the pill is a label only.
+    expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+  });
+
+  testWidgets('the usage strip sits under the hero when a provider reports', (tester) async {
+    backend.modelOptionsResult = const Ok(
+      ModelOptions(
+        provider: 'openai-codex',
+        providers: [
+          ModelProvider(
+            slug: 'openai-codex',
+            name: 'OpenAI Codex',
+            models: ['m'],
+            isCurrent: true,
+            usage: ProviderUsage(windows: [UsageWindow(label: 'Session', usedPercent: 10)]),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(home(const []));
+    await tester.pumpAndSettle();
+    expect(find.text('OpenAI Codex'), findsOneWidget);
+  });
+
+  group('the bar folds in the hero', () {
+    final rows = [
+      for (var i = 0; i < 20; i++) ConversationSummary(id: '$i', title: 'Conversation $i'),
+    ];
+
+    double offset(WidgetTester tester) =>
+        tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+
+    testWidgets('scrolling the hero away shows the link in the bar', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      // The bar's own link is not built while the hero is in view.
+      expect(find.text('Connected'), findsNothing);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsOneWidget);
+      // Back to the top, and it leaves again.
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 600));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+      expect(find.text('Connected'), findsNothing);
+    });
+
+    testWidgets('a short pull settles back to the full hero', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -30));
+      await tester.pumpAndSettle();
+      expect(offset(tester), 0);
+      expect(find.text('Connected'), findsNothing);
+    });
+
+    testWidgets('past halfway, it settles into the compact bar', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -100));
+      await tester.pumpAndSettle();
+      // Fully folded: the bar's link at full strength, not partway in.
+      final link = tester.widget<Opacity>(
+        find.ancestor(of: find.text('Connected'), matching: find.byType(Opacity)).first,
+      );
+      expect(link.opacity, 1);
+    });
+
+    testWidgets('the compact link opens the link detail', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connected'));
+      // The push, then the route transition.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(LinkStatusScreen), findsOneWidget);
+    });
+  });
+
+  group('managing conversations', () {
+    final rows = [
+      const ConversationSummary(id: 'a', title: 'Fix the build'),
+      const ConversationSummary(id: 'b', title: 'Plan the week'),
+    ];
+
+    testWidgets('rename from a long press', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText).last, 'Fix CI');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(backend.renames, [('a', 'Fix CI')]);
+      expect(find.text('Fix CI'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('a refused rename puts the old title back', (tester) async {
+      backend.renameResult = const Err(IrisFailure(FailureKind.rejected, message: 'nope'));
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(EditableText).last, 'Fix CI');
+      await tester.pump();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+      expect(find.textContaining('Could not rename'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('archive hides the row; undo brings it back', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      expect(backend.archives, [('a', true)]);
+      expect(find.text('Fix the build'), findsNothing);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(backend.archives, [('a', true), ('a', false)]);
+      expect(find.text('Fix the build'), findsOneWidget);
+    });
+
+    testWidgets('a refused archive brings the row back', (tester) async {
+      backend.archiveResult = const Err(IrisFailure(FailureKind.offline));
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.longPress(find.text('Fix the build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archive'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('Archived opens the archived screen', (tester) async {
+      backend.archivedResult = const Ok([ConversationSummary(id: 'z', title: 'Old notes')]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await tester.scrollUntilVisible(
+        find.text('Archived'),
+        200,
+        // The list, not the search field's own scrollable.
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Archived'));
+      await tester.pumpAndSettle();
+      expect(find.text('Old notes'), findsOneWidget);
+    });
+  });
+
+  group('search', () {
+    final rows = [
+      const ConversationSummary(id: 'a', title: 'Fix the build'),
+      const ConversationSummary(id: 'b', title: 'Plan the week'),
+    ];
+
+    Future<void> search(WidgetTester tester, String query) async {
+      await tester.enterText(
+        find.descendant(of: find.byType(SearchField), matching: find.byType(EditableText)),
+        query,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('typing filters at once, then the server answers', (tester) async {
+      backend.searchResult = const Ok([
+        SearchHit(
+          storedId: 'c',
+          title: 'Deploy notes',
+          snippet: [SnippetRun('the '), SnippetRun('build', matched: true), SnippetRun(' broke')],
+        ),
+      ]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'build');
+      // Local first: the loaded row whose title matches.
+      expect(find.text('Fix the build'), findsOneWidget);
+      expect(find.text('Plan the week'), findsNothing);
+      // After the pause, the server's hits replace it.
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(backend.searches, ['build']);
+      expect(find.text('Deploy notes'), findsOneWidget);
+      expect(find.text('the build broke', findRichText: true), findsOneWidget);
+    });
+
+    testWidgets('archived hits are left out', (tester) async {
+      backend.searchResult = const Ok([
+        SearchHit(storedId: 'c', title: 'Old one', archived: true),
+      ]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'old');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Old one'), findsNothing);
+      expect(find.text('No matches'), findsOneWidget);
+    });
+
+    testWidgets('a failed server search keeps the local matches', (tester) async {
+      backend.searchResult = const Err(IrisFailure(FailureKind.offline));
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'week');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Plan the week'), findsOneWidget);
+      expect(find.text("Couldn't search the server"), findsOneWidget);
+    });
+
+    testWidgets('clearing the field brings the list back', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'week');
+      await tester.tap(find.bySemanticsLabel('Clear search'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+      expect(find.text('Plan the week'), findsOneWidget);
+    });
+  });
+
+  test('local matches compare case-insensitively on the title', () {
+    final rows = [
+      const ConversationSummary(id: 'a', title: 'Fix The Build'),
+      const ConversationSummary(id: 'b', title: 'Plan'),
+    ];
+    expect(localMatches(rows, 'the b').map((r) => r.id), ['a']);
+    expect(localMatches(rows, '  '), rows);
   });
 }

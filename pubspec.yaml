@@ -50,6 +50,7 @@ dependencies:
   mobile_scanner: ^7.4.2
   markdown: ^7.3.1
   url_launcher: ^6.3.3
+  re_highlight: 0.0.3
 
 dev_dependencies:
   flutter_test:
@@ -82,7 +83,10 @@ flutter:
   # only to the user's own server, and a design system that phones a font CDN
   # on first paint would break both that promise and the offline-first goal.
   # Only the five weights the type scale actually uses are shipped (668 KB).
-  # Licensed under the SIL Open Font License — see assets/fonts/GEIST-OFL.txt.
+  # Instrument Serif is the design's voice for greetings and screen titles, and
+  # is used nowhere else. It is bundled for the same reason.
+  # Licensed under the SIL Open Font License — see assets/fonts/GEIST-OFL.txt
+  # and assets/fonts/INSTRUMENT-SERIF-OFL.txt.
   fonts:
     - family: Geist
       fonts:
@@ -98,9 +102,17 @@ flutter:
           weight: 400
         - asset: assets/fonts/GeistMono-Medium.ttf
           weight: 500
+    - family: InstrumentSerif
+      fonts:
+        - asset: assets/fonts/InstrumentSerif-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/InstrumentSerif-Italic.ttf
+          weight: 400
+          style: italic
 
   assets:
     - assets/fonts/GEIST-OFL.txt
+    - assets/fonts/INSTRUMENT-SERIF-OFL.txt
 
   # To add assets to your application, add an assets section, like this:
   # assets:

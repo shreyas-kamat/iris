@@ -33,6 +33,7 @@ final class ChatState {
     this.turn = TurnPhase.idle,
     this.approvals = const [],
     this.questions = const [],
+    this.inputs = const [],
     this.title,
     this.failure,
     this.earlier,
@@ -40,6 +41,8 @@ final class ChatState {
     this.model,
     this.provider,
     this.commands = const [],
+    this.context,
+    this.retrying = false,
   });
 
   final ChatPhase phase;
@@ -47,6 +50,9 @@ final class ChatState {
   final TurnPhase turn;
   final List<ApprovalRequest> approvals;
   final List<ClarifyRequest> questions;
+
+  /// Password and secret prompts waiting for the person.
+  final List<InputRequest> inputs;
   final String? title;
 
   /// Why the transcript could not be read, when [phase] is failed.
@@ -64,6 +70,12 @@ final class ChatState {
   /// The gateway's slash commands, once read.
   final List<SlashCommand> commands;
 
+  /// How full the context window is, once the gateway says.
+  final ContextUsage? context;
+
+  /// A retry is on its way; the failed card shows it working.
+  final bool retrying;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -72,6 +84,7 @@ final class ChatState {
     TurnPhase? turn,
     List<ApprovalRequest>? approvals,
     List<ClarifyRequest>? questions,
+    List<InputRequest>? inputs,
     String? title,
     IrisFailure? failure,
     HistoryCursor? earlier,
@@ -79,12 +92,15 @@ final class ChatState {
     String? model,
     String? provider,
     List<SlashCommand>? commands,
+    ContextUsage? context,
+    bool? retrying,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
     turn: turn ?? this.turn,
     approvals: approvals ?? this.approvals,
     questions: questions ?? this.questions,
+    inputs: inputs ?? this.inputs,
     title: title ?? this.title,
     failure: failure ?? this.failure,
     earlier: earlier ?? this.earlier,
@@ -92,12 +108,14 @@ final class ChatState {
     model: model ?? this.model,
     provider: provider ?? this.provider,
     commands: commands ?? this.commands,
+    context: context ?? this.context,
+    retrying: retrying ?? this.retrying,
   );
 
   /// The state after [event].
   ChatState apply(ChatEvent event) => switch (event) {
     MessageStarted() => copyWith(
-      items: _withLive(items),
+      items: _withLive(retrying ? _withoutRetry(items) : items),
       turn: TurnPhase.thinking,
     ),
     TextDelta(:final text) => copyWith(
@@ -128,7 +146,7 @@ final class ChatState {
       items: _toolDone(items, done),
       turn: _waitingOr(TurnPhase.thinking),
     ),
-    TurnFailed(:final message) => withError(message),
+    TurnFailed(:final message) => withFailure(message),
     TurnInterrupted() => copyWith(
       items: [
         ..._settled(items),
@@ -147,18 +165,9 @@ final class ChatState {
     ),
     ApprovalAsked(:final request) => withApproval(request),
     ClarifyAsked(:final request) => withQuestion(request),
-    RequestWithdrawn(:final requestId) => _decided(
-      copyWith(
-        approvals: [
-          for (final approval in approvals)
-            if (!approval.matches(requestId)) approval,
-        ],
-        questions: [
-          for (final question in questions)
-            if (question.requestId != requestId) question,
-        ],
-      ),
-    ),
+    InputAsked(:final request) => withInput(request),
+    ContextChanged(:final usage) => copyWith(context: usage),
+    RequestWithdrawn(:final requestId) => _withdrawn(requestId),
   };
 
   /// The newest page of stored history, replacing whatever was shown.
@@ -171,11 +180,13 @@ final class ChatState {
     turn: turn,
     approvals: approvals,
     questions: questions,
+    inputs: inputs,
     title: title,
     earlier: earlier,
     model: model,
     provider: provider,
     commands: commands,
+    context: context,
   );
 
   /// An earlier page, above what is shown.
@@ -188,12 +199,14 @@ final class ChatState {
     turn: turn,
     approvals: approvals,
     questions: questions,
+    inputs: inputs,
     title: title,
     failure: failure,
     earlier: earlier,
     model: model,
     provider: provider,
     commands: commands,
+    context: context,
   );
 
   /// The person's message, shown at once.
@@ -204,6 +217,39 @@ final class ChatState {
     ],
     turn: TurnPhase.thinking,
   );
+
+  /// The person steered the running turn. The reply so far is finished, so
+  /// what the agent says next starts below the steer, and the turn carries on.
+  ChatState withSteer(String text) => copyWith(
+    items: [
+      ..._settled(items),
+      UserTurn(id: 'local-${items.length}', text: text, steered: true),
+    ],
+  );
+
+  /// The turn failed. Only the newest failure can be retried: retrying an
+  /// older one would ask Hermes to repeat something it has moved past.
+  ChatState withFailure(String message) => copyWith(
+    items: [
+      ..._withoutRetry(_settled(items)),
+      Notice(
+        id: 'notice-${items.length}',
+        text: message,
+        isError: true,
+        retryable: true,
+      ),
+    ],
+    turn: _waitingOr(TurnPhase.idle),
+    retrying: false,
+  );
+
+  static List<TranscriptItem> _withoutRetry(List<TranscriptItem> items) => [
+    for (final item in items)
+      if (item is Notice && item.retryable)
+        item.copyWith(retryable: false)
+      else
+        item,
+  ];
 
   /// A failure, shown inline; the turn ends unless a decision is waiting.
   ChatState withError(String message) => copyWith(
@@ -256,6 +302,46 @@ final class ChatState {
     turn: TurnPhase.waiting,
   );
 
+  ChatState _withdrawn(String requestId) {
+    final hadInput = inputs.any((input) => input.requestId == requestId);
+    final next = _decided(
+      copyWith(
+        approvals: [
+          for (final approval in approvals)
+            if (!approval.matches(requestId)) approval,
+        ],
+        questions: [
+          for (final question in questions)
+            if (question.requestId != requestId) question,
+        ],
+        inputs: [
+          for (final input in inputs)
+            if (input.requestId != requestId) input,
+        ],
+      ),
+    );
+    // The card vanishing on its own would be a mystery; say why.
+    return hadInput ? next.withNotice('Hermes stopped waiting for that.') : next;
+  }
+
+  ChatState withInput(InputRequest request) => copyWith(
+    inputs: [
+      for (final input in inputs)
+        if (input.requestId != request.requestId) input,
+      request,
+    ],
+    turn: TurnPhase.waiting,
+  );
+
+  ChatState withoutInput(InputRequest request) => _decided(
+    copyWith(
+      inputs: [
+        for (final input in inputs)
+          if (input.requestId != request.requestId) input,
+      ],
+    ),
+  );
+
   /// [question] of [request] answered; the request goes once none remain.
   ChatState withoutQuestion(ClarifyRequest request, ClarifyQuestion question) {
     final remaining = request.without(question.id);
@@ -273,13 +359,16 @@ final class ChatState {
   }
 
   TurnPhase _waitingOr(TurnPhase phase) =>
-      approvals.isNotEmpty || questions.isNotEmpty ? TurnPhase.waiting : phase;
+      approvals.isNotEmpty || questions.isNotEmpty || inputs.isNotEmpty
+      ? TurnPhase.waiting
+      : phase;
 
   /// After a decision: back to thinking once nothing is waiting.
   static ChatState _decided(ChatState next) =>
       next.turn == TurnPhase.waiting &&
           next.approvals.isEmpty &&
-          next.questions.isEmpty
+          next.questions.isEmpty &&
+          next.inputs.isEmpty
       ? next.copyWith(turn: TurnPhase.thinking)
       : next;
 

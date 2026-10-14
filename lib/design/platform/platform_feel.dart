@@ -81,17 +81,23 @@ abstract final class IrisHaptics {
   static Future<void> failed() => HapticFeedback.vibrate();
 }
 
-/// A page transition in the platform's own idiom.
+/// The page push, drawn the same way on every platform.
 ///
-/// Both directions use the same spring language as the rest of Iris, but the
-/// *gesture* differs: iOS drags from the left edge and the outgoing page
-/// parallaxes behind; Android uses predictive back and the outgoing page scales
-/// down. Matching the gesture matters more than matching the animation, because
-/// the gesture is what a person's thumb already expects.
+/// This is the design's own transition, not the platform's. The incoming page
+/// slides in from just off the right edge on a long, soft curve, and it casts
+/// a shadow to its left so it reads as lying on top of the page beneath. The
+/// page beneath drifts a short way to the left rather than sliding out fully.
+///
+/// Matching one motion everywhere is deliberate. The app's whole rhythm (orb,
+/// sheets, pushes) comes from one curve, and an Android-style scale would fight
+/// it. Under reduced motion the page appears with no movement at all.
 final class IrisPageRoute<T> extends PageRoute<T> {
   IrisPageRoute({required this.builder, super.settings});
 
   final WidgetBuilder builder;
+
+  /// The design's curve, a fast start that settles without overshooting.
+  static const Curve _curve = Cubic(0.32, 0.72, 0, 1);
 
   @override
   Color? get barrierColor => null;
@@ -102,8 +108,13 @@ final class IrisPageRoute<T> extends PageRoute<T> {
   @override
   bool get maintainState => true;
 
+  /// The forward push is slower than the return, so the page feels like it
+  /// settles into place and then leaves briskly.
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 340);
+  Duration get transitionDuration => const Duration(milliseconds: 500);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 380);
 
   @override
   Widget buildPage(
@@ -121,28 +132,40 @@ final class IrisPageRoute<T> extends PageRoute<T> {
   ) {
     if (MediaQuery.disableAnimationsOf(context)) return child;
 
-    final curved = CurvedAnimation(
-      parent: animation,
-      curve: const Cubic(0.2, 0, 0, 1),
-      reverseCurve: const Cubic(0.4, 0, 1, 1),
+    // The page beneath this one drifts left while this page covers it. That
+    // is driven by `secondaryAnimation`, which runs when another route is
+    // pushed over this one.
+    final beneath = SlideTransition(
+      position: Tween<Offset>(
+        begin: Offset.zero,
+        end: const Offset(-0.28, 0),
+      ).animate(CurvedAnimation(parent: secondaryAnimation, curve: _curve)),
+      child: child,
     );
 
-    return switch (IrisPlatform.of(context)) {
-      IrisPlatform.ios => SlideTransition(
-        position: Tween(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(curved),
-        child: child,
-      ),
-      IrisPlatform.android || IrisPlatform.other => FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          scale: Tween(begin: 0.94, end: 1.0).animate(curved),
-          child: child,
+    // The incoming page slides from just outside the edge, so a sliver of it
+    // is visible from the first frame and the motion never looks like a
+    // page popping in.
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(1.05, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: _curve)),
+      child: DecoratedBox(
+        // The shadow falls to the left, onto the page underneath. It is what
+        // makes the incoming page read as a layer rather than a flat wipe.
+        decoration: const BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 60,
+              offset: Offset(-30, 0),
+            ),
+          ],
         ),
+        child: beneath,
       ),
-    };
+    );
   }
 }
 

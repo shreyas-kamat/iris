@@ -403,3 +403,29 @@ class IrisEmptyState extends StatelessWidget {
     );
   }
 }
+
+/// [AnimatedSize] that keeps its place in the tree but does not animate when
+/// motion is reduced. A zero-duration [AnimatedSize] re-dirties itself during
+/// its own layout, which Flutter asserts against, so reduced motion must not
+/// reach it at all.
+class IrisAnimatedSize extends StatelessWidget {
+  const IrisAnimatedSize({
+    required this.child,
+    this.alignment = Alignment.topCenter,
+    super.key,
+  });
+
+  final Widget child;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    if (context.reduceMotion) return child;
+    return AnimatedSize(
+      duration: IrisDurations.normal,
+      curve: IrisCurves.standard,
+      alignment: alignment,
+      child: child,
+    );
+  }
+}
