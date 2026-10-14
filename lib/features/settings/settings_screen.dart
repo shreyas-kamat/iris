@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme_controller.dart';
+import '../../app/usage.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/net/capabilities.dart';
 import '../../data/rpc/dashboard_session.dart';
@@ -29,6 +30,7 @@ import '../../design/tokens/palette.dart';
 import '../chat/profile_picker.dart';
 import '../home/link_status_screen.dart';
 import '../servers/server_switcher.dart';
+import 'usage_settings_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -149,6 +151,27 @@ class SettingsScreen extends ConsumerWidget {
                     onChanged: (follow) => ref
                         .read(themeControllerProvider.notifier)
                         .setFollowServerSkin(follow: follow),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            IrisSettingsGroup(
+              title: 'Home',
+              children: [
+                IrisSettingsRow(
+                  label: 'Usage on home',
+                  sub: 'What is left',
+                  value: usageSummary(
+                    ref.watch(usageSelectionProvider),
+                    ref.watch(usageOptionsProvider).value,
+                  ),
+                  onTap: () => unawaited(
+                    Navigator.of(context).push(
+                      IrisPageRoute<void>(
+                        builder: (_) => const UsageSettingsScreen(),
+                      ),
+                    ),
                   ),
                 ),
               ],
