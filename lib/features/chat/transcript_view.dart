@@ -9,6 +9,7 @@ import '../../data/chat/chat_models.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/markdown.dart';
 import '../../design/components/primitives.dart';
+import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
@@ -21,16 +22,30 @@ import 'links.dart';
 /// is still arriving. It drives that turn's orb and meta line; a finished turn
 /// gets no live state and settles into the resting orb.
 class TranscriptEntry extends StatelessWidget {
-  const TranscriptEntry(this.item, {this.live, super.key});
+  const TranscriptEntry(
+    this.item, {
+    this.live,
+    this.onRetry,
+    this.retrying = false,
+    super.key,
+  });
 
   final TranscriptItem item;
   final AgentState? live;
+
+  /// Retries the failed turn. Only a retryable notice uses it.
+  final VoidCallback? onRetry;
+
+  /// A retry is on its way.
+  final bool retrying;
 
   @override
   Widget build(BuildContext context) => switch (item) {
     final UserTurn turn => _UserBubble(turn),
     final AssistantTurn turn => _AssistantBlock(turn, live: live),
     final ToolCall call => ToolCard(call),
+    final Notice notice when notice.retryable && onRetry != null =>
+      _FailedCard(notice, onRetry: onRetry!, retrying: retrying),
     final Notice notice => _NoticeLine(notice),
   };
 }
@@ -57,25 +72,54 @@ class _UserBubble extends StatelessWidget {
         alignment: Alignment.centerRight,
         // Eighty-two percent of the column, so a short message stays short and
         // a long one never runs the full width into the agent's replies.
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: constraints.maxWidth * .82),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.palette.accentQuiet,
-              borderRadius: _shape,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-              child: SelectableText(
-                turn.text,
-                style: theme.typography.body.copyWith(
-                  fontSize: 15,
-                  height: 1.45,
-                  color: theme.palette.ink,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth * .82),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.palette.accentQuiet,
+                  borderRadius: _shape,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 11,
+                  ),
+                  child: SelectableText(
+                    turn.text,
+                    style: theme.typography.body.copyWith(
+                      fontSize: 15,
+                      height: 1.45,
+                      color: theme.palette.ink,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            if (turn.steered) ...[
+              const SizedBox(height: IrisSpace.xs),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.subdirectory_arrow_right,
+                    size: 12,
+                    color: theme.palette.inkMuted,
+                  ),
+                  const SizedBox(width: IrisSpace.xxs),
+                  Text(
+                    'Steered',
+                    style: theme.typography.caption.copyWith(
+                      color: theme.palette.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -334,6 +378,105 @@ class _CaretState extends State<_Caret> with SingleTickerProviderStateMixin {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A turn that failed, with a way to run it again: the design's failed-turn
+/// card. While the retry is on its way the pill shows it working, so a second
+/// tap cannot send a second retry.
+class _FailedCard extends StatelessWidget {
+  const _FailedCard(
+    this.notice, {
+    required this.onRetry,
+    required this.retrying,
+  });
+
+  final Notice notice;
+  final VoidCallback onRetry;
+  final bool retrying;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    final failed = palette.colorFor(AgentState.failed);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: failed.withValues(alpha: .08),
+        borderRadius: const BorderRadius.all(IrisRadius.lg),
+        border: Border.all(
+          color: failed.withValues(alpha: .22),
+          width: IrisStroke.hairline,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              notice.text,
+              style: type.body.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: failed,
+              ),
+            ),
+          ),
+          const SizedBox(width: IrisSpace.md),
+          AnimatedSwitcher(
+            duration: context.reduceMotion
+                ? Duration.zero
+                : IrisDurations.normal,
+            switchInCurve: IrisCurves.standard,
+            child: retrying
+                ? Semantics(
+                    key: const ValueKey('retrying'),
+                    container: true,
+                    excludeSemantics: true,
+                    label: 'Retrying',
+                    child: const SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: Center(
+                        child: IrisOrb(
+                          state: AgentState.loading,
+                          size: 22,
+                          glow: false,
+                        ),
+                      ),
+                    ),
+                  )
+                : IrisPressable(
+                    key: const ValueKey('retry'),
+                    onTap: () {
+                      unawaited(IrisHaptics.commit());
+                      onRetry();
+                    },
+                    scale: .95,
+                    semanticLabel: 'Retry',
+                    child: Container(
+                      height: 34,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: failed,
+                        borderRadius: const BorderRadius.all(IrisRadius.full),
+                      ),
+                      child: Text(
+                        'Retry',
+                        style: type.label.copyWith(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: palette.inkInverse,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }

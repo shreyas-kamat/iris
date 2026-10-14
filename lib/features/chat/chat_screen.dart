@@ -5,13 +5,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/sheet.dart';
+import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
+import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
@@ -19,6 +23,7 @@ import '../../design/tokens/palette.dart';
 import 'chat_controller.dart';
 import 'chat_state.dart';
 import 'composer.dart';
+import 'context_sheet.dart';
 import 'decision_cards.dart';
 import 'model_sheet.dart';
 import 'transcript_view.dart';
@@ -45,6 +50,7 @@ class ChatScreen extends StatefulWidget {
     required this.backend,
     this.conversationId,
     this.title,
+    this.archived = false,
     super.key,
   });
 
@@ -53,6 +59,10 @@ class ChatScreen extends StatefulWidget {
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
   final String? title;
+
+  /// The conversation is archived. Sending in it first asks to bring it back,
+  /// so a reply never lands somewhere the person cannot find it.
+  final bool archived;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -65,11 +75,13 @@ class _ChatScreenState extends State<ChatScreen> {
     title: widget.title,
   );
   final _text = TextEditingController();
+  bool _unarchived = false;
 
   @override
   void initState() {
     super.initState();
     _chat.onPrefill = _prefill;
+    _chat.onSteerReturned = _steerReturned;
     _text.addListener(_watchForSlash);
     unawaited(_chat.open());
   }
@@ -94,9 +106,55 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _send() {
+  /// A steer Hermes could not take goes back where it was typed.
+  void _steerReturned(String text) {
+    unawaited(IrisHaptics.failed());
+    _prefill(text);
+  }
+
+  Future<bool> _confirmUnarchive() async {
+    final id = _chat.conversationId;
+    if (!widget.archived || _unarchived || id == null) return true;
+    final confirmed = await showIrisSheet<bool>(
+      context: context,
+      builder: (sheetContext) => IrisSheet(
+        title: 'Unarchive this chat?',
+        subtitle:
+            'It moves back to your conversations, so the reply is easy to find.',
+        actions: IrisSheetActions(
+          secondary: IrisButton(
+            label: 'Not now',
+            onPressed: () => Navigator.of(sheetContext).pop(false),
+          ),
+          primary: IrisButton(
+            label: 'Unarchive and send',
+            tone: IrisButtonTone.primary,
+            onPressed: () => Navigator.of(sheetContext).pop(true),
+          ),
+        ),
+        child: const SizedBox.shrink(),
+      ),
+    );
+    if (confirmed != true || !mounted) return false;
+    switch (await widget.backend.setArchived(id, archived: false)) {
+      case Ok():
+        _unarchived = true;
+        return true;
+      case Err(:final failure):
+        if (mounted) {
+          showIrisToast(
+            context,
+            message: 'Could not unarchive: ${ChatController.describe(failure)}',
+          );
+        }
+        return false;
+    }
+  }
+
+  Future<void> _send() async {
     final text = _text.text;
     if (text.trim().isEmpty) return;
+    if (!await _confirmUnarchive()) return;
     _text.clear();
     unawaited(_chat.send(text));
   }
@@ -105,7 +163,7 @@ class _ChatScreenState extends State<ChatScreen> {
   /// behaves identically, including clearing the field.
   void _sendSuggestion(String text) {
     _text.value = TextEditingValue(text: text);
-    _send();
+    unawaited(_send());
   }
 
   @override
@@ -122,27 +180,30 @@ class _ChatScreenState extends State<ChatScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (state.approvals.isNotEmpty)
-            _Decision(
-              child: ApprovalCard(
-                request: state.approvals.first,
-                onChoose: (choice) =>
-                    unawaited(_chat.approve(state.approvals.first, choice)),
-              ),
-            )
-          else if (state.questions.isNotEmpty)
-            _Decision(
-              child: ClarifyCard(
-                key: ValueKey(
-                  '${state.questions.first.requestId}/'
-                  '${state.questions.first.questions.length}',
+          // One decision at a time, arriving on the standard curve and
+          // collapsing its height when answered, so the composer glides
+          // rather than jumping.
+          IrisAnimatedSize(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedSwitcher(
+              duration: context.reduceMotion
+                  ? Duration.zero
+                  : IrisDurations.normal,
+              switchInCurve: IrisCurves.standard,
+              switchOutCurve: IrisCurves.exit,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0, .08),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
                 ),
-                request: state.questions.first,
-                onAnswer: (question, answer) => unawaited(
-                  _chat.answer(state.questions.first, question, answer),
-                ),
               ),
+              child: _decision(state),
             ),
+          ),
           Composer(
             controller: _text,
             running: state.running,
@@ -152,14 +213,61 @@ class _ChatScreenState extends State<ChatScreen> {
             onModel: _chat.isLive
                 ? () => unawaited(showModelPicker(context, _chat))
                 : null,
+            contextUsage: state.context,
+            onContext: state.context == null
+                ? null
+                : () => unawaited(
+                    showContextSheet(
+                      context,
+                      state.context!,
+                      model: state.model,
+                    ),
+                  ),
             state: agentStateFor(state.turn),
-            onSend: _send,
+            onSend: () => unawaited(_send()),
             onStop: () => unawaited(_chat.stop()),
           ),
         ],
       ),
     ),
   );
+
+  Widget _decision(ChatState state) {
+    if (state.approvals.isNotEmpty) {
+      final request = state.approvals.first;
+      return _Decision(
+        key: ValueKey('approval-${request.serverRequestId ?? request.queueId}'),
+        child: ApprovalCard(
+          request: request,
+          onChoose: (choice) => unawaited(_chat.approve(request, choice)),
+        ),
+      );
+    }
+    if (state.questions.isNotEmpty) {
+      final request = state.questions.first;
+      return _Decision(
+        key: ValueKey(
+          'clarify-${request.requestId}/${request.questions.length}',
+        ),
+        child: ClarifyCard(
+          request: request,
+          onAnswer: (question, answer) =>
+              unawaited(_chat.answer(request, question, answer)),
+        ),
+      );
+    }
+    if (state.inputs.isNotEmpty) {
+      final request = state.inputs.first;
+      return _Decision(
+        key: ValueKey('input-${request.requestId}'),
+        child: InputCard(
+          request: request,
+          onAnswer: (value) => _chat.answerInput(request, value),
+        ),
+      );
+    }
+    return const SizedBox.shrink(key: ValueKey('none'));
+  }
 
   Widget _body(BuildContext context, ChatState state) {
     switch (state.phase) {
@@ -218,6 +326,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: TranscriptEntry(
                   item,
                   live: live,
+                  onRetry: _chat.isLive && !state.running
+                      ? () => unawaited(_chat.retry())
+                      : null,
+                  retrying: state.retrying,
                   key: ValueKey(item.id),
                 ),
               ),
@@ -380,7 +492,7 @@ class _EmptyConversation extends StatelessWidget {
 
 /// Room around a decision card above the composer.
 class _Decision extends StatelessWidget {
-  const _Decision({required this.child});
+  const _Decision({required this.child, super.key});
 
   final Widget child;
 

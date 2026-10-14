@@ -9,6 +9,7 @@ import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/features/chat/chat_screen.dart';
+import 'package:iris/features/chat/decision_cards.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/harness.dart';
@@ -310,5 +311,60 @@ void main() {
     await settle(tester);
     expect(find.text('Write a plan for '), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets('a sudo prompt shows its card and the answer reaches the backend', (tester) async {
+    await tester.pumpWidget(themed(ChatScreen(backend: backend, conversationId: 'stored-1')));
+    await settle(tester);
+    await settle(tester);
+    backend.emit(
+      InputAsked(
+        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.sudo),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Hermes needs your sudo password'), findsOneWidget);
+    await tester.enterText(
+      find.descendant(of: find.byType(InputCard), matching: find.byType(EditableText)),
+      'pw',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Submit'));
+    await tester.pumpAndSettle();
+    expect(backend.inputAnswers, [('srq-1', 'pw')]);
+    expect(find.byType(InputCard), findsNothing);
+  });
+
+  testWidgets('sending in an archived chat asks to unarchive first', (tester) async {
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1', archived: true)),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.enterText(find.byType(EditableText).last, 'hello');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unarchive this chat?'), findsOneWidget);
+    await tester.tap(find.text('Unarchive and send'));
+    await tester.pumpAndSettle();
+    expect(backend.archives, [('stored-1', false)]);
+    expect(backend.submitted.single.$2, 'hello');
+  });
+
+  testWidgets('declining to unarchive keeps the text and sends nothing', (tester) async {
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1', archived: true)),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.enterText(find.byType(EditableText).last, 'hello');
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+    expect(backend.submitted, isEmpty);
+    expect(find.text('hello'), findsOneWidget);
   });
 }

@@ -13,6 +13,12 @@ import 'package:iris/features/chat/transcript_view.dart';
 
 import '../support/harness.dart';
 
+/// The card's input, not the selectable command above it.
+final _field = find.descendant(
+  of: find.byType(IrisField),
+  matching: find.byType(EditableText),
+);
+
 void main() {
   testWidgets('a tool card shows its name, state and output', (tester) async {
     await tester.pumpWidget(
@@ -273,5 +279,88 @@ void main() {
       expect(groupedNumber(48210), '48,210');
       expect(groupedNumber(1272000), '1,272,000');
     });
+  });
+
+  group('input card', () {
+    const sudo = InputRequest(
+      requestId: 'srq-1',
+      sessionId: 'run-1',
+      kind: InputKind.sudo,
+      command: 'apt install jq',
+    );
+
+    testWidgets('submits the masked value and clears the field', (tester) async {
+      String? sent;
+      await tester.pumpWidget(
+        themed(
+          Center(
+            child: InputCard(
+              request: sudo,
+              onAnswer: (value) async => sent = value,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Hermes needs your sudo password'), findsOneWidget);
+      expect(find.text('apt install jq'), findsOneWidget);
+      await tester.enterText(_field, 'hunter2');
+      await tester.pump();
+      await tester.tap(find.text('Submit'));
+      await tester.pump();
+      expect(sent, 'hunter2');
+      expect(
+        tester.widget<EditableText>(_field).controller.text,
+        isEmpty,
+      );
+    });
+
+    testWidgets('cancel sends an empty value', (tester) async {
+      String? sent;
+      await tester.pumpWidget(
+        themed(Center(child: InputCard(request: sudo, onAnswer: (v) async => sent = v))),
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      expect(sent, '');
+    });
+
+    testWidgets('the eye shows and hides what was typed', (tester) async {
+      await tester.pumpWidget(
+        themed(Center(child: InputCard(request: sudo, onAnswer: (_) async {}))),
+      );
+      EditableText field() => tester.widget<EditableText>(_field);
+      expect(field().obscureText, isTrue);
+      await tester.tap(find.bySemanticsLabel('Show password'));
+      await tester.pump();
+      expect(field().obscureText, isFalse);
+      await tester.tap(find.bySemanticsLabel('Hide password'));
+      await tester.pump();
+      expect(field().obscureText, isTrue);
+    });
+  });
+
+  testWidgets('a retryable failure offers Retry; retrying shows it working', (tester) async {
+    var retried = 0;
+    const failed = Notice(id: 'n', text: 'Gateway timed out', isError: true, retryable: true);
+    await tester.pumpWidget(
+      themed(Center(child: TranscriptEntry(failed, onRetry: () => retried++))),
+    );
+    await tester.tap(find.text('Retry'));
+    expect(retried, 1);
+
+    await tester.pumpWidget(
+      themed(Center(child: TranscriptEntry(failed, onRetry: () {}, retrying: true))),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsNothing);
+    expect(find.byKey(const ValueKey('retrying')), findsOneWidget);
+    expect(find.bySemanticsLabel('Retrying'), findsOneWidget);
+  });
+
+  testWidgets('a steered turn says so', (tester) async {
+    await tester.pumpWidget(
+      themed(const Center(child: TranscriptEntry(UserTurn(id: 'u', text: 'go on', steered: true)))),
+    );
+    expect(find.text('Steered'), findsOneWidget);
   });
 }

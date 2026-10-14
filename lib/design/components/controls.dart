@@ -351,7 +351,9 @@ class _IrisFieldState extends State<IrisField> {
               ),
               if (widget.trailing case final trailing?) ...[
                 const SizedBox(width: IrisSpace.xs),
-                trailing,
+                // Its own semantics node, so a screen reader can reach it
+                // instead of hearing it folded into the field's label.
+                Semantics(container: true, child: trailing),
               ],
             ],
           ),
