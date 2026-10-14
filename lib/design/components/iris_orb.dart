@@ -373,7 +373,10 @@ class _OrbFrame extends ChangeNotifier {
 }
 
 class _IrisOrbState extends State<IrisOrb> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_onTick);
+  /// Created the first time there is something to ease, so a settled orb
+  /// never has one. Never created in [dispose]: a new ticker looks up
+  /// TickerMode, which is illegal once the element is inactive.
+  Ticker? _ticker;
   final _OrbFrame _frame = _OrbFrame();
 
   /// The colour the current state wants, from the palette. Held here so the
@@ -434,13 +437,15 @@ class _IrisOrbState extends State<IrisOrb> with SingleTickerProviderStateMixin {
   void _sync() {
     final target = _specFor(widget.state);
     if (_reduced) {
-      _ticker.stop();
+      _ticker?.stop();
       _frame.snapTo(target, _targetColor);
       return;
     }
-    if (!_frame.settled(target, _targetColor) && !_ticker.isActive) {
+    if (_frame.settled(target, _targetColor)) return;
+    final ticker = _ticker ??= createTicker(_onTick);
+    if (!ticker.isActive) {
       _last = Duration.zero;
-      _ticker.start();
+      ticker.start();
     }
   }
 
@@ -452,14 +457,14 @@ class _IrisOrbState extends State<IrisOrb> with SingleTickerProviderStateMixin {
     final target = _specFor(widget.state);
     _frame.step(dt, target, _targetColor);
     if (_frame.settled(target, _targetColor)) {
-      _ticker.stop();
+      _ticker?.stop();
     }
     _frame.markDirty();
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _ticker?.dispose();
     _frame.dispose();
     super.dispose();
   }
