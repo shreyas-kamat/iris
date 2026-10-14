@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../app/usage.dart';
 import '../../core/failure.dart';
 import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
@@ -27,6 +28,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
 import '../home/link_status_screen.dart';
+import '../home/usage_strip.dart';
 import '../settings/settings_screen.dart';
 import 'chat_screen.dart';
 import 'profile_picker.dart';
@@ -61,7 +63,9 @@ class _ConversationListScreenState
     );
     if (!mounted) return;
     // A send may have created a conversation or retitled one.
-    ref.invalidate(conversationsProvider);
+    ref
+      ..invalidate(conversationsProvider)
+      ..invalidate(usageOptionsProvider);
   }
 
   Future<void> _loadMore(ChatBackend chat, int offset) async {
@@ -144,6 +148,7 @@ class _ConversationListScreenState
                   ),
                 ),
               ),
+              const UsageStrip(),
               Expanded(
                 child: _ConversationList(
                   conversations: conversations,
@@ -157,6 +162,12 @@ class _ConversationListScreenState
                       ? null
                       : (offset) => unawaited(_loadMore(chat, offset)),
                   onRetry: () => ref.invalidate(conversationsProvider),
+                  onRefresh: () async {
+                    ref
+                      ..invalidate(conversationsProvider)
+                      ..invalidate(usageOptionsProvider);
+                    await ref.read(conversationsProvider.future);
+                  },
                   now: now,
                 ),
               ),
@@ -487,8 +498,10 @@ class _ConversationList extends StatelessWidget {
     required this.onOpen,
     required this.onMore,
     required this.onRetry,
+    required this.onRefresh,
   });
 
+  final Future<void> Function() onRefresh;
   final AsyncValue<ConversationPage?> conversations;
   final List<ConversationSummary> more;
   final bool loadingMore;
@@ -556,46 +569,51 @@ class _ConversationList extends StatelessWidget {
     final next = onMore;
     // Index 0 is the section label. The bottom padding is the height of the
     // floating bar plus its fade, so the last row can be scrolled clear of it.
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: _barClearance),
-      itemCount: list.length + 1 + (hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              IrisSpace.sm,
-              gutter,
-              IrisSpace.sm,
-            ),
-            child: IrisLabel('Recent', color: context.palette.inkFaint),
-          );
-        }
-        final rowIndex = index - 1;
-        if (rowIndex == list.length) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: IrisSpace.md),
-            child: Center(
-              child: IrisButton(
-                label: 'Show more',
-                tone: IrisButtonTone.ghost,
-                busy: loadingMore,
-                onPressed: next == null ? null : () => next(list.length),
+    return RefreshIndicator(
+      color: context.palette.accent,
+      backgroundColor: context.palette.surfaceRaised,
+      onRefresh: onRefresh,
+      child: ListView.builder(
+        padding: const EdgeInsets.only(bottom: _barClearance),
+        itemCount: list.length + 1 + (hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                gutter,
+                IrisSpace.sm,
+                gutter,
+                IrisSpace.sm,
               ),
+              child: IrisLabel('Recent', color: context.palette.inkFaint),
+            );
+          }
+          final rowIndex = index - 1;
+          if (rowIndex == list.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: IrisSpace.md),
+              child: Center(
+                child: IrisButton(
+                  label: 'Show more',
+                  tone: IrisButtonTone.ghost,
+                  busy: loadingMore,
+                  onPressed: next == null ? null : () => next(list.length),
+                ),
+              ),
+            );
+          }
+          final conversation = list[rowIndex];
+          return Padding(
+            padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+            child: _ConversationRow(
+              key: ValueKey(conversation.id),
+              title: conversation.title,
+              subtitle: _subtitle(conversation, now),
+              onTap: open == null ? null : () => open(conversation),
             ),
           );
-        }
-        final conversation = list[rowIndex];
-        return Padding(
-          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
-          child: _ConversationRow(
-            key: ValueKey(conversation.id),
-            title: conversation.title,
-            subtitle: _subtitle(conversation, now),
-            onTap: open == null ? null : () => open(conversation),
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 

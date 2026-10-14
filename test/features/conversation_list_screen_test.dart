@@ -147,4 +147,24 @@ void main() {
     // No picker means no chevron: the pill is a label only.
     expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
   });
+
+  testWidgets('the usage strip sits under the hero when a provider reports', (tester) async {
+    backend.modelOptionsResult = const Ok(
+      ModelOptions(
+        provider: 'openai-codex',
+        providers: [
+          ModelProvider(
+            slug: 'openai-codex',
+            name: 'OpenAI Codex',
+            models: ['m'],
+            isCurrent: true,
+            usage: ProviderUsage(windows: [UsageWindow(label: 'Session', usedPercent: 10)]),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(home(const []));
+    await tester.pumpAndSettle();
+    expect(find.text('OpenAI Codex'), findsOneWidget);
+  });
 }
