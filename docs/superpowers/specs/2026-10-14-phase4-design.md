@@ -125,7 +125,8 @@ probed read-only:
 
 **Steer.** `ChatController.send(text)` stays the single entry point:
 - If no turn is running, it calls `submit`, as today.
-- If a turn is running, it calls `steer`:
+- If a turn is running and the text is not a slash command, it calls `steer`. Slash text during a run does
+  nothing, and the composer offers no steer button for it, because a command is not a steer:
   - **accepted:** the composer clears, and a local `UserTurn(steered: true)` is appended. Once Hermes stores the
     row, the next history load replaces it with the stored `display_kind: steer` row.
   - **rejected, and the turn has ended meanwhile:** the text is submitted as a prompt.
@@ -169,8 +170,9 @@ The layout, from top to bottom:
 
 1. **Orb hero.** Unchanged.
 2. **Usage strip.** One row per configured provider. It's hidden when nothing reports usage.
-   - **Rows:** the configured list is `["@profile"]` by default. `@profile` resolves to `model.options`'
-     top-level `provider` for the active profile. Duplicates are dropped, and so is any provider without usage.
+   - **Rows:** the configured list is `["@profile"]` by default. `@profile` resolves to the active profile's own
+     `provider` (from `GET /api/profiles`), falling back to `model.options`' top-level `provider`, which describes the
+     gateway's launch profile. Duplicates are dropped, and so is any provider without usage.
    - **Collapsed row:** the provider name, an `IrisGauge` for its tightest window (the highest `used_percent`)
      stretched to the row width, and the caption "**27% left** · resets in 2h 36m". A pooled provider shows its
      best account (the lowest used) in the collapsed row.
@@ -186,13 +188,13 @@ The layout, from top to bottom:
    - A failed server search keeps the local matches and adds a quiet "Couldn't search the server" line.
    - Clearing the field restores the list.
 4. **Conversation rows.**
-   - A long press (Android), or the context menu (iOS) through `design/platform/adaptive.dart`, offers **Rename**
-     and **Archive**.
+   - A long press on either platform opens an action sheet with **Rename** and **Archive**. Sheets are how
+     everything that interrupts arrives in Iris (`design/components/sheet.dart`).
    - **Rename** opens an `IrisSheet` with an `IrisField` holding the current title, selected. Saving updates the
      row optimistically and rolls it back with a notice if the server refuses.
-   - **Archive** removes the row optimistically and shows a snackbar with **Undo**, which unarchives it.
-5. **"Archived"** at the end of the list (shown only when the archived total is above zero, or always when that
-   total is unknown).
+   - **Archive** removes the row optimistically and shows a toast with **Undo**, which unarchives it. `IrisToast` is a new design component: Iris has no snackbar.
+5. **"Archived"** at the end of the list, always present. When nothing is archived, its screen shows an empty
+   state, which saves a request on every home load.
    - It opens `ArchivedScreen`, paged through `archivedConversations`, with an **Unarchive** action per row.
    - An archived conversation opens normally. Sending in it first asks "Unarchive this chat?" and unarchives on
      confirmation.
@@ -227,10 +229,10 @@ The design file (`design/Iris App.dc.html`) and the tokens are the source of tru
 | sudo / secret card | An `IrisCard` in the decision-card slot: a lock glyph, the title, the sudo `command` in a sunken monospace well, a masked `IrisField` with a show/hide eye toggle (autocorrect, suggestions and autofill off), **Cancel** (quiet) and **Submit** (accent). | It arrives like the approval card (rising and fading in on `standard`). The field takes focus as it arrives. The answered and withdrawn states cross-fade, then the card collapses its height on `gentle`. | `gate` when it arrives; `commit` on submit |
 | Context ring | A 20 pt ring with a `IrisStroke.ring` stroke, a track in `surfaceSunken`, and a fill tinted by the same rule as `IrisGauge` (neutral below 70%, shading through `working` to `failed`). It shares that tint function with `IrisGauge`. | The fill springs to each new value on `standard`. It fades in on first data. | — |
 | Context sheet | `IrisSheet`: the large figure "18%" in the serif role, "48,210 of 272,000 tokens" and the model name. | The standard sheet spring (`gentle`). | `selection` on open |
-| Usage strip | Rows on `surface` with hairline separators. The provider name in `ink`, the caption in `inkMuted` with the "left" figure in `ink` and medium weight, and a full-width `IrisGauge` (6 pt). A pooled account's `limited` or `unavailable` state shows as an `IrisChip`. | Gauges spring from 0 on first appearance and to new values on refresh. Tapping expands the height on `gentle`, and the windows stagger in 30 ms apart on `standard`. Skeleton shimmer (`IrisSkeleton`) shows while loading. | `selection` on expand |
+| Usage strip | Rows on `surface` with hairline separators. The provider name in `ink`, the caption in `inkMuted` with the "left" figure in `ink` and medium weight, and a full-width `IrisGauge` (6 pt). A pooled account's `limited` or `unavailable` state shows as an `IrisChip`. | Gauges spring from 0 on first appearance and to new values on refresh. Tapping expands the height on `gentle`, and the windows stagger in 30 ms apart on `standard`. The strip stays hidden until there is something to show, then grows in (`AnimatedSize`, `IrisDurations.normal`): a skeleton for a strip that may turn out empty would flash for nothing. | `selection` on expand |
 | Search | A pill `IrisField` with a magnifier and a clear button, on `surfaceSunken`. Hit rows show the title and a two-line snippet with matched runs in `ink` and medium weight, the rest in `inkMuted`. | Pulling past 56 pt reveals the field, which springs to rest on `standard`. Results cross-fade over `IrisDurations.normal` when the server replaces the local matches. A thin indeterminate line runs under the field while a search is in flight. | `selection` when the field locks open |
 | Rename | `IrisSheet` titled "Rename", with the field pre-selected and `IrisSheetActions` (Cancel / Save). | The standard sheet spring. The row's title cross-fades to the new one. | `commit` on save |
-| Archive / undo | A snackbar on `surfaceRaised` with an "Undo" text button in the accent. | The row slides out to the leading edge and its height collapses on `standard`. Undo springs it back into place. | `commit` on archive |
+| Archive / undo | An `IrisToast` on `surfaceRaised`, floating above the new-chat bar, with an "Undo" text button in the accent. | The row slides out to the leading edge and its height collapses on `standard`. Undo springs it back into place. | `commit` on archive |
 | Archived screen | The same row style as home, under a page title. **Unarchive** is a trailing quiet button. An empty state uses `IrisEmptyState` ("Nothing archived"). | Pushed with `IrisPageRoute`. An unarchived row collapses out on `standard`. | `commit` |
 | Usage settings | `IrisSettingsGroup` sections Main / Secondary / Others, with each choice made in an `IrisSheet` list (`IrisListRow`) that shows a checkmark for the selection. | Rows insert and remove with a height animation on `standard`. | `selection` |
 | Highlighted code | The existing `_CodeBlock`, with only the text colours changing. | A single cross-fade from plain to highlighted over `IrisDurations.normal`, on completion. | — |
