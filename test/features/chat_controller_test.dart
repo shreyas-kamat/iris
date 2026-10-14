@@ -498,6 +498,22 @@ void main() {
     });
   });
 
+  test('a password card from before a reconnect goes; the resume re-announces', () async {
+    final controller = controllerFor();
+    await controller.open();
+    backend.emit(
+      InputAsked(
+        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.sudo),
+      ),
+    );
+    await settle();
+    expect(controller.value.inputs, isNotEmpty);
+    backend.reconnect();
+    await settle();
+    await settle();
+    expect(controller.value.inputs, isEmpty);
+  });
+
   test('the context window from the resume shows at once', () async {
     backend.resumeResult = const Ok(
       ResumedConversation(runtimeId: 'run-1', context: ContextUsage(percent: 40, used: 4, max: 10)),

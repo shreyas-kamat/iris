@@ -120,6 +120,7 @@ final class ChatController extends ValueNotifier<ChatState> {
               : TurnPhase.idle,
           approvals: const [],
           questions: const [],
+          inputs: const [],
           model: again.model,
           provider: again.provider,
           context: again.context,
