@@ -12,6 +12,7 @@ import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
+import 'package:iris/features/chat/conversation_search.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/harness.dart';
@@ -244,5 +245,88 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Old notes'), findsOneWidget);
     });
+  });
+
+  group('search', () {
+    final rows = [
+      const ConversationSummary(id: 'a', title: 'Fix the build'),
+      const ConversationSummary(id: 'b', title: 'Plan the week'),
+    ];
+
+    Future<void> search(WidgetTester tester, String query) async {
+      // Far enough to reveal the field, not far enough to pull to refresh.
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, 80));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(of: find.byType(SearchField), matching: find.byType(EditableText)),
+        query,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('typing filters at once, then the server answers', (tester) async {
+      backend.searchResult = const Ok([
+        SearchHit(
+          storedId: 'c',
+          title: 'Deploy notes',
+          snippet: [SnippetRun('the '), SnippetRun('build', matched: true), SnippetRun(' broke')],
+        ),
+      ]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'build');
+      // Local first: the loaded row whose title matches.
+      expect(find.text('Fix the build'), findsOneWidget);
+      expect(find.text('Plan the week'), findsNothing);
+      // After the pause, the server's hits replace it.
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(backend.searches, ['build']);
+      expect(find.text('Deploy notes'), findsOneWidget);
+      expect(find.text('the build broke', findRichText: true), findsOneWidget);
+    });
+
+    testWidgets('archived hits are left out', (tester) async {
+      backend.searchResult = const Ok([
+        SearchHit(storedId: 'c', title: 'Old one', archived: true),
+      ]);
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'old');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Old one'), findsNothing);
+      expect(find.text('No matches'), findsOneWidget);
+    });
+
+    testWidgets('a failed server search keeps the local matches', (tester) async {
+      backend.searchResult = const Err(IrisFailure(FailureKind.offline));
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'week');
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.text('Plan the week'), findsOneWidget);
+      expect(find.text("Couldn't search the server"), findsOneWidget);
+    });
+
+    testWidgets('clearing the field brings the list back', (tester) async {
+      await tester.pumpWidget(home(rows));
+      await settle(tester);
+      await search(tester, 'week');
+      await tester.tap(find.bySemanticsLabel('Clear search'));
+      await tester.pumpAndSettle();
+      expect(find.text('Fix the build'), findsOneWidget);
+      expect(find.text('Plan the week'), findsOneWidget);
+    });
+  });
+
+  test('local matches compare case-insensitively on the title', () {
+    final rows = [
+      const ConversationSummary(id: 'a', title: 'Fix The Build'),
+      const ConversationSummary(id: 'b', title: 'Plan'),
+    ];
+    expect(localMatches(rows, 'the b').map((r) => r.id), ['a']);
+    expect(localMatches(rows, '  '), rows);
   });
 }

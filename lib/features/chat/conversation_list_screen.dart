@@ -28,6 +28,7 @@ import '../../design/platform/iris_scaffold.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
+import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import '../home/link_status_screen.dart';
 import '../home/usage_strip.dart';
@@ -37,6 +38,7 @@ import 'chat_controller.dart';
 import 'chat_screen.dart';
 import 'conversation_actions.dart';
 import 'conversation_row.dart';
+import 'conversation_search.dart';
 import 'profile_picker.dart';
 import 'relative_time.dart';
 
@@ -58,6 +60,48 @@ class _ConversationListScreenState
 
   /// Rows archived here, folded out of the list.
   final Set<String> _gone = {};
+
+  final _search = TextEditingController();
+  final _searchFocus = FocusNode();
+
+  /// Starts scrolled just past the search field, so it waits above the first
+  /// row and a pull reveals it. A list too short to scroll simply shows it.
+  final _scroll = ScrollController(initialScrollOffset: searchFieldExtent);
+
+  /// The query the server is asked, settled 250 ms after the last keystroke.
+  String _serverQuery = '';
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _search.addListener(_onQuery);
+    _searchFocus.addListener(() {
+      if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
+    });
+  }
+
+  void _onQuery() {
+    _debounce?.cancel();
+    final query = _search.text.trim();
+    setState(() {
+      if (query.isEmpty) _serverQuery = '';
+    });
+    if (query.isEmpty) return;
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() => _serverQuery = query);
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    _searchFocus.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
   bool _loadingMore = false;
 
   Future<void> _open(
@@ -241,6 +285,12 @@ class _ConversationListScreenState
                   conversations: conversations,
                   more: _more,
                   loadingMore: _loadingMore,
+                  scroll: _scroll,
+                  search: _search,
+                  searchFocus: _searchFocus,
+                  serverHits: _serverQuery.isEmpty
+                      ? null
+                      : ref.watch(conversationSearchProvider(_serverQuery)),
                   titles: _titles,
                   gone: _gone,
                   onActions: chat == null
@@ -592,6 +642,10 @@ class _ConversationList extends StatelessWidget {
     required this.more,
     required this.loadingMore,
     required this.onOpen,
+    required this.scroll,
+    required this.search,
+    required this.searchFocus,
+    required this.serverHits,
     required this.titles,
     required this.gone,
     required this.onActions,
@@ -606,6 +660,12 @@ class _ConversationList extends StatelessWidget {
   final List<ConversationSummary> more;
   final bool loadingMore;
   final ValueChanged<ConversationSummary>? onOpen;
+  final ScrollController scroll;
+  final TextEditingController search;
+  final FocusNode searchFocus;
+
+  /// The server's answer to the settled query; null when none is active.
+  final AsyncValue<List<SearchHit>>? serverHits;
   final Map<String, String> titles;
   final Set<String> gone;
   final ValueChanged<ConversationSummary>? onActions;
@@ -671,62 +731,58 @@ class _ConversationList extends StatelessWidget {
     final now = this.now;
     final open = onOpen;
     final next = onMore;
-    // Index 0 is the section label. The bottom padding is the height of the
-    // floating bar plus its fade, so the last row can be scrolled clear of it.
-    return RefreshIndicator(
-      color: context.palette.accent,
-      backgroundColor: context.palette.surfaceRaised,
-      onRefresh: onRefresh,
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: _barClearance),
-        itemCount: list.length + 2 + (hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == list.length + 1 + (hasMore ? 1 : 0)) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, 0),
-              child: IrisListRow(
-                title: 'Archived',
-                leading: Icon(
-                  Icons.archive_outlined,
-                  size: IrisSize.icon,
-                  color: context.palette.inkMuted,
-                ),
-                trailing: Icon(
-                  Icons.chevron_right,
-                  size: 16,
-                  color: context.palette.lineStrong,
-                ),
-                onTap: onArchived,
-              ),
-            );
-          }
-          if (index == 0) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                gutter,
-                IrisSpace.sm,
-                gutter,
-                IrisSpace.sm,
-              ),
-              child: IrisLabel('Recent', color: context.palette.inkFaint),
-            );
-          }
-          final rowIndex = index - 1;
-          if (rowIndex == list.length) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: IrisSpace.md),
-              child: Center(
-                child: IrisButton(
-                  label: 'Show more',
-                  tone: IrisButtonTone.ghost,
-                  busy: loadingMore,
-                  onPressed: next == null ? null : () => next(list.length),
-                ),
-              ),
-            );
-          }
-          final conversation = list[rowIndex];
-          return Leaving(
+    final query = search.text.trim();
+    final searching = query.isNotEmpty;
+
+    /// Snaps a half-revealed field to open or closed, so it is never left
+    /// cut in half.
+    bool snap(ScrollEndNotification _) {
+      final offset = scroll.hasClients ? scroll.offset : 0.0;
+      if (searching || searchFocus.hasFocus) return false;
+      if (offset <= 0 || offset >= searchFieldExtent) return false;
+      final target = offset < searchFieldExtent / 2 ? 0.0 : searchFieldExtent;
+      // After the current frame: a scroll cannot start inside its own end
+      // notification.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!scroll.hasClients) return;
+        if (context.reduceMotion) {
+          scroll.jumpTo(target);
+        } else {
+          unawaited(
+            scroll.animateTo(
+              target,
+              duration: IrisDurations.normal,
+              curve: IrisCurves.standard,
+            ),
+          );
+        }
+      });
+      return false;
+    }
+
+    final children = <Widget>[
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        child: SearchField(
+          controller: search,
+          focusNode: searchFocus,
+          searching: serverHits?.isLoading ?? false,
+        ),
+      ),
+      if (searching)
+        ..._searchItems(context, gutter, list, open)
+      else ...[
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            IrisSpace.sm,
+            gutter,
+            IrisSpace.sm,
+          ),
+          child: IrisLabel('Recent', color: context.palette.inkFaint),
+        ),
+        for (final conversation in list)
+          Leaving(
             key: ValueKey(conversation.id),
             gone: gone.contains(conversation.id),
             child: Padding(
@@ -740,10 +796,137 @@ class _ConversationList extends StatelessWidget {
                     : () => onActions!(conversation),
               ),
             ),
-          );
-        },
+          ),
+        if (hasMore)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: IrisSpace.md),
+            child: Center(
+              child: IrisButton(
+                label: 'Show more',
+                tone: IrisButtonTone.ghost,
+                busy: loadingMore,
+                onPressed: next == null ? null : () => next(list.length),
+              ),
+            ),
+          ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, 0),
+          child: IrisListRow(
+            title: 'Archived',
+            leading: Icon(
+              Icons.archive_outlined,
+              size: IrisSize.icon,
+              color: context.palette.inkMuted,
+            ),
+            trailing: Icon(
+              Icons.chevron_right,
+              size: 16,
+              color: context.palette.lineStrong,
+            ),
+            onTap: onArchived,
+          ),
+        ),
+      ],
+    ];
+    // The bottom padding is the height of the floating bar plus its fade, so
+    // the last row can be scrolled clear of it.
+    return NotificationListener<ScrollEndNotification>(
+      onNotification: snap,
+      child: RefreshIndicator(
+        color: context.palette.accent,
+        backgroundColor: context.palette.surfaceRaised,
+        onRefresh: onRefresh,
+        child: ListView(
+          controller: scroll,
+          padding: const EdgeInsets.only(bottom: _barClearance),
+          children: children,
+        ),
       ),
     );
+  }
+
+  /// What shows under the field while a query is typed: the server's hits
+  /// once they arrive, the loaded rows that match until then, and what went
+  /// wrong if the server could not be asked.
+  List<Widget> _searchItems(
+    BuildContext context,
+    double gutter,
+    List<ConversationSummary> list,
+    ValueChanged<ConversationSummary>? open,
+  ) {
+    final palette = context.palette;
+    final type = context.type;
+    final hits = serverHits?.value;
+    final failed = serverHits?.hasError ?? false;
+    final local = localMatches(list, search.text);
+    final rows = hits == null
+        ? <Widget>[
+            for (final conversation in local)
+              Padding(
+                key: ValueKey('local-${conversation.id}'),
+                padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+                child: ConversationRow(
+                  title: titles[conversation.id] ?? conversation.title,
+                  subtitle: _subtitle(conversation, now),
+                  onTap: open == null ? null : () => open(conversation),
+                ),
+              ),
+          ]
+        : <Widget>[
+            for (final hit in hits.where((hit) => !hit.archived))
+              Padding(
+                key: ValueKey('hit-${hit.storedId}'),
+                padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+                child: SearchHitRow(
+                  hit: hit,
+                  onTap: open == null
+                      ? null
+                      : () => open(
+                          ConversationSummary(
+                            id: hit.storedId,
+                            title: hit.title,
+                          ),
+                        ),
+                ),
+              ),
+          ];
+    final settled = hits != null || failed;
+    return [
+      if (failed)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            IrisSpace.xs,
+            gutter,
+            IrisSpace.sm,
+          ),
+          child: Text(
+            "Couldn't search the server",
+            style: type.caption.copyWith(color: palette.inkMuted),
+          ),
+        ),
+      // The local matches give way to the server's hits with a cross-fade
+      // rather than a swap.
+      AnimatedSwitcher(
+        duration: context.reduceMotion ? Duration.zero : IrisDurations.normal,
+        switchInCurve: IrisCurves.standard,
+        child: Column(
+          key: ValueKey(hits != null),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rows,
+        ),
+      ),
+      if (rows.isEmpty && (settled || local.isEmpty))
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: IrisSpace.xl),
+          child: Center(
+            child: Text(
+              'No matches',
+              style: type.caption.copyWith(color: palette.inkMuted),
+            ),
+          ),
+        ),
+    ];
   }
 
   /// Floating bar height plus the fade above it, so the last row clears it.
