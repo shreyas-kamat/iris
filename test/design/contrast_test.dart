@@ -11,6 +11,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/design/tokens/code_colors.dart';
 import 'package:iris/design/tokens/metrics.dart';
 import 'package:iris/design/tokens/palette.dart';
 
@@ -267,5 +268,21 @@ void main() {
         );
       }
     }
+  });
+
+  group('code', () {
+    test('every highlight role passes AA on the code well', () {
+      for (final entry in palettes.entries) {
+        final p = entry.value;
+        final code = IrisCodeColors.of(p);
+        for (final (name, color) in code.roles) {
+          expect(
+            contrast(color, p.surfaceSunken),
+            greaterThanOrEqualTo(aaBody),
+            reason: '${entry.key}: code $name on sunken',
+          );
+        }
+      }
+    });
   });
 }

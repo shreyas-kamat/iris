@@ -115,9 +115,15 @@ class SpringBuilder extends StatefulWidget {
     required this.value,
     required this.builder,
     this.spring = IrisSprings.standard,
+    this.initial,
     this.child,
     super.key,
   });
+
+  /// Where the first frame starts. When set, the value springs from here to
+  /// [value] as the widget appears, so a gauge fills in rather than popping
+  /// in full. Null starts at [value].
+  final double? initial;
 
   /// The target. Changing it springs from wherever the animation currently is.
   final double value;
@@ -137,8 +143,26 @@ class _SpringBuilderState extends State<SpringBuilder>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController.unbounded(
     vsync: this,
-    value: widget.value,
+    value: widget.initial ?? widget.value,
   );
+
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    final initial = widget.initial;
+    if (initial == null || initial == widget.value) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = widget.value;
+    } else {
+      _controller.animateWith(
+        SpringSimulation(widget.spring, initial, widget.value, 0),
+      );
+    }
+  }
 
   @override
   void didUpdateWidget(SpringBuilder oldWidget) {

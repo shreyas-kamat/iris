@@ -3,6 +3,8 @@ library;
 
 import 'dart:async';
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../platform/platform_feel.dart';
@@ -158,8 +160,12 @@ class IrisField extends StatefulWidget {
     this.onSubmitted,
     this.autofocus = false,
     this.errorText,
+    this.trailing,
     super.key,
   });
+
+  /// A control at the end of the field, such as a show/hide toggle.
+  final Widget? trailing;
 
   final TextEditingController? controller;
   final String? hint;
@@ -290,47 +296,63 @@ class _IrisFieldState extends State<IrisField> {
               width: _focused || hasError ? IrisStroke.thick : IrisStroke.thin,
             ),
           ),
-          child: Stack(
+          child: Row(
             children: [
-              // EditableText has no decoration layer, so the hint is drawn
-              // underneath in the same metrics — which is also why it lines up
-              // exactly with the first typed character.
-              if (widget.hint case final hint?)
-                if (_controller.text.isEmpty)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Align(
-                        alignment: widget.maxLines == 1
-                            ? Alignment.centerLeft
-                            : Alignment.topLeft,
-                        child: Text(
-                          hint,
-                          style: textStyle.copyWith(color: palette.inkFaint),
+              Expanded(
+                child: Stack(
+                  children: [
+                    // EditableText has no decoration layer, so the hint is drawn
+                    // underneath in the same metrics — which is also why it lines up
+                    // exactly with the first typed character.
+                    if (widget.hint case final hint?)
+                      if (_controller.text.isEmpty)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Align(
+                              alignment: widget.maxLines == 1
+                                  ? Alignment.centerLeft
+                                  : Alignment.topLeft,
+                              child: Text(
+                                hint,
+                                style: textStyle.copyWith(
+                                  color: palette.inkFaint,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
+                    ExcludeSemantics(
+                      // The wrapping Semantics node already describes this field;
+                      // leaving EditableText's own node in place produces two
+                      // announcements for one control.
+                      child: EditableText(
+                        controller: _controller,
+                        focusNode: _focus,
+                        autofocus: widget.autofocus,
+                        obscureText: widget.obscure,
+                        maxLines: widget.maxLines,
+                        minLines: widget.minLines,
+                        keyboardType: widget.keyboardType,
+                        onSubmitted: widget.onSubmitted,
+                        style: textStyle,
+                        cursorColor: palette.accent,
+                        backgroundCursorColor: palette.inkFaint,
+                        selectionColor: palette.accent.withValues(alpha: 0.28),
+                        cursorWidth: 1.5,
+                        cursorRadius: const Radius.circular(1),
+                        // A password must never be learned, suggested or
+                        // "corrected" by the keyboard.
+                        autocorrect: !widget.obscure,
+                        enableSuggestions: !widget.obscure,
                       ),
                     ),
-                  ),
-              ExcludeSemantics(
-                // The wrapping Semantics node already describes this field;
-                // leaving EditableText's own node in place produces two
-                // announcements for one control.
-                child: EditableText(
-                  controller: _controller,
-                  focusNode: _focus,
-                  autofocus: widget.autofocus,
-                  obscureText: widget.obscure,
-                  maxLines: widget.maxLines,
-                  minLines: widget.minLines,
-                  keyboardType: widget.keyboardType,
-                  onSubmitted: widget.onSubmitted,
-                  style: textStyle,
-                  cursorColor: palette.accent,
-                  backgroundCursorColor: palette.inkFaint,
-                  selectionColor: palette.accent.withValues(alpha: 0.28),
-                  cursorWidth: 1.5,
-                  cursorRadius: const Radius.circular(1),
+                  ],
                 ),
               ),
+              if (widget.trailing case final trailing?) ...[
+                const SizedBox(width: IrisSpace.xs),
+                trailing,
+              ],
             ],
           ),
         ),
@@ -347,6 +369,17 @@ class _IrisFieldState extends State<IrisField> {
     );
   }
 }
+
+/// The fill colour of a gauge or ring at [fill] (0 to 1). Neutral until it
+/// matters, then shading through the working hue to the failure hue: a
+/// meter that reddens from zero trains people to ignore it.
+Color gaugeTint(IrisPalette palette, double fill) => fill < 0.7
+    ? palette.inkMuted
+    : Color.lerp(
+        palette.colorFor(AgentState.working),
+        palette.colorFor(AgentState.failed),
+        ((fill - 0.7) / 0.3).clamp(0.0, 1.0),
+      )!;
 
 /// A fill gauge, for the context window and the cost meter.
 ///
@@ -365,68 +398,139 @@ class IrisGauge extends StatelessWidget {
   /// Fill from 0 to 1.
   final double value;
   final String? label;
-  final double width;
+
+  /// Null stretches the bar to the width it is given.
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final clamped = value.clamp(0.0, 1.0);
-    // Stays neutral until it matters. A gauge that reddens gradually from zero
-    // trains people to ignore it.
-    final tint = clamped < 0.7
-        ? palette.inkMuted
-        : Color.lerp(
-            palette.colorFor(AgentState.working),
-            palette.colorFor(AgentState.failed),
-            ((clamped - 0.7) / 0.3).clamp(0.0, 1.0),
-          )!;
-
+    final bar = SizedBox(
+      width: width,
+      // 6pt, not 4: at 4 the bar reads as a hairline rule rather than as
+      // a measurement, and the fill level is not legible at a glance.
+      height: 6,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.all(IrisRadius.full),
+        child: Stack(
+          children: [
+            Positioned.fill(child: ColoredBox(color: palette.surfaceSunken)),
+            // The fill springs in from empty and to each new value, so a
+            // refresh reads as the meter moving rather than being redrawn.
+            Positioned.fill(
+              child: SpringBuilder(
+                value: clamped,
+                initial: 0,
+                builder: (context, fill, _) {
+                  final shown = fill.clamp(0.0, 1.0);
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: shown,
+                      heightFactor: 1,
+                      child: ColoredBox(color: gaugeTint(palette, shown)),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
     return Semantics(
       label: label == null
           ? '${(clamped * 100).round()} percent'
           : '$label: ${(clamped * 100).round()} percent',
       excludeSemantics: true,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: width == null ? MainAxisSize.max : MainAxisSize.min,
         children: [
           if (label case final label?) ...[
             IrisLabel(label, small: true),
             const SizedBox(width: IrisSpace.sm),
           ],
-          SizedBox(
-            width: width,
-            // 6pt, not 4: at 4 the bar reads as a hairline rule rather than as
-            // a measurement, and the fill level is not legible at a glance.
-            height: 6,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.all(IrisRadius.full),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ColoredBox(color: palette.surfaceSunken),
-                  ),
-                  // Positioned rather than a bare FractionallySizedBox: an
-                  // unpositioned child in a Stack is centre-aligned and a
-                  // ColoredBox has no intrinsic size, so the fill would be
-                  // invisible.
-                  Positioned.fill(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: clamped,
-                        heightFactor: 1,
-                        child: ColoredBox(color: tint),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          if (width == null) Expanded(child: bar) else bar,
         ],
       ),
     );
   }
+}
+
+/// A small ring that fills, for the context window in the composer. A circle
+/// sits well beside the composer's round controls, where a bar would read as
+/// a divider. It tints by the same rule as [IrisGauge].
+class IrisRing extends StatelessWidget {
+  const IrisRing({
+    required this.value,
+    required this.semanticLabel,
+    this.size = 20,
+    super.key,
+  });
+
+  /// Fill from 0 to 1.
+  final double value;
+  final String semanticLabel;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Semantics(
+      label: semanticLabel,
+      excludeSemantics: true,
+      child: SizedBox.square(
+        dimension: size,
+        child: SpringBuilder(
+          value: value.clamp(0.0, 1.0),
+          initial: 0,
+          builder: (context, fill, _) {
+            final shown = fill.clamp(0.0, 1.0);
+            return CustomPaint(
+              painter: _RingPainter(
+                fill: shown,
+                track: palette.surfaceSunken,
+                tint: gaugeTint(palette, shown),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.fill, required this.track, required this.tint});
+
+  final double fill;
+  final Color track;
+  final Color tint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = IrisStroke.ring;
+    final rect = (Offset.zero & size).deflate(stroke / 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+    canvas.drawArc(rect, 0, math.pi * 2, false, paint..color = track);
+    if (fill <= 0) return;
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      math.pi * 2 * fill,
+      false,
+      paint
+        ..color = tint
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.fill != fill || old.track != track || old.tint != tint;
 }
 
 /// The design's on/off toggle: a pill track with a white knob that springs
@@ -484,7 +588,9 @@ class IrisSwitch extends StatelessWidget {
           child: AnimatedAlign(
             // The overshoot in this curve is the point: the knob lands with a
             // small bounce, which is what makes the switch feel physical.
-            duration: reduced ? Duration.zero : const Duration(milliseconds: 350),
+            duration: reduced
+                ? Duration.zero
+                : const Duration(milliseconds: 350),
             curve: const Cubic(0.34, 1.56, 0.64, 1),
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
