@@ -205,4 +205,46 @@ void main() {
       expect(codeSpan(tester, code).children, isNull);
     });
   });
+
+  testWidgets('an alert shows its title and body', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('> [!TIP]\n> Use a cache.')),
+    );
+    expect(find.text('Tip'), findsOneWidget);
+    expect(find.text('Use a cache.'), findsOneWidget);
+    expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
+  });
+
+  testWidgets('footnotes are superscript and listed at the end', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('Fact.[^1]\n\n[^1]: Source.')),
+    );
+    expect(find.textContaining('¹'), findsOneWidget);
+    expect(find.textContaining('Source.'), findsOneWidget);
+    expect(find.textContaining('↩'), findsNothing);
+  });
+
+  testWidgets('sub, sup, kbd and mark are styled', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('H<sub>2</sub>O and <kbd>Esc</kbd>')),
+    );
+    final spans = spansOf(tester, find.textContaining('H'));
+    final two = spans.firstWhere((s) => s.text == '2');
+    expect(two.style?.fontSize, lessThan(16));
+    expect(
+      spans.firstWhere((s) => s.text?.trim() == 'Esc').style?.fontFamily,
+      contains('Mono'),
+    );
+  });
+
+  testWidgets('table cells follow the column alignment', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('| a | b |\n|:-:|--:|\n| 1 | 2 |')),
+    );
+    final aligns = tester
+        .widgetList<Align>(find.byType(Align))
+        .map((a) => a.alignment)
+        .toSet();
+    expect(aligns, containsAll([Alignment.center, Alignment.centerRight]));
+  });
 }

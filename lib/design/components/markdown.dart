@@ -22,6 +22,8 @@ import '../theme/iris_theme.dart';
 import '../tokens/code_colors.dart';
 import '../tokens/metrics.dart';
 import '../tokens/motion.dart';
+import '../tokens/palette.dart';
+import 'markdown_syntax.dart';
 import 'primitives.dart';
 
 class IrisMarkdown extends StatefulWidget {
@@ -68,10 +70,7 @@ class _IrisMarkdownState extends State<IrisMarkdown> {
   @override
   Widget build(BuildContext context) {
     _clearRecognizers();
-    final nodes = md.Document(
-      extensionSet: md.ExtensionSet.gitHubFlavored,
-      encodeHtml: false,
-    ).parse(widget.data);
+    final nodes = irisDocument().parse(widget.data);
     final renderer = _Renderer(
       context.iris,
       widget.onTapLink,
@@ -114,6 +113,8 @@ final class _Renderer {
     'pre',
     'hr',
     'table',
+    'div',
+    'section',
   };
 
   TextStyle get body =>
@@ -157,6 +158,8 @@ final class _Renderer {
         color: theme.palette.line,
       ),
       'table' => table(node),
+      'div' => alert(node),
+      'section' => footnotes(node),
       _ => _rich(inline(node.children, body)),
     };
   }
@@ -241,6 +244,31 @@ final class _Renderer {
             style: style,
           ),
         ];
+      case 'sup' when node.attributes['class'] == 'footnote-ref':
+        return [TextSpan(text: _superscript(node.textContent), style: style)];
+      case 'sub' || 'sup':
+        return inline(
+          node.children,
+          style.copyWith(
+            fontSize: (style.fontSize ?? 16) * 0.72,
+            fontFeatures: [
+              node.tag == 'sub'
+                  ? const FontFeature.subscripts()
+                  : const FontFeature.superscripts(),
+            ],
+          ),
+          link,
+        );
+      case 'kbd':
+        return [
+          TextSpan(text: ' ${node.textContent} ', style: _inlineCode(style)),
+        ];
+      case 'mark':
+        return inline(
+          node.children,
+          style.copyWith(backgroundColor: theme.palette.accentQuiet),
+          link,
+        );
       default:
         return inline(node.children, style, link);
     }
@@ -259,6 +287,120 @@ final class _Renderer {
     recognizers.add(recognizer);
     return recognizer;
   }
+
+  static const _alerts = {
+    'note': ('Note', Icons.info_outline, AgentState.idle),
+    'tip': ('Tip', Icons.lightbulb_outline, AgentState.done),
+    'important': ('Important', Icons.priority_high, AgentState.thinking),
+    'warning': ('Warning', Icons.warning_amber_outlined, AgentState.working),
+    'caution': ('Caution', Icons.dangerous_outlined, AgentState.failed),
+  };
+
+  /// A GitHub alert: `> [!NOTE]` and its kin. Any other `div` draws its
+  /// children as ordinary blocks.
+  Widget alert(md.Element node) {
+    final kind = RegExp(r'markdown-alert-(\w+)')
+        .firstMatch(node.attributes['class'] ?? '')?[1];
+    final style = _alerts[kind];
+    final children = [
+      for (final child in node.children ?? const <md.Node>[])
+        if (child is! md.Element ||
+            child.attributes['class'] != 'markdown-alert-title')
+          child,
+    ];
+    if (style == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: spaced(blocks(children), IrisSpace.sm),
+      );
+    }
+    final (title, icon, state) = style;
+    final color = theme.palette.colorFor(state);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: color, width: IrisStroke.ring)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: IrisSpace.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: IrisSize.iconSmall, color: color),
+                const SizedBox(width: IrisSpace.xs),
+                Text(
+                  title,
+                  style: body.copyWith(color: color, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: IrisSpace.xs),
+            ...spaced(blocks(children), IrisSpace.sm),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The footnotes block GitHub puts at the end: a numbered list, smaller and
+  /// muted, under a hairline. The ↩ back-links go nowhere in an app, so they
+  /// are dropped.
+  Widget footnotes(md.Element node) {
+    final small = body.copyWith(
+      fontSize: (body.fontSize ?? 16) * 0.85,
+      color: theme.palette.inkMuted,
+    );
+    final items = elementsIn(node).where((e) => e.tag == 'li').toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(
+          height: IrisSpace.md,
+          thickness: IrisStroke.hairline,
+          color: theme.palette.line,
+        ),
+        for (final (i, item) in items.indexed)
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: '${i + 1}. ', style: small),
+                ...inline(_withoutBackrefs(item.children), small),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  static Iterable<md.Element> elementsIn(md.Element node) sync* {
+    for (final child in node.children ?? const <md.Node>[]) {
+      if (child is md.Element) {
+        yield child;
+        yield* elementsIn(child);
+      }
+    }
+  }
+
+  /// A footnote's content without its ↩ links. Its paragraph is flattened to
+  /// inline nodes so the number and the text share a line.
+  static List<md.Node> _withoutBackrefs(List<md.Node>? nodes) => [
+    for (final node in nodes ?? const <md.Node>[])
+      if (node is md.Element && node.attributes['class'] == 'footnote-backref')
+        ...const <md.Node>[]
+      else if (node is md.Element && node.tag == 'p')
+        ..._withoutBackrefs(node.children)
+      else
+        node,
+  ];
+
+  static String _superscript(String digits) => digits
+      .split('')
+      .map((d) => const {
+            '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+            '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+          }[d] ?? d)
+      .join();
 
   Widget list(md.Element node) {
     final ordered = node.tag == 'ol';
@@ -374,12 +516,19 @@ final class _Renderer {
                     horizontal: IrisSpace.sm,
                     vertical: IrisSpace.xs,
                   ),
-                  child: _rich(
-                    inline(
-                      cell.children,
-                      cell.tag == 'th'
-                          ? body.copyWith(fontWeight: FontWeight.w600)
-                          : body,
+                  child: Align(
+                    alignment: switch (cell.attributes['align']) {
+                      'center' => Alignment.center,
+                      'right' => Alignment.centerRight,
+                      _ => Alignment.centerLeft,
+                    },
+                    child: _rich(
+                      inline(
+                        cell.children,
+                        cell.tag == 'th'
+                            ? body.copyWith(fontWeight: FontWeight.w600)
+                            : body,
+                      ),
                     ),
                   ),
                 ),
