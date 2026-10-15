@@ -49,10 +49,13 @@ the upload key.
 Iris has not been built for iOS yet; every device check so far was on an Android emulator. It
 needs a Mac or a cloud build service, and an Apple Developer account, to build, sign and upload.
 The project is set up for it: bundle ID, icons, `ITSAppUsesNonExemptEncryption = false` (the app
-only uses standard HTTPS), a camera usage string for QR pairing, and `PrivacyInfo.xcprivacy`
-(no tracking and no data collected).
+only uses standard HTTPS), a Local Network usage string, and `PrivacyInfo.xcprivacy` (no tracking
+and no data collected).
 
 ## Permissions the store forms must match
 
 - **Internet.** To reach the user's own Hermes server.
-- **Camera.** Only for scanning the pairing QR code. Nothing is recorded or stored.
+- **Local network (iOS).** To reach a server on the same Wi-Fi or tailnet.
+- Nothing else: no camera, microphone, location, contacts or notifications. QR pairing was dropped
+  for 1.0 because no screen used it; if it returns, the camera permission and its usage string come
+  back with it, along with the privacy policy and support wording.

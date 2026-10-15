@@ -47,7 +47,6 @@ dependencies:
   go_router: ^17.5.0
   collection: ^1.19.1
   sqlite3: ^3.5.2
-  mobile_scanner: ^7.4.2
   markdown: ^7.3.1
   url_launcher: ^6.3.3
   re_highlight: 0.0.3
