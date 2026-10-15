@@ -1,117 +1,115 @@
 # Iris
 
-A Flutter client for [Hermes Agent](https://github.com/NousResearch/hermes-agent), talking to
-your own Hermes dashboard (the agent's built-in web dashboard, default port 9119).
+[![CI](https://github.com/shreyas-kamat/iris/actions/workflows/ci.yml/badge.svg)](https://github.com/shreyas-kamat/iris/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-The phone is a control plane, not a compute plane. The agent, its tools and your data stay on
-your hardware. Iris connects directly to your server — no relay, no account, no analytics.
+A free, open-source phone app for [Hermes Agent](https://github.com/NousResearch/hermes-agent). It
+talks to your own Hermes dashboard (the agent's built-in web dashboard, default port 9119).
 
-## Status
+The phone is a control plane, not a compute plane. The agent, its tools and your data stay on your
+hardware. Iris connects directly to your server: **no relay, no account, no analytics, no crash
+reporting.** It needs a Hermes dashboard to talk to; it does not include an agent or a hosted service.
+There is an offline demo if you want a look first.
 
-Phases 0 (foundation), 1 (design system) and the dashboard transport are complete: Iris signs
-in (through Cloudflare Access when the dashboard sits behind it), holds a live JSON-RPC
-connection that reconnects by itself, and shows its state. Chat is next.
+## What it does
 
-## The design language
+- **Connect your way.** Same Wi-Fi, Tailscale, or a Cloudflare-protected address. Iris checks the address
+  first and asks only for what it needs: a Cloudflare Access service token, or a username and password.
+  Plain `http` works only for private addresses (LAN, Tailscale, `.local`); anything on the internet must
+  use `https`.
+- **Chat.** Streaming replies with Markdown, code highlighting, visible reasoning and tool calls.
+  Approve or deny commands, answer `sudo` and secret prompts, steer a running turn, stop it, retry a
+  failed one.
+- **Conversations.** A paged list with a search field (local matches at once, the server's full-text hits
+  after), rename, archive with undo, and an Archived view.
+- **Profiles and usage.** Switch between the server's agent profiles; see how much of a provider's quota
+  is used on the home screen.
+- **Look and feel.** Ten skins, light and dark, honours reduced motion and large text, touch targets of at
+  least 44 points. See [`docs/design-language.md`](docs/design-language.md).
+- **Try the demo.** From the first screen, with no server and no network: sample conversations and four
+  scripted turns that show tool calls, approvals, the sudo prompt, a failed turn and retry. Nothing from it
+  is saved.
 
-**Aperture.** Iris is the Greek messenger who travels on light — Hermes' counterpart, which is
-exactly this app's relationship to the server it talks to. The agent works on a machine in another
-room; this is the opening you watch it through.
+## Privacy and security in brief
 
-- **Colour is state, not decoration.** The accent hue names what the agent is doing — thinking is
-  cool, tools run warm, an approval gate is hot enough to stop your thumb. You should know a run's
-  state before reading a word. Every colour is derived in OKLCH so ramps step evenly across all ten
-  skins instead of going muddy in some hues; `lib/design/tokens/oklch.dart` does the conversion and
-  fits out-of-gamut colours by reducing chroma rather than clipping channels.
-- **Mono is the interface's own voice.** Section labels, tool names, timestamps, counts and paths
-  are set in Geist Mono, small and tracked; prose is Geist. Nearly everything the app says on its
-  own behalf is machine fact, and setting it apart means you can tell what the agent *said* from
-  what the app is *reporting* without reading either.
-- **Boldness is spent in one place.** The aperture (`design/components/aperture.dart`) is the only
-  element allowed continuous motion. It answers the three questions the whole app exists for — is
-  it alive, what is it doing, does it need me — in one 26pt mark, through hue, dilation and motion
-  simultaneously, so it stays legible to someone who cannot separate the colours.
-- **Everything moves on a spring.** Duration curves restart when interrupted; springs carry their
-  velocity into the new target. On a phone, where every gesture is interrupted, that is the
-  difference between software and an object. Reduced-motion is honoured throughout.
+- Passwords and access tokens are kept in the platform keystore (Android Keystore, iOS Keychain), never in
+  the app's database or logs.
+- Iris sends your messages to the server you entered, and nowhere else. Conversations are held in memory
+  while you read them; they are not copied into Iris's own storage.
+- A self-signed certificate is trusted only if you choose to, and only for that one server.
+- Links in a reply open in your browser, and only `http`, `https` and `mailto` links open at all.
+- Android backup is off, so saved server addresses and settings are not copied to cloud backups.
+
+The full policy is in [`SECURITY.md`](SECURITY.md); the user-facing privacy policy is at
+<https://iris.shreyaskamat.in/privacy-policy>.
+
+## Getting started
+
+You need a running Hermes dashboard, or use **Try the demo** on the first screen. Pick how your phone
+reaches the server and enter its address, usually on port 9119.
+
+If the dashboard is behind **Cloudflare Access**, Iris needs a service token (Zero Trust, Access,
+Service credentials) and a *Service Auth* policy for it on the application. Iris sends it as
+`CF-Access-Client-Id` and `CF-Access-Client-Secret`, over HTTPS only.
+
+## Building from source
+
+Requirements: Flutter 3.41 (Dart 3.11) and, for Android, the Android SDK.
+
+```sh
+flutter pub get
+dart run build_runner build      # Drift code generation; rerun after editing lib/data/db/database.dart
+flutter analyze                  # must report no issues
+flutter test
+flutter run
+```
+
+Release builds, signing and store assets are covered in [`docs/release.md`](docs/release.md). iOS has not
+been built or run yet; the project is set up for it but needs a Mac.
+
+The golden-image tests were generated on Windows. If you work on another platform and a golden differs
+only in text rendering, say so in your pull request rather than regenerating every image.
+
+Tests in `test/live/` talk to a real server and are skipped by default. They read connection details from
+`~/.iris-live.json`, which lives outside the repository and must never be committed.
 
 ## Architecture
 
 ```
 lib/
+  app/        providers, preferences, theme controller
   core/       Result / IrisFailure, tolerant JSON, redacting logger
-  design/     tokens, theme, components, motion, platform adapters
   data/
-    net/      dio client, failure translation, capability probe
+    net/      dio client, auth, capability probe, connection modes, private-address rules
     rpc/      JSON-RPC over WebSocket: frames, client, live session
-    db/       Drift schema — offline mirror and durable outbox
-    models/   wire models, hand-decoded through Json
-  features/   one folder per screen
-  services/   notifications, live activity, voice, share intake
+    chat/     the ChatBackend interface, events, models, parsers
+    db/       Drift schema
+    prefs/    saved choices
+  demo/       an in-memory stand-in for a Hermes server, behind the same ChatBackend
+  design/     tokens, theme, components, motion, platform adapters
+  features/   chat, home, servers, settings, design gallery
 ```
 
-`features/` talks only to repositories. Repositories return `Result<T>` and never throw.
+`features/` talks to repositories and to the `ChatBackend` interface. Repositories return `Result<T>` and
+do not throw. The demo plugs in at that interface, so no screen knows whether it is talking to a server.
+More on the reasoning behind the design is in [`docs/design-language.md`](docs/design-language.md); the
+design specs and implementation plans for each phase are in [`docs/superpowers/`](docs/superpowers/).
 
-### Three load-bearing decisions
+## Contributing
 
-**Tolerant decoding.** The Hermes dashboard ships fast and every user runs a different build, so no wire
-field is trusted to exist or to have the type it had last week. Everything is read through
-`core/json.dart`, which never throws and coerces across the representations the server actually
-uses. An unknown SSE event becomes `UnknownEvent` and renders as a labelled chip rather than
-crashing the transcript.
-
-**Capability probing, not version pinning.** Features are gated on whether an endpoint answers,
-not on a version string — version numbers lie about backported and locally-patched builds, and
-pinning would let an app update declare a user's own machine unsupported.
-
-**Reconnection is normal.** A phone loses its connection constantly while the agent keeps working.
-`DashboardSession` mints a fresh single-use ticket and reopens the socket with backoff,
-signing in again first if the session cookie expired. An access-proxy refusal or an untrusted
-certificate stops it instead, because retrying cannot fix either.
-
-## What the design system guarantees
-
-These are asserted by tests, not by intention. Each one failed at least once before it held.
-
-- **Contrast.** Every foreground/background pair in all ten skins in both appearances is measured
-  against WCAG AA (`test/design/contrast_test.dart`, 13 assertions across 20 palettes). This caught
-  placeholder text sitting at 2.84:1, below even the large-text floor.
-- **Touch targets.** Anything tappable reserves at least 44pt in both axes, without changing how it
-  looks. Non-interactive chips are not padded out.
-- **Text scaling.** The whole gallery renders without overflow at 200% text, in portrait and in
-  landscape. Buttons grow rather than clipping their labels; tracked mono labels stop scaling at
-  1.6x, where they would otherwise wrap mid-word.
-- **Insets.** The composer rises above the keyboard and sits above the home indicator, never both.
-  Headers clear the notch. Scroll views end above the home bar.
-- **Screen readers.** Fields announce what they are for rather than only their contents; errors are
-  live regions so they are spoken when they appear.
-- **Windows.** Portrait, landscape, and a 320pt iPhone SE all render without overflow. Size classes
-  are separate for width and height, because a phone in landscape has plenty of width and almost no
-  height.
-- **Reduced motion.** Honoured everywhere, including the aperture's ambient animation, which stops
-  rather than slowing.
-
-## Development
-
-```sh
-flutter pub get
-dart run build_runner build      # Drift codegen
-flutter analyze                  # must be clean
-flutter test
-flutter run
-```
-
-Regenerate after touching `lib/data/db/database.dart`.
+Contributions are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first, and please follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). To report a vulnerability, see [`SECURITY.md`](SECURITY.md); do not
+open a public issue for it.
 
 ## Environment notes
 
-- **`compileSdk` is pinned to 36** in `android/app/build.gradle.kts`. Flutter defaults to 37, but
-  this SDK installs the minor-versioned `android-37.0` platform, which AGP 8.11 cannot match
-  against the plain `android-37` hash it looks for. `flutter_secure_storage` warns that it was
-  compiled against 37; the build and app work at 36. Resolving it properly means AGP 8.13+ and
-  `compileSdkMinor`, which is a separate upgrade.
-- **The application ID is `com.iflotech.iris`** on Android and iOS, and is permanent once
-  published. Signing, build and store-asset notes are in [`docs/release.md`](docs/release.md).
-- **Cloudflare Access.** A dashboard published behind Access needs a service token (Zero Trust
-  → Access → Service credentials) and a *Service Auth* policy on the application. Iris sends it
-  as `CF-Access-Client-Id` / `CF-Access-Client-Secret`, over HTTPS only.
+- **`compileSdk` is pinned to 36** in `android/app/build.gradle.kts`. Flutter defaults to 37, but this SDK
+  installs the minor-versioned `android-37.0` platform, which AGP 8.11 cannot match against the plain
+  `android-37` hash it looks for. `flutter_secure_storage` warns that it was compiled against 37; the build
+  and app work at 36. Resolving it properly means AGP 8.13+ and `compileSdkMinor`, a separate upgrade.
+- **The application ID is `com.iflotech.iris`** on Android and iOS.
+
+## License
+
+Iris is released under the [Apache License 2.0](LICENSE). Copyright 2026 Shreyas Kamat. Bundled fonts
+(Geist, Geist Mono, Instrument Serif) are under the SIL Open Font License; see [`NOTICE`](NOTICE).
