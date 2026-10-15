@@ -68,6 +68,10 @@ final class FakeChatBackend implements ChatBackend {
   final List<(String, String)> renames = [];
   final List<(String, bool)> archives = [];
 
+  /// Called as each archive or unarchive is accepted, so a test can keep a
+  /// server-side list in step with it.
+  void Function(String storedId, {required bool archived})? onArchived;
+
   /// Queries searched, in order.
   final List<String> searches = [];
 
@@ -226,6 +230,7 @@ final class FakeChatBackend implements ChatBackend {
     required bool archived,
   }) async {
     archives.add((storedId, archived));
+    if (archiveResult is Ok) onArchived?.call(storedId, archived: archived);
     return archiveResult;
   }
 

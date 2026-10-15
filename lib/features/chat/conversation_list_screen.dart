@@ -235,7 +235,15 @@ class _ConversationListScreenState
         context,
         message: 'Could not undo: ${ChatController.describe(failure)}',
       );
+      return;
     }
+    // A refresh since the archive dropped the row from the list, so there is
+    // nothing on screen to bring back: ask the server again.
+    final listed = [
+      ...?ref.read(conversationsProvider).value?.items,
+      ..._more,
+    ].any((row) => row.id == id);
+    if (!listed) ref.invalidate(conversationsProvider);
   }
 
   Future<void> _openArchived(ChatBackend chat) async {
@@ -252,14 +260,21 @@ class _ConversationListScreenState
     if (!mounted) return;
     setState(() {
       _loadingMore = false;
-      if (page case Ok(:final value)) _more.addAll(value.items);
+      if (page case Ok(:final value)) {
+        // The pages can overlap when the list changed between them.
+        final have = {for (final row in _more) row.id};
+        _more.addAll(value.items.where((row) => !have.contains(row.id)));
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     // A refreshed first page starts the list over.
-    ref.listen(conversationsProvider, (_, _) {
+    ref.listen(conversationsProvider, (_, next) {
+      // While it loads, the old rows are still on screen: keep what was
+      // archived or renamed so they do not flicker back.
+      if (next.isLoading) return;
       _more.clear();
       _titles.clear();
       _gone.clear();
@@ -323,7 +338,9 @@ class _ConversationListScreenState
                       linkState: linkState,
                       headline: headline,
                       host: server == null ? '' : _hostOf(server.baseUrl),
-                      total: conversations.value?.total,
+                      total: conversations.value == null
+                          ? null
+                          : conversations.value!.total - _gone.length,
                       now: now,
                       onGateway: openGateway,
                     ),
@@ -1003,7 +1020,13 @@ class _ConversationList extends StatelessWidget {
                 label: 'Show more',
                 tone: IrisButtonTone.ghost,
                 busy: loadingMore,
-                onPressed: next == null ? null : () => next(list.length),
+                // The server no longer counts what was archived here.
+                onPressed: next == null
+                    ? null
+                    : () => next(
+                        list.length -
+                            list.where((row) => gone.contains(row.id)).length,
+                      ),
               ),
             ),
           ),
@@ -1041,7 +1064,22 @@ class _ConversationList extends StatelessWidget {
     final type = context.type;
     final hits = serverHits?.value;
     final failed = serverHits?.hasError ?? false;
-    final local = localMatches(list, search.text);
+    // What was archived or renamed here counts, ahead of the server's view.
+    final local = localMatches([
+      for (final row in list)
+        if (!gone.contains(row.id))
+          if (titles[row.id] case final title?)
+            ConversationSummary(
+              id: row.id,
+              title: title,
+              startedAt: row.startedAt,
+              messageCount: row.messageCount,
+              source: row.source,
+              profile: row.profile,
+            )
+          else
+            row,
+    ], search.text);
     final rows = hits == null
         ? <Widget>[
             for (final conversation in local)
@@ -1049,28 +1087,46 @@ class _ConversationList extends StatelessWidget {
                 key: ValueKey('local-${conversation.id}'),
                 padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
                 child: ConversationRow(
-                  title: titles[conversation.id] ?? conversation.title,
+                  title: conversation.title,
                   subtitle: _subtitle(conversation, now),
                   onTap: open == null ? null : () => open(conversation),
                 ),
               ),
           ]
         : <Widget>[
-            for (final hit in hits.where((hit) => !hit.archived))
-              Padding(
-                key: ValueKey('hit-${hit.storedId}'),
-                padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
-                child: SearchHitRow(
-                  hit: hit,
-                  onTap: open == null
-                      ? null
-                      : () => open(
-                          ConversationSummary(
-                            id: hit.storedId,
-                            title: hit.title,
-                          ),
-                        ),
-                ),
+            for (final found in hits.where(
+              (hit) => !hit.archived && !gone.contains(hit.storedId),
+            ))
+              Builder(
+                key: ValueKey('hit-${found.storedId}'),
+                builder: (context) {
+                  final title = titles[found.storedId] ?? found.title;
+                  return Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      0,
+                      gutter,
+                      IrisSpace.xs,
+                    ),
+                    child: SearchHitRow(
+                      hit: SearchHit(
+                        storedId: found.storedId,
+                        title: title,
+                        snippet: found.snippet,
+                        lastActive: found.lastActive,
+                        messageCount: found.messageCount,
+                      ),
+                      onTap: open == null
+                          ? null
+                          : () => open(
+                              ConversationSummary(
+                                id: found.storedId,
+                                title: title,
+                              ),
+                            ),
+                    ),
+                  );
+                },
               ),
           ];
     final settled = hits != null || failed;
