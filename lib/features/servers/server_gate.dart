@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../data/net/connection_mode.dart';
 import '../../data/net/server_config.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
@@ -37,7 +38,8 @@ class ServerGate extends ConsumerWidget {
       // retrying, so it says what happened rather than spinning.
       error: (error, _) => _Unrecoverable(detail: '$error'),
       data: (list) {
-        if (list.isEmpty) return const ConnectScreen();
+        if (list.isEmpty)
+          return const ConnectScreen(mode: ConnectionMode.cloudflare);
 
         // Deferred: selecting during build would mutate a provider mid-frame.
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -116,10 +118,9 @@ class _ChooseServer extends ConsumerWidget {
                 child: IrisListRow(
                   title: server.label,
                   subtitle: server.baseUrl,
-                  onTap: () =>
-                      ref.read(activeServerIdProvider.notifier).select(
-                        server.id,
-                      ),
+                  onTap: () => ref
+                      .read(activeServerIdProvider.notifier)
+                      .select(server.id),
                 ),
               ),
             const SizedBox(height: IrisSpace.lg),
@@ -127,7 +128,8 @@ class _ChooseServer extends ConsumerWidget {
               label: 'Add another',
               onPressed: () => Navigator.of(context).push<void>(
                 PageRouteBuilder<void>(
-                  pageBuilder: (context, _, _) => const ConnectScreen(),
+                  pageBuilder: (context, _, _) =>
+                      const ConnectScreen(mode: ConnectionMode.cloudflare),
                 ),
               ),
             ),

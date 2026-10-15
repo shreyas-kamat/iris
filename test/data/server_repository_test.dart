@@ -62,8 +62,9 @@ void main() {
             requiresPassword: Value(requiresPassword),
           ),
         );
-    if (password != null)
+    if (password != null) {
       await credentials.write(id, ServerSecrets(password: password));
+    }
     return id;
   }
 

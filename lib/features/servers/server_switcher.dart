@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../data/net/connection_mode.dart';
 import '../../data/net/server_config.dart';
 import '../../data/repositories/server_repository.dart';
 import '../../design/components/controls.dart';
@@ -82,6 +83,7 @@ class _ServerSwitcherSheet extends ConsumerWidget {
     await navigator.push<void>(
       PageRouteBuilder<void>(
         pageBuilder: (context, _, _) => ConnectScreen(
+          mode: ConnectionMode.cloudflare,
           onConnected: (_) => Navigator.of(context).popUntil((r) => r.isFirst),
         ),
       ),
