@@ -32,5 +32,5 @@ the real server (Hermes, model `gpt-6.1-sol`). Screenshots are in `2026-10-15-ph
 2. **Open: a loaded image goes back to its placeholder** once a later message arrives and the list rebuilds
    (`02-…` and `04-…` show the placeholder again after the tap in `03-…`). Tap to load works, but the loaded state
    isn't kept.
-3. The composer shows a small spinner beside the model chip after a turn finishes. It was already there in earlier
-   builds and isn't from this phase.
+3. The composer shows a small spinner beside the model chip after a turn finishes. It was there in every screenshot; I haven't checked whether
+   it predates this phase. Worth a look.
