@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/design/components/markdown.dart';
 import 'package:iris/design/components/markdown_image.dart';
+import 'package:iris/design/components/math.dart';
 
 import '../support/harness.dart';
 
@@ -300,5 +301,37 @@ void main() {
       themed(const IrisMarkdown('![x](file:///etc/passwd)')),
     );
     expect(find.byType(MarkdownImage), findsNothing);
+  });
+
+  testWidgets('maths renders as maths, inline and display', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('Area \$\\pi r^2\$.\n\n\$\$\nE=mc^2\n\$\$')),
+    );
+    expect(find.byType(IrisMath), findsNWidgets(2));
+    expect(find.text(r'\pi r^2'), findsNothing);
+  });
+
+  testWidgets('TeX that does not parse shows its source', (tester) async {
+    await tester.pumpWidget(themed(const IrisMarkdown(r'$\frac{a}{$')));
+    expect(find.textContaining(r'\frac{a}{'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('physics, units and chemistry lay out, not fall back', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown(r'$\dv{f}{x}$ and $\ce{H2O}$ and $\SI{3}{m}$')),
+    );
+    expect(find.byType(IrisMath), findsNWidgets(3));
+    expect(find.textContaining(r'\dv'), findsNothing);
+    expect(find.textContaining(r'\ce'), findsNothing);
+    expect(find.textContaining(r'\SI'), findsNothing);
+  });
+
+  testWidgets('a math fence is maths, a latex fence is code', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('```math\nx^2\n```\n\n```latex\nx^2\n```')),
+    );
+    expect(find.byType(IrisMath), findsOneWidget);
+    expect(find.text('latex'), findsOneWidget);
   });
 }
