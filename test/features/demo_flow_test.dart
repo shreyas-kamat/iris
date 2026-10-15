@@ -123,7 +123,7 @@ void main() {
     expect(find.byType(LinkStatusScreen), findsOneWidget);
     await tester.tap(find.text('Demo').last);
     await settle(tester);
-    expect(find.text('Add server'), findsNothing);
+    expect(find.text('Add a server'), findsNothing);
     handle.dispose();
   });
 }
