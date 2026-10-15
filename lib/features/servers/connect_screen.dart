@@ -20,8 +20,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/failure.dart';
 import '../../core/result.dart';
+import '../../data/net/connection_mode.dart';
 import '../../data/net/credentials.dart';
 import '../../data/net/dashboard_auth.dart';
+import '../../data/net/private_host.dart';
 import '../../data/net/server_config.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
@@ -31,6 +33,7 @@ import '../../design/platform/iris_scaffold.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
+import 'connection_mode_copy.dart';
 
 /// Where the flow is.
 enum _Step {
@@ -51,7 +54,10 @@ enum _Step {
 }
 
 class ConnectScreen extends ConsumerStatefulWidget {
-  const ConnectScreen({this.onConnected, super.key});
+  const ConnectScreen({required this.mode, this.onConnected, super.key});
+
+  /// How the user said they reach the server; it changes the wording only.
+  final ConnectionMode mode;
 
   /// Called once a server is saved and reachable.
   final ValueChanged<ServerConfig>? onConnected;
@@ -88,6 +94,23 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     super.dispose();
   }
 
+  /// The address to use, with the scheme this mode implies for a bare one.
+  String get _addressText => addressFor(_address.text, widget.mode);
+
+  /// Refuses plain http to anything but a private address. True if refused.
+  bool _refusedPlainHttp() {
+    final uri = Uri.tryParse(_addressText);
+    if (uri == null || plainHttpAllowed(uri)) return false;
+    setState(() {
+      _step = _Step.address;
+      _failure = const IrisFailure(
+        FailureKind.rejected,
+        message: 'Use https for an address on the internet.',
+      );
+    });
+    return true;
+  }
+
   bool get _busy => _step == _Step.probing || _step == _Step.joining;
 
   static String? _text(TextEditingController controller) {
@@ -105,6 +128,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   );
 
   Future<void> _probe() async {
+    if (_refusedPlainHttp()) return;
     setState(() {
       _step = _Step.probing;
       _failure = null;
@@ -113,7 +137,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     final probe = await ref
         .read(serverRepositoryProvider)
         .testConnection(
-          _address.text,
+          _addressText,
           allowSelfSigned: _allowSelfSigned,
           secrets: _secrets,
         );
@@ -173,10 +197,11 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     final result = await ref
         .read(serverRepositoryProvider)
         .addServer(
-          baseUrl: _address.text,
+          baseUrl: _addressText,
           label: _label.text,
           secrets: _secrets,
           allowSelfSigned: _allowSelfSigned,
+          mode: widget.mode,
         );
     if (!mounted) return;
 
@@ -210,15 +235,36 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: window.isCramped ? IrisSpace.lg : IrisSpace.huge),
-              IrisOrb(
-                state: switch (_step) {
-                  _Step.address => AgentState.idle,
-                  _Step.probing => AgentState.thinking,
-                  _Step.accessToken || _Step.login => AgentState.waiting,
-                  _Step.joining => AgentState.working,
-                },
-                size: 40,
+              SizedBox(
+                height: window.isCramped ? IrisSpace.lg : IrisSpace.huge,
+              ),
+              Row(
+                children: [
+                  IrisOrb(
+                    state: switch (_step) {
+                      _Step.address => AgentState.idle,
+                      _Step.probing => AgentState.thinking,
+                      _Step.accessToken || _Step.login => AgentState.waiting,
+                      _Step.joining => AgentState.working,
+                    },
+                    size: 40,
+                  ),
+                  const Spacer(),
+                  IrisChip(widget.mode.title),
+                  const SizedBox(width: IrisSpace.xs),
+                  Semantics(
+                    label: 'Change how you connect',
+                    button: true,
+                    excludeSemantics: true,
+                    child: IrisButton(
+                      label: 'Change',
+                      tone: IrisButtonTone.ghost,
+                      onPressed: _busy
+                          ? null
+                          : () => unawaited(Navigator.of(context).maybePop()),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: IrisSpace.lg),
               Text('Connect to your agent', style: theme.typography.display),
@@ -258,7 +304,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     label: 'Server address',
     controller: _address,
     mono: true,
-    hint: 'https://hermes.example.com',
+    hint: widget.mode.example,
     keyboardType: TextInputType.url,
     autofocus: autofocus,
     onSubmitted: autofocus ? (_) => _probe() : null,
@@ -268,7 +314,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     _Step.address || _Step.probing => [
       _addressField(autofocus: true),
       const SizedBox(height: IrisSpace.md),
-      _AddressHint(allowSelfSigned: _allowSelfSigned),
+      _AddressHint(allowSelfSigned: _allowSelfSigned, help: widget.mode.help),
     ],
     // The address stays visible and editable on later steps, because "wrong
     // token" and "right token, wrong server" look identical from here.
@@ -359,9 +405,10 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
 /// Written to answer the question people actually have at this moment, which is
 /// "what do I type", not "what is a reverse proxy".
 class _AddressHint extends StatelessWidget {
-  const _AddressHint({required this.allowSelfSigned});
+  const _AddressHint({required this.allowSelfSigned, required this.help});
 
   final bool allowSelfSigned;
+  final String help;
 
   @override
   Widget build(BuildContext context) {
@@ -370,9 +417,7 @@ class _AddressHint extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Use the address of the Hermes dashboard: the one you open in a '
-          'browser, usually on port 9119. A tunnel, Tailscale or a local '
-          'address on the same network all work.',
+          help,
           style: theme.typography.caption.copyWith(
             color: theme.palette.inkMuted,
           ),
@@ -452,7 +497,8 @@ class _FailureNote extends StatelessWidget {
           const SizedBox(height: IrisSpace.sm),
           Text(detail, style: theme.typography.body),
           if (failure.message case final message?
-              when failure.kind != FailureKind.unknown && message != detail) ...[
+              when failure.kind != FailureKind.unknown &&
+                  message != detail) ...[
             const SizedBox(height: IrisSpace.sm),
             Text(
               message,

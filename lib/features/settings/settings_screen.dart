@@ -16,6 +16,7 @@ import '../../app/usage.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/net/capabilities.dart';
 import '../../data/rpc/dashboard_session.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -177,26 +178,38 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 22),
-            IrisSettingsGroup(
-              title: 'Server',
-              children: [
-                IrisSettingsRow(
-                  label: 'Servers',
-                  value: server?.label ?? 'None',
-                  onTap: () => unawaited(showServerSwitcher(context)),
-                ),
-                IrisSettingsRow(
-                  label: 'Connection details',
-                  onTap: () => unawaited(
-                    Navigator.of(context).push(
-                      IrisPageRoute<void>(
-                        builder: (_) => const LinkStatusScreen(),
+            if (ref.watch(demoModeProvider))
+              IrisSettingsGroup(
+                title: 'Demo',
+                children: [
+                  IrisSettingsRow(
+                    label: 'Leave demo',
+                    sub: 'Connect your own Hermes server',
+                    onTap: () => leaveDemo(context),
+                  ),
+                ],
+              )
+            else
+              IrisSettingsGroup(
+                title: 'Server',
+                children: [
+                  IrisSettingsRow(
+                    label: 'Servers',
+                    value: server?.label ?? 'None',
+                    onTap: () => unawaited(showServerSwitcher(context)),
+                  ),
+                  IrisSettingsRow(
+                    label: 'Connection details',
+                    onTap: () => unawaited(
+                      Navigator.of(context).push(
+                        IrisPageRoute<void>(
+                          builder: (_) => const LinkStatusScreen(),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),

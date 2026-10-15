@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../data/net/server_config.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -19,7 +20,7 @@ import '../../design/platform/iris_scaffold.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
-import 'connect_screen.dart';
+import 'welcome_screen.dart';
 
 class ServerGate extends ConsumerWidget {
   const ServerGate({required this.connected, super.key});
@@ -29,6 +30,7 @@ class ServerGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(demoModeProvider)) return connected(context);
     final servers = ref.watch(serversProvider);
 
     return servers.when(
@@ -37,7 +39,9 @@ class ServerGate extends ConsumerWidget {
       // retrying, so it says what happened rather than spinning.
       error: (error, _) => _Unrecoverable(detail: '$error'),
       data: (list) {
-        if (list.isEmpty) return const ConnectScreen();
+        if (list.isEmpty) {
+          return const WelcomeScreen();
+        }
 
         // Deferred: selecting during build would mutate a provider mid-frame.
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -116,10 +120,9 @@ class _ChooseServer extends ConsumerWidget {
                 child: IrisListRow(
                   title: server.label,
                   subtitle: server.baseUrl,
-                  onTap: () =>
-                      ref.read(activeServerIdProvider.notifier).select(
-                        server.id,
-                      ),
+                  onTap: () => ref
+                      .read(activeServerIdProvider.notifier)
+                      .select(server.id),
                 ),
               ),
             const SizedBox(height: IrisSpace.lg),
@@ -127,7 +130,8 @@ class _ChooseServer extends ConsumerWidget {
               label: 'Add another',
               onPressed: () => Navigator.of(context).push<void>(
                 PageRouteBuilder<void>(
-                  pageBuilder: (context, _, _) => const ConnectScreen(),
+                  pageBuilder: (context, _, _) =>
+                      const WelcomeScreen(showDemo: false),
                 ),
               ),
             ),

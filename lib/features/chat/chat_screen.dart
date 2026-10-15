@@ -51,6 +51,7 @@ class ChatScreen extends StatefulWidget {
     this.conversationId,
     this.title,
     this.archived = false,
+    this.suggestions,
     super.key,
   });
 
@@ -63,6 +64,9 @@ class ChatScreen extends StatefulWidget {
   /// The conversation is archived. Sending in it first asks to bring it back,
   /// so a reply never lands somewhere the person cannot find it.
   final bool archived;
+
+  /// What a new chat offers to ask; the general suggestions when null.
+  final List<String>? suggestions;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -288,7 +292,10 @@ class _ChatScreenState extends State<ChatScreen> {
       case ChatPhase.ready:
         final items = state.items;
         if (items.isEmpty) {
-          return _EmptyConversation(onSuggestion: _sendSuggestion);
+          return _EmptyConversation(
+            onSuggestion: _sendSuggestion,
+            suggestions: widget.suggestions ?? _suggestions,
+          );
         }
         final hasEarlier = state.earlier != null;
         final liveState = agentStateFor(state.turn);
@@ -355,7 +362,6 @@ class _ChatHeader extends StatelessWidget {
   /// True while the conversation is being opened, before any turn exists.
   final bool connecting;
 
-
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
@@ -419,9 +425,13 @@ class _ChatHeader extends StatelessWidget {
 
 /// A new conversation: the orb, a prompt, and three things to ask.
 class _EmptyConversation extends StatelessWidget {
-  const _EmptyConversation({required this.onSuggestion});
+  const _EmptyConversation({
+    required this.onSuggestion,
+    required this.suggestions,
+  });
 
   final ValueChanged<String> onSuggestion;
+  final List<String> suggestions;
 
   @override
   Widget build(BuildContext context) {
@@ -441,7 +451,7 @@ class _EmptyConversation extends StatelessWidget {
               style: type.serif.copyWith(fontSize: 30, height: 1.1),
             ),
             const SizedBox(height: IrisSpace.sm),
-            for (final text in _suggestions)
+            for (final text in suggestions)
               Padding(
                 padding: const EdgeInsets.only(top: IrisSpace.sm),
                 child: IrisPressable(

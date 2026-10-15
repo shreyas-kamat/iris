@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/data/db/database.dart';
+import 'package:iris/data/net/connection_mode.dart';
 import 'package:iris/data/net/server_connection.dart';
 import 'package:iris/data/repositories/server_repository.dart';
 import 'package:iris/design/theme/iris_theme.dart';
@@ -37,7 +38,7 @@ void main() {
     await db.close();
   });
 
-  Widget harness() {
+  Widget harness({ConnectionMode mode = ConnectionMode.cloudflare}) {
     final theme = IrisThemeData(skin: IrisSkin.aperture, isDark: true);
     return ProviderScope(
       overrides: [
@@ -53,7 +54,10 @@ void main() {
           theme: theme.materialTheme,
           home: Material(
             type: MaterialType.transparency,
-            child: IrisTheme(data: theme, child: const ConnectScreen()),
+            child: IrisTheme(
+              data: theme,
+              child: ConnectScreen(mode: mode),
+            ),
           ),
         ),
       ),
@@ -68,6 +72,85 @@ void main() {
     });
     await tester.pump();
   }
+
+  testWidgets('each mode shows its own example and help', (tester) async {
+    await tester.pumpWidget(harness(mode: ConnectionMode.lan));
+    expect(find.text('SAME WI-FI'), findsOneWidget);
+    expect(find.text('http://192.168.1.20:9119'), findsOneWidget);
+    expect(find.textContaining('ip addr'), findsOneWidget);
+
+    await tester.pumpWidget(harness(mode: ConnectionMode.tailscale));
+    expect(find.text('http://100.101.102.103:9119'), findsOneWidget);
+    expect(find.textContaining('Tailscale app'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a public address over plain http is refused before any request',
+    (tester) async {
+      await tester.pumpWidget(harness(mode: ConnectionMode.lan));
+      await submitAddress(tester, 'http://hermes.example.com');
+      expect(
+        find.text('Use https for an address on the internet.'),
+        findsOneWidget,
+      );
+      expect(http.requests, isEmpty);
+    },
+  );
+
+  testWidgets('a bare LAN address goes out over http', (tester) async {
+    await tester.pumpWidget(harness(mode: ConnectionMode.lan));
+    await submitAddress(tester, '192.168.1.20:9119');
+    expect(http.requests, isNotEmpty);
+    expect(http.requests.first.uri.scheme, 'http');
+    expect(http.requests.first.uri.host, '192.168.1.20');
+  });
+
+  testWidgets('Change goes back', (tester) async {
+    final theme = IrisThemeData(skin: IrisSkin.aperture, isDark: true);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          serverRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(390, 844),
+            disableAnimations: true,
+          ),
+          child: MaterialApp(
+            theme: theme.materialTheme,
+            builder: (context, navigator) => IrisTheme(
+              data: theme,
+              child: Material(
+                type: MaterialType.transparency,
+                child: navigator,
+              ),
+            ),
+            home: Builder(
+              builder: (context) => Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const ConnectScreen(mode: ConnectionMode.lan),
+                    ),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConnectScreen), findsOneWidget);
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ConnectScreen), findsNothing);
+  });
 
   testWidgets('an access-gated address asks for a service token', (
     tester,

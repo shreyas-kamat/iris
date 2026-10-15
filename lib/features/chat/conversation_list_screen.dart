@@ -22,6 +22,8 @@ import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/rpc/dashboard_session.dart';
+import '../../demo/demo_content.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -161,6 +163,9 @@ class _ConversationListScreenState
     await Navigator.of(context).push(
       IrisPageRoute<void>(
         builder: (_) => ChatScreen(
+          suggestions: ref.read(demoModeProvider)
+              ? [for (final script in demoScripts) script.prompt]
+              : null,
           backend: chat,
           conversationId: conversation?.id,
           title: conversation?.title,
@@ -168,10 +173,16 @@ class _ConversationListScreenState
       ),
     );
     if (!mounted) return;
-    // A send may have created a conversation or retitled one.
-    ref
-      ..invalidate(conversationsProvider)
-      ..invalidate(usageOptionsProvider);
+    // A send may have created a conversation or retitled one. A frame later:
+    // the home screen is revealed in the next build, and invalidating just
+    // before it makes the usage rows rebuild mid-build, which Riverpod asserts
+    // against.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+        ..invalidate(conversationsProvider)
+        ..invalidate(usageOptionsProvider);
+    });
   }
 
   Future<void> _actions(
@@ -302,6 +313,7 @@ class _ConversationListScreenState
 
     return IrisScaffold(
       header: _HomeBar(
+        demo: ref.watch(demoModeProvider),
         collapse: _collapse,
         profile: profile,
         // The pill only opens something when there is a choice to make.
@@ -411,6 +423,7 @@ class _ConversationListScreenState
 /// connection stays in view.
 class _HomeBar extends StatelessWidget {
   const _HomeBar({
+    required this.demo,
     required this.collapse,
     required this.profile,
     required this.onProfile,
@@ -428,6 +441,9 @@ class _HomeBar extends StatelessWidget {
   final AgentState linkState;
   final String headline;
   final VoidCallback onGateway;
+
+  /// Whether this is the demo, which is marked beside the profile.
+  final bool demo;
 
   @override
   Widget build(BuildContext context) {
@@ -465,6 +481,10 @@ class _HomeBar extends StatelessWidget {
             child: Row(
               children: [
                 pill,
+                if (demo) ...[
+                  const SizedBox(width: IrisSpace.sm),
+                  IrisChip.state('Demo', AgentState.waiting, palette),
+                ],
                 Expanded(
                   child: shown == 0
                       ? const SizedBox.shrink()

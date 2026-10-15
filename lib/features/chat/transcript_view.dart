@@ -6,6 +6,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_models.dart';
+import '../../demo/demo_content.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/markdown.dart';
 import '../../design/components/primitives.dart';
@@ -44,8 +46,11 @@ class TranscriptEntry extends StatelessWidget {
     final UserTurn turn => _UserBubble(turn),
     final AssistantTurn turn => _AssistantBlock(turn, live: live),
     final ToolCall call => ToolCard(call),
-    final Notice notice when notice.retryable && onRetry != null =>
-      _FailedCard(notice, onRetry: onRetry!, retrying: retrying),
+    final Notice notice when notice.retryable && onRetry != null => _FailedCard(
+      notice,
+      onRetry: onRetry!,
+      retrying: retrying,
+    ),
     final Notice notice => _NoticeLine(notice),
   };
 }
@@ -185,7 +190,9 @@ class _AssistantBlock extends StatelessWidget {
             child: IrisMarkdown(
               turn.text,
               highlight: !streaming,
-              onTapLink: (href) => unawaited(openLink(href)),
+              onTapLink: (href) => href == leaveDemoLink
+                  ? leaveDemo(context)
+                  : unawaited(openLink(href)),
             ),
           ),
         if (streaming) ...[
@@ -295,13 +302,8 @@ class _ThoughtsCardState extends State<_ThoughtsCard> {
                 ),
               ),
             ),
-            AnimatedSize(
-              duration: context.reduceMotion
-                  ? Duration.zero
-                  : const Duration(milliseconds: 450),
-              curve: IrisCurves.standard,
-              alignment: Alignment.topCenter,
-              child: _open
+            () {
+              final body = _open
                   ? Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                       child: Text(
@@ -314,8 +316,18 @@ class _ThoughtsCardState extends State<_ThoughtsCard> {
                         ),
                       ),
                     )
-                  : const SizedBox(width: double.infinity),
-            ),
+                  : const SizedBox(width: double.infinity);
+              // A zero-length AnimatedSize restarts during layout, which
+              // Flutter asserts on; with motion reduced there is nothing to
+              // animate, so it is left out, as IrisAnimatedSize does.
+              if (context.reduceMotion) return body;
+              return AnimatedSize(
+                duration: const Duration(milliseconds: 450),
+                curve: IrisCurves.standard,
+                alignment: Alignment.topCenter,
+                child: body,
+              );
+            }(),
           ],
         ),
       ),

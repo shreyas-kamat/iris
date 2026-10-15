@@ -13,7 +13,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../core/failure.dart';
 import '../../data/net/capabilities.dart';
+import '../../data/net/server_config.dart';
 import '../../data/rpc/dashboard_session.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -23,6 +25,7 @@ import '../../design/platform/iris_scaffold.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
+import '../servers/connection_mode_copy.dart';
 import '../servers/server_switcher.dart';
 
 /// The orb state, headline and explanation for [link].
@@ -103,8 +106,16 @@ class LinkStatusScreen extends ConsumerWidget {
               const SizedBox(height: IrisSpace.xl),
               IrisListRow(
                 title: server?.label ?? 'No server',
-                subtitle: server?.baseUrl,
-                onTap: () => unawaited(showServerSwitcher(context)),
+                subtitle: switch (server) {
+                  null => null,
+                  ServerConfig(:final mode?) =>
+                    '${server.baseUrl} · ${mode.title}',
+                  _ => server.baseUrl,
+                },
+                // The demo has no other server to switch to or add.
+                onTap: ref.watch(demoModeProvider)
+                    ? null
+                    : () => unawaited(showServerSwitcher(context)),
               ),
               if (capabilities.serverVersion case final version?) ...[
                 const SizedBox(height: IrisSpace.sm),

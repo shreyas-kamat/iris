@@ -23,6 +23,8 @@ import '../data/net/server_config.dart';
 import '../data/prefs/preferences_store.dart';
 import '../data/repositories/server_repository.dart';
 import '../data/rpc/dashboard_session.dart';
+import '../demo/demo_chat_backend.dart';
+import '../demo/demo_mode.dart';
 import 'preferences.dart';
 
 /// The on-disk database.
@@ -84,6 +86,7 @@ class ActiveServerId extends Notifier<String?> {
 
 /// The active server's config, or null.
 final activeServerProvider = Provider<ServerConfig?>((ref) {
+  if (ref.watch(demoModeProvider)) return demoServer;
   final id = ref.watch(activeServerIdProvider);
   if (id == null) return null;
   final servers = ref.watch(serversProvider).value ?? const [];
@@ -100,6 +103,7 @@ final activeServerProvider = Provider<ServerConfig?>((ref) {
 /// configs by id, so a rewrite of the same server's row — which every
 /// capability probe makes — does not restart the link.
 final activeSessionProvider = FutureProvider<DashboardSession?>((ref) async {
+  if (ref.watch(demoModeProvider)) return null;
   final config = ref.watch(activeServerProvider);
   if (config == null) return null;
   final repository = ref.watch(serverRepositoryProvider);
@@ -115,6 +119,10 @@ final activeSessionProvider = FutureProvider<DashboardSession?>((ref) async {
 
 /// Where the active server's live link is.
 final activeLinkProvider = StreamProvider<LinkState>((ref) async* {
+  if (ref.watch(demoModeProvider)) {
+    yield const LinkState(LinkPhase.live);
+    return;
+  }
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) {
     yield const LinkState(LinkPhase.idle);
@@ -126,6 +134,7 @@ final activeLinkProvider = StreamProvider<LinkState>((ref) async* {
 
 /// What the active server was last found to support.
 final activeCapabilitiesProvider = StreamProvider<ServerCapabilities>((ref) {
+  if (ref.watch(demoModeProvider)) return Stream.value(demoCapabilities);
   final config = ref.watch(activeServerProvider);
   if (config == null) return Stream.value(const ServerCapabilities.unknown());
   return ref.watch(serverRepositoryProvider).watchCapabilities(config.id);
@@ -192,6 +201,8 @@ class ActiveProfile extends Notifier<String> {
 /// profile.
 final activeChatProvider = FutureProvider<ChatBackend?>((ref) async {
   final profile = ref.watch(activeProfileProvider);
+  final world = ref.watch(demoSessionProvider);
+  if (world != null) return DemoChatBackend(world, profile: profile);
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
   final chat = DashboardChat(session, profile: profile);
@@ -205,9 +216,7 @@ final activeChatProvider = FutureProvider<ChatBackend?>((ref) async {
 /// a list loaded before a drop catches up.
 final conversationsProvider = FutureProvider<ConversationPage?>((ref) async {
   final live = ref.watch(
-    activeLinkProvider.select(
-      (link) => link.value?.phase == LinkPhase.live,
-    ),
+    activeLinkProvider.select((link) => link.value?.phase == LinkPhase.live),
   );
   if (!live) return null;
   final chat = await ref.watch(activeChatProvider.future);
@@ -221,9 +230,7 @@ final conversationsProvider = FutureProvider<ConversationPage?>((ref) async {
 /// The active server's agent profiles. Null until the link is live.
 final profilesProvider = FutureProvider<List<AgentProfile>?>((ref) async {
   final live = ref.watch(
-    activeLinkProvider.select(
-      (link) => link.value?.phase == LinkPhase.live,
-    ),
+    activeLinkProvider.select((link) => link.value?.phase == LinkPhase.live),
   );
   if (!live) return null;
   final chat = await ref.watch(activeChatProvider.future);

@@ -19,6 +19,7 @@ import '../../core/logging.dart';
 import '../../core/result.dart';
 import '../db/database.dart';
 import '../net/capabilities.dart';
+import '../net/connection_mode.dart';
 import '../net/credentials.dart';
 import '../net/dashboard_auth.dart';
 import '../net/server_config.dart';
@@ -157,6 +158,7 @@ final class ServerRepository {
     requiresPassword: row.requiresPassword,
     usesAccessToken: row.usesAccessToken,
     allowSelfSignedCertificate: row.allowSelfSigned,
+    mode: ConnectionMode.fromStoredName(row.connectionMode),
   );
 
   /// Looks at [baseUrl] without saving anything, so the connect screen asks
@@ -203,6 +205,7 @@ final class ServerRepository {
     required String label,
     ServerSecrets secrets = ServerSecrets.none,
     bool allowSelfSigned = false,
+    ConnectionMode? mode,
   }) async {
     final normalised = ServerConfig.normaliseBaseUrl(baseUrl);
     if (normalised.isEmpty) {
@@ -228,6 +231,7 @@ final class ServerRepository {
       requiresPassword: secrets.hasLogin,
       usesAccessToken: secrets.hasAccessToken,
       allowSelfSignedCertificate: allowSelfSigned,
+      mode: mode,
     );
 
     final connection = _connect(config, secrets: secrets);
@@ -254,6 +258,7 @@ final class ServerRepository {
             requiresPassword: Value(config.requiresPassword),
             usesAccessToken: Value(config.usesAccessToken),
             allowSelfSigned: Value(config.allowSelfSignedCertificate),
+            connectionMode: Value(mode?.storedName),
             lastConnectedAt: Value(DateTime.now()),
             position: Value(existing.length),
           ),

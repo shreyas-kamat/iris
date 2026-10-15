@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/data/db/database.dart';
 import 'package:iris/data/net/capabilities.dart';
+import 'package:iris/data/net/connection_mode.dart';
 import 'package:iris/data/net/credentials.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/net/server_connection.dart';
@@ -61,9 +62,27 @@ void main() {
             requiresPassword: Value(requiresPassword),
           ),
         );
-    if (password != null) await credentials.write(id, ServerSecrets(password: password));
+    if (password != null) {
+      await credentials.write(id, ServerSecrets(password: password));
+    }
     return id;
   }
+
+  test('the connection mode is saved with the server', () async {
+    http.on(
+      'POST',
+      '/api/auth/ws-ticket',
+      (_) => FakeReply.json({'ticket': 't'}),
+    );
+    final added = await repository.addServer(
+      baseUrl: 'http://100.101.102.103:9119',
+      label: 'Box',
+      mode: ConnectionMode.tailscale,
+    );
+    expect(added.isOk, isTrue);
+    final saved = (await repository.listServers()).single;
+    expect(saved.mode, ConnectionMode.tailscale);
+  });
 
   group('url normalisation', () {
     test('a bare host gets https, not http', () {
@@ -179,15 +198,22 @@ void main() {
       expect(config.usesAccessToken, isTrue);
     });
 
-    test('an access-gated server without a token is refused as gated', () async {
-      http.on('POST', '/api/auth/ws-ticket', (_) => FakeReply.cloudflareLogin());
-      final result = await repository.addServer(
-        baseUrl: 'https://h.example',
-        label: 'H',
-      );
-      expect(result.failureOrNull?.kind, FailureKind.accessGate);
-      expect(await repository.listServers(), isEmpty);
-    });
+    test(
+      'an access-gated server without a token is refused as gated',
+      () async {
+        http.on(
+          'POST',
+          '/api/auth/ws-ticket',
+          (_) => FakeReply.cloudflareLogin(),
+        );
+        final result = await repository.addServer(
+          baseUrl: 'https://h.example',
+          label: 'H',
+        );
+        expect(result.failureOrNull?.kind, FailureKind.accessGate);
+        expect(await repository.listServers(), isEmpty);
+      },
+    );
 
     test('a duplicate address is refused', () async {
       await seedServer();
@@ -291,11 +317,7 @@ void main() {
 
     test('a probe stores names, version and time', () async {
       http
-        ..on(
-          'GET',
-          '/api/status',
-          (_) => FakeReply.json({'version': '0.9.1'}),
-        )
+        ..on('GET', '/api/status', (_) => FakeReply.json({'version': '0.9.1'}))
         ..on(
           'GET',
           '/api/profiles',
