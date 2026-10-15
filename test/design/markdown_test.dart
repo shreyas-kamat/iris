@@ -317,6 +317,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('physics, units and chemistry lay out, not fall back', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown(r'$\dv{f}{x}$ and $\ce{H2O}$ and $\SI{3}{m}$')),
+    );
+    expect(find.byType(IrisMath), findsNWidgets(3));
+    expect(find.textContaining(r'\dv'), findsNothing);
+    expect(find.textContaining(r'\ce'), findsNothing);
+    expect(find.textContaining(r'\SI'), findsNothing);
+  });
+
   testWidgets('a math fence is maths, a latex fence is code', (tester) async {
     await tester.pumpWidget(
       themed(const IrisMarkdown('```math\nx^2\n```\n\n```latex\nx^2\n```')),
