@@ -3,7 +3,7 @@
          not only in debug and profile. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="iris"
+        android:label="Iris"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
