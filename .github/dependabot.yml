@@ -8,6 +8,13 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # These releases need Dart 3.12, newer than the Flutter that CI pins.
+    # Drop these rules when FLUTTER_VERSION moves past 3.41.
+    ignore:
+      - dependency-name: freezed
+        versions: [">=4.0.0-0"]
+      - dependency-name: cupertino_icons
+        versions: [">=2.0.0-0"]
   - package-ecosystem: gradle
     directory: /android
     schedule:
