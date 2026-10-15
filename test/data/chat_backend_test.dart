@@ -2,6 +2,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
@@ -626,6 +627,39 @@ void main() {
         'info': {'model': 'm', 'context_used': 30, 'context_max': 120},
       });
       expect((await resumed).valueOrNull?.context?.percent, 25);
+    });
+  });
+
+  group('transcription', () {
+    test('posts the clip as a WAV data URL and returns the words', () async {
+      Object? body;
+      http.on('POST', '/api/audio/transcribe', (request) {
+        body = request.data;
+        return FakeReply.json({'transcript': '  hello there '});
+      });
+      final result = await chat.transcribe(Uint8List.fromList([1, 2]));
+      expect(result.valueOrNull, 'hello there');
+      expect((body as Map)['data_url'], 'data:audio/wav;base64,AQI=');
+      expect((body as Map)['mime_type'], 'audio/wav');
+    });
+
+    test('an error field is a failure in Hermes words', () async {
+      http.on('POST', '/api/audio/transcribe',
+          (_) => FakeReply.json({'error': 'No speech-to-text provider is configured'}));
+      final result = await chat.transcribe(Uint8List(1));
+      expect(result.failureOrNull?.message, contains('speech-to-text'));
+    });
+
+    test('a named profile is passed along', () async {
+      Map<String, dynamic>? query;
+      http.on('POST', '/api/audio/transcribe', (request) {
+        query = request.queryParameters;
+        return FakeReply.json({'text': 'hi'});
+      });
+      final named = DashboardChat(session, profile: 'work');
+      addTearDown(named.dispose);
+      await named.transcribe(Uint8List(1));
+      expect(query?['profile'], 'work');
     });
   });
 }

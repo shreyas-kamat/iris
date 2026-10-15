@@ -8,7 +8,9 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import '../../core/failure.dart';
 import '../../core/json.dart';
@@ -154,6 +156,10 @@ abstract interface class ChatBackend {
 
   /// This profile's conversations matching [query], one hit per conversation.
   Future<Result<List<SearchHit>>> search(String query);
+
+  /// What was said in [wav] (16 kHz mono WAV), by Hermes' speech-to-text.
+  /// Empty when it heard nothing worth sending.
+  Future<Result<String>> transcribe(Uint8List wav);
 }
 
 final class DashboardChat implements ChatBackend {
@@ -589,6 +595,42 @@ final class DashboardChat implements ChatBackend {
     '/api/sessions/${Uri.encodeComponent(storedId)}',
     body: _scoped(body),
   )).map((_) {});
+
+  /// A two-minute clip is about 5 MB as base64; transcription can take a
+  /// while on a small host.
+  static const transcribeTimeout = Duration(seconds: 90);
+
+  @override
+  Future<Result<String>> transcribe(Uint8List wav) async {
+    const route = '/api/audio/transcribe';
+    final sent = await _session.connection.client.post(
+      route,
+      body: {
+        'data_url': 'data:audio/wav;base64,${base64Encode(wav)}',
+        'mime_type': 'audio/wav',
+      },
+      query: _scoped({}),
+      receiveTimeout: transcribeTimeout,
+    );
+    switch (sent) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(:final value):
+        final error = value['error'].stringOrNull?.trim();
+        if (error != null && error.isNotEmpty) {
+          return Err(IrisFailure(FailureKind.server, message: error, endpoint: route));
+        }
+        final words = value['transcript'].stringOrNull ?? value['text'].stringOrNull;
+        if (words == null) {
+          return Err(const IrisFailure(
+            FailureKind.malformed,
+            message: "Hermes didn't send back what you said.",
+            endpoint: route,
+          ));
+        }
+        return Ok(words.trim());
+    }
+  }
 
   @override
   Future<Result<List<SearchHit>>> search(String query) async =>

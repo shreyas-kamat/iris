@@ -23,6 +23,7 @@ import '../tokens/code_colors.dart';
 import '../tokens/metrics.dart';
 import '../tokens/motion.dart';
 import '../tokens/palette.dart';
+import 'markdown_image.dart';
 import 'markdown_syntax.dart';
 import 'primitives.dart';
 
@@ -142,6 +143,13 @@ final class _Renderer {
       return node.text.trim().isEmpty ? null : _rich(inline([node], body));
     }
     if (node is! md.Element) return null;
+    final image = node.tag == 'p' ? _soleImage(node) : null;
+    if (image != null) {
+      return MarkdownImage(
+        url: image.attributes['src']!,
+        alt: image.attributes['alt'],
+      );
+    }
     return switch (node.tag) {
       'h1' ||
       'h2' ||
@@ -162,6 +170,21 @@ final class _Renderer {
       'section' => footnotes(node),
       _ => _rich(inline(node.children, body)),
     };
+  }
+
+  /// The image a paragraph holds and nothing else, if its source can be shown.
+  static md.Element? _soleImage(md.Element p) {
+    final children = [
+      for (final c in p.children ?? const <md.Node>[])
+        if (c is! md.Text || c.text.trim().isNotEmpty) c,
+    ];
+    if (children.length != 1) return null;
+    final only = children.single;
+    return only is md.Element &&
+            only.tag == 'img' &&
+            MarkdownImage.canShow(only.attributes['src'])
+        ? only
+        : null;
   }
 
   Widget _rich(List<InlineSpan> spans) => Text.rich(TextSpan(children: spans));
@@ -590,14 +613,38 @@ const _aliases = {
   'golang': 'go',
 };
 
-/// The grammar for a fence's language, or null when there is none. There is
-/// no guessing: detection is slow and often wrong, and a wrongly coloured
-/// block reads worse than a plain one.
+/// The grammar for a fence's language, or null when there is none.
 String? highlightLanguage(String? fence) {
   final name = fence?.trim().toLowerCase();
   if (name == null || name.isEmpty) return null;
   final resolved = _aliases[name] ?? name;
   return _highlighter.getLanguage(resolved) == null ? null : resolved;
+}
+
+/// The languages an unlabelled block may be detected as. A short list is
+/// fast and rarely wrong; the full grammar set mislabels prose and logs.
+const _detectable = [
+  'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'sql',
+  'go', 'rust', 'java', 'kotlin', 'swift', 'dart', 'dockerfile',
+];
+
+final Map<String, String?> _detected = {};
+
+/// The language an unlabelled block is clearly written in, or null. It must
+/// score well and clearly beat the runner-up: a wrongly coloured block reads
+/// worse than a plain one.
+String? detectLanguage(String code) {
+  if (code.length < 20 || code.length > maxHighlightLength) return null;
+  if (_detected.containsKey(code)) return _detected[code];
+  final best = _highlighter.highlightAuto(code, _detectable);
+  final runnerUp = best.secondBest?.relevance ?? 0;
+  final language = best.language != null &&
+          best.relevance >= 4 &&
+          best.relevance >= runnerUp * 1.5
+      ? best.language
+      : null;
+  if (_detected.length > 200) _detected.clear();
+  return _detected[code] = language;
 }
 
 /// Highlighted spans, by palette, language and code. A transcript rebuilds
@@ -652,6 +699,10 @@ class _CodeBlockState extends State<_CodeBlock> {
     });
   }
 
+  /// The fence's language, or the detected one for a finished, unlabelled block.
+  String? get _language =>
+      widget.language ?? (widget.highlight ? detectLanguage(widget.code) : null);
+
   Widget _codeText(BuildContext context) {
     final palette = context.palette;
     final style = context.type.code.copyWith(
@@ -661,7 +712,7 @@ class _CodeBlockState extends State<_CodeBlock> {
     );
     final colors = IrisCodeColors.of(palette);
     final span = widget.highlight
-        ? _highlighted(widget.code, widget.language, colors)
+        ? _highlighted(widget.code, _language, colors)
         : null;
     if (span == null) {
       return Text(widget.code, key: const ValueKey('plain'), style: style);
@@ -707,7 +758,7 @@ class _CodeBlockState extends State<_CodeBlock> {
                 children: [
                   Expanded(
                     child: Text(
-                      widget.language ?? 'code',
+                      _language ?? 'code',
                       style: type.codeSmall.copyWith(
                         fontSize: 11,
                         color: palette.inkFaint,

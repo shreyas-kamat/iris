@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/design/components/markdown.dart';
+import 'package:iris/design/components/markdown_image.dart';
 
 import '../support/harness.dart';
 
@@ -152,6 +153,33 @@ void main() {
   });
 
   group('highlighting', () {
+    test('a clear unlabelled block is detected; a vague one is not', () {
+      expect(
+        detectLanguage(
+          'def greet(name):\n    print(f"hi {name}")\n\nfor i in range(3):\n    greet(i)\n',
+        ),
+        'python',
+      );
+      expect(
+        detectLanguage('SELECT id, name FROM users WHERE active = 1 ORDER BY name;'),
+        'sql',
+      );
+      expect(detectLanguage('hello there'), isNull);
+      expect(detectLanguage('x'), isNull);
+    });
+
+    testWidgets('a finished unlabelled block is coloured and named', (tester) async {
+      await tester.pumpWidget(
+        themed(
+          const IrisMarkdown(
+            '```\ndef greet(name):\n    print(f"hi {name}")\n\nfor i in range(3):\n    greet(i)\n```',
+          ),
+        ),
+      );
+      expect(find.byKey(const ValueKey('highlighted')), findsOneWidget);
+      expect(find.text('python'), findsOneWidget);
+    });
+
     test('fence names resolve through aliases; unknown ones do not', () {
       expect(highlightLanguage('sh'), 'bash');
       expect(highlightLanguage('zsh'), 'bash');
@@ -246,5 +274,31 @@ void main() {
         .map((a) => a.alignment)
         .toSet();
     expect(aligns, containsAll([Alignment.center, Alignment.centerRight]));
+  });
+
+  testWidgets('an image waits for a tap before loading', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('![chart](https://img.example/c.png)')),
+    );
+    expect(find.byType(Image), findsNothing);
+    expect(find.textContaining('img.example'), findsOneWidget);
+    await tester.tap(find.byType(MarkdownImage));
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('an image inside a sentence stays its alt text', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('See ![chart](https://img.example/c.png) here')),
+    );
+    expect(find.byType(MarkdownImage), findsNothing);
+    expect(find.textContaining('chart'), findsOneWidget);
+  });
+
+  testWidgets('a non-web image source is not offered', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('![x](file:///etc/passwd)')),
+    );
+    expect(find.byType(MarkdownImage), findsNothing);
   });
 }
