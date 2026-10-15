@@ -10,6 +10,7 @@
 library;
 
 import '../../core/json.dart';
+import 'attachment.dart';
 import 'chat_models.dart';
 
 abstract final class HistoryParser {
@@ -57,11 +58,13 @@ abstract final class HistoryParser {
       final content = visible;
       switch (role) {
         case 'user':
-          if (content.trim().isNotEmpty) {
+          final (files, text) = splitReferences(content);
+          if (text.trim().isNotEmpty || files.isNotEmpty) {
             items.add(
               UserTurn(
                 id: id,
-                text: content,
+                text: text,
+                attachments: files,
                 steered: row['display_kind'].string().trim() == 'steer',
               ),
             );

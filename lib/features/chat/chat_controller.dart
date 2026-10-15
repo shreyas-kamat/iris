@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/failure.dart';
 import '../../core/result.dart';
+import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
@@ -168,21 +169,41 @@ final class ChatController extends ValueNotifier<ChatState> {
   /// Sends [text], creating the conversation first if this is a new chat.
   /// Text that starts with a slash runs as a command. During a run, text
   /// steers the turn instead; a command cannot steer, so it waits.
-  Future<void> send(String text) async {
+  Future<void> send(
+    String text, {
+    List<Attachment> attachments = const [],
+  }) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty && attachments.isEmpty) return;
     if (value.running) {
       if (!trimmed.startsWith('/')) await _steer(trimmed);
       return;
     }
-    _update(value.withUserTurn(trimmed));
+    _update(
+      value.withUserTurn(
+        trimmed,
+        attachments: [for (final file in attachments) file.name],
+      ),
+    );
     final runtimeId = _runtimeId ?? await _create();
     if (runtimeId == null) return;
-    if (trimmed.startsWith('/') && trimmed.length > 1) {
+    if (attachments.isEmpty && trimmed.startsWith('/') && trimmed.length > 1) {
       await _slash(runtimeId, trimmed, depth: 0);
-    } else {
-      await _submit(runtimeId, trimmed);
+      return;
     }
+    final references = <String>[];
+    for (final file in attachments) {
+      switch (await _backend.attach(runtimeId, file)) {
+        case Ok(value: final reference?):
+          references.add(reference);
+        case Ok():
+          break;
+        case Err(:final failure):
+          _update(value.withError(describe(failure)));
+          return;
+      }
+    }
+    await _submit(runtimeId, promptWithReferences(trimmed, references));
   }
 
   Future<void> _submit(String runtimeId, String text) async {

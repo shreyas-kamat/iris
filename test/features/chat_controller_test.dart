@@ -3,10 +3,12 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
@@ -96,6 +98,50 @@ void main() {
       expect(controller.value.turn, TurnPhase.thinking);
     },
   );
+
+  test('attachments are staged, then named ahead of the prompt', () async {
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send(
+      'read these',
+      attachments: [
+        Attachment(name: 'a.png', bytes: Uint8List(1)),
+        Attachment(name: 'n.txt', bytes: Uint8List(1)),
+      ],
+    );
+    expect(backend.attached.map((a) => a.$2), ['a.png', 'n.txt']);
+    expect(backend.submitted.single.$2, '@file:/s/n.txt\n\nread these');
+    final turn = controller.value.items.whereType<UserTurn>().single;
+    expect(turn.text, 'read these');
+    expect(turn.attachments, ['a.png', 'n.txt']);
+  });
+
+  test('a photo alone can be sent', () async {
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send(
+      '',
+      attachments: [Attachment(name: 'a.png', bytes: Uint8List(1))],
+    );
+    expect(backend.submitted.single.$2, '');
+    expect(
+      controller.value.items.whereType<UserTurn>().single.attachments,
+      ['a.png'],
+    );
+  });
+
+  test('a failed upload is reported and nothing is submitted', () async {
+    backend.attachResult = (_) => Err(const IrisFailure(FailureKind.offline));
+    final controller = controllerFor();
+    await controller.open();
+    await controller.send(
+      'hi',
+      attachments: [Attachment(name: 'n.txt', bytes: Uint8List(1))],
+    );
+    expect(backend.submitted, isEmpty);
+    expect(controller.value.items.last, isA<Notice>());
+    expect(controller.value.turn, TurnPhase.idle);
+  });
 
   test('a new chat is created on the first send', () async {
     final controller = controllerFor(id: null);

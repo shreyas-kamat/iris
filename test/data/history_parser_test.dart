@@ -149,6 +149,17 @@ void main() {
       expect(call.output, 'out');
     });
 
+    test('a stored prompt gives its files back as chips', () {
+      final items = HistoryParser.transcript(
+        page([
+          {'id': 1, 'role': 'user', 'content': '@file:/s/n.txt\n\nread this'},
+        ]),
+      );
+      final turn = items.whereType<UserTurn>().single;
+      expect(turn.text, 'read this');
+      expect(turn.attachments, ['n.txt']);
+    });
+
     test('hidden, system and empty rows are skipped', () {
       final items = HistoryParser.transcript(
         page([
