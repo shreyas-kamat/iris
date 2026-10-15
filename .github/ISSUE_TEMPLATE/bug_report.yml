@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in Iris does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not paste passwords, access tokens or your real server address.**
+        For a security problem, use the private report link instead of this form.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open …\n2. Tap …\n3. See …"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Iris version
+      description: From the store listing, or the commit if you built it yourself.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and OS version
+      placeholder: Pixel 9, Android 15
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: How do you connect?
+      options: [Same Wi-Fi, Tailscale, Cloudflare Access, The demo, Not sure]
+    validations:
+      required: true
+  - type: input
+    id: hermes
+    attributes:
+      label: Hermes version, if you know it
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots are welcome; blur anything private.
