@@ -25,6 +25,7 @@ import '../tokens/motion.dart';
 import '../tokens/palette.dart';
 import 'markdown_image.dart';
 import 'markdown_syntax.dart';
+import 'math.dart';
 import 'primitives.dart';
 
 class IrisMarkdown extends StatefulWidget {
@@ -116,6 +117,7 @@ final class _Renderer {
     'table',
     'div',
     'section',
+    'math-display',
   };
 
   TextStyle get body =>
@@ -168,6 +170,7 @@ final class _Renderer {
       'table' => table(node),
       'div' => alert(node),
       'section' => footnotes(node),
+      mathDisplayTag => IrisMath(node.textContent, display: true, style: body),
       _ => _rich(inline(node.children, body)),
     };
   }
@@ -292,6 +295,18 @@ final class _Renderer {
           style.copyWith(backgroundColor: theme.palette.accentQuiet),
           link,
         );
+      case mathInlineTag || mathDisplayTag:
+        return [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: IrisMath(
+              node.textContent,
+              display: node.tag == mathDisplayTag,
+              style: style,
+            ),
+          ),
+        ];
       default:
         return inline(node.children, style, link);
     }
@@ -504,11 +519,11 @@ final class _Renderer {
 
   Widget code(md.Element node) {
     final text = node.textContent.replaceFirst(RegExp(r'\n$'), '');
-    return _CodeBlock(
-      code: text,
-      language: _languageOf(node),
-      highlight: highlight,
-    );
+    final language = _languageOf(node);
+    if (language == 'math') {
+      return IrisMath(text, display: true, style: body);
+    }
+    return _CodeBlock(code: text, language: language, highlight: highlight);
   }
 
   /// The fence's language, from the `language-xxx` class the parser puts on
