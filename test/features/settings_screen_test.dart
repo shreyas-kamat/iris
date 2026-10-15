@@ -75,6 +75,22 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
   });
 
+  testWidgets('About names the licence and opens the open source licences', (
+    tester,
+  ) async {
+    await tester.pumpWidget(settings());
+    await settle(tester);
+    await tester.ensureVisible(find.text('Open source licences'));
+    expect(find.text('About'.toUpperCase()), findsOneWidget);
+    expect(find.textContaining('Apache-2.0'), findsOneWidget);
+    expect(find.text('Source code'), findsOneWidget);
+
+    await tester.tap(find.text('Open source licences'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LicensePage), findsOneWidget);
+    expect(find.text('Iris'), findsWidgets);
+  });
+
   testWidgets('a single profile is not tappable', (tester) async {
     await tester.pumpWidget(
       settings(

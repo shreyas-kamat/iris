@@ -28,6 +28,7 @@ import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
+import '../chat/links.dart';
 import '../chat/profile_picker.dart';
 import '../home/link_status_screen.dart';
 import '../servers/server_switcher.dart';
@@ -210,6 +211,30 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            const SizedBox(height: 22),
+            IrisSettingsGroup(
+              title: 'About',
+              children: [
+                IrisSettingsRow(
+                  label: 'Open source licences',
+                  sub: 'Apache-2.0 · © 2026 Shreyas Kamat',
+                  onTap: () => showLicensePage(
+                    context: context,
+                    applicationName: 'Iris',
+                    applicationLegalese:
+                        '© 2026 Shreyas Kamat\n'
+                        'Licensed under the Apache License 2.0',
+                  ),
+                ),
+                IrisSettingsRow(
+                  label: 'Source code',
+                  sub: 'github.com/shreyas-kamat/iris',
+                  onTap: () => unawaited(
+                    openLink('https://github.com/shreyas-kamat/iris'),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

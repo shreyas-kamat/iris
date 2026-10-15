@@ -53,6 +53,11 @@ android {
 
     buildTypes {
         release {
+            // Shrink and optimise the Java side, and drop unused resources.
+            // Flutter's plugin already does this by default; stating it keeps
+            // it from regressing quietly.
+            isMinifyEnabled = true
+            isShrinkResources = true
             // Signed with the upload key when key.properties exists. Without it
             // the release build uses the debug key so `flutter run --release`
             // still works, but Google Play will not accept that bundle.

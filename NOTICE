@@ -1,0 +1,12 @@
+Iris
+Copyright 2026 Shreyas Kamat
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Fonts bundled with the app are licensed separately, under the SIL Open Font
+License 1.1; their licence texts are in assets/fonts/:
+  - Geist and Geist Mono         (assets/fonts/GEIST-OFL.txt)
+  - Instrument Serif             (assets/fonts/INSTRUMENT-SERIF-OFL.txt)
+
+The Flutter framework and the Dart packages Iris depends on carry their own
+licences; the app lists them under Settings > Open source licences.

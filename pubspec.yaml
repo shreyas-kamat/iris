@@ -78,6 +78,11 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The fonts' licence texts, shown under Settings > Open source licences.
+  assets:
+    - assets/fonts/GEIST-OFL.txt
+    - assets/fonts/INSTRUMENT-SERIF-OFL.txt
+
   # Geist and Geist Mono are bundled rather than fetched at runtime: Iris talks
   # only to the user's own server, and a design system that phones a font CDN
   # on first paint would break both that promise and the offline-first goal.
@@ -108,10 +113,6 @@ flutter:
         - asset: assets/fonts/InstrumentSerif-Italic.ttf
           weight: 400
           style: italic
-
-  assets:
-    - assets/fonts/GEIST-OFL.txt
-    - assets/fonts/INSTRUMENT-SERIF-OFL.txt
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -89,7 +89,7 @@ List<Override> _sharedOverrides(FakeChatBackend backend) => [
   activeServerProvider.overrideWithValue(
     const ServerConfig(
       id: 's',
-      baseUrl: 'https://hermes.shreyaskamat.in',
+      baseUrl: 'https://hermes.example.com',
       label: 'Hermes Ops',
     ),
   ),
