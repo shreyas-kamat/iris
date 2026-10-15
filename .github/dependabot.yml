@@ -20,6 +20,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Flutter supports AGP 9 only from 3.44, and Gradle 9.6 removed an
+    # internal API that AGP 8 uses. Drop these rules with the Flutter upgrade.
+    ignore:
+      - dependency-name: com.android.application
+        versions: [">=9.0.0-0"]
+      - dependency-name: gradle-wrapper
+        versions: [">=9.6.0-0"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
