@@ -10,7 +10,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
-import '../../data/net/connection_mode.dart';
 import '../../data/net/server_config.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
@@ -20,7 +19,7 @@ import '../../design/platform/iris_scaffold.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
-import 'connect_screen.dart';
+import 'welcome_screen.dart';
 
 class ServerGate extends ConsumerWidget {
   const ServerGate({required this.connected, super.key});
@@ -38,8 +37,9 @@ class ServerGate extends ConsumerWidget {
       // retrying, so it says what happened rather than spinning.
       error: (error, _) => _Unrecoverable(detail: '$error'),
       data: (list) {
-        if (list.isEmpty)
-          return const ConnectScreen(mode: ConnectionMode.cloudflare);
+        if (list.isEmpty) {
+          return const WelcomeScreen();
+        }
 
         // Deferred: selecting during build would mutate a provider mid-frame.
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -129,7 +129,7 @@ class _ChooseServer extends ConsumerWidget {
               onPressed: () => Navigator.of(context).push<void>(
                 PageRouteBuilder<void>(
                   pageBuilder: (context, _, _) =>
-                      const ConnectScreen(mode: ConnectionMode.cloudflare),
+                      const WelcomeScreen(showDemo: false),
                 ),
               ),
             ),

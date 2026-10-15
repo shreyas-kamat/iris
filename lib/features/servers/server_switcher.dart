@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
-import '../../data/net/connection_mode.dart';
 import '../../data/net/server_config.dart';
 import '../../data/repositories/server_repository.dart';
 import '../../design/components/controls.dart';
@@ -15,7 +14,7 @@ import '../../design/components/sheet.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
-import 'connect_screen.dart';
+import 'welcome_screen.dart';
 
 /// Opens the server list.
 Future<void> showServerSwitcher(BuildContext context) => showIrisSheet<void>(
@@ -82,10 +81,7 @@ class _ServerSwitcherSheet extends ConsumerWidget {
     final navigator = Navigator.of(context);
     await navigator.push<void>(
       PageRouteBuilder<void>(
-        pageBuilder: (context, _, _) => ConnectScreen(
-          mode: ConnectionMode.cloudflare,
-          onConnected: (_) => Navigator.of(context).popUntil((r) => r.isFirst),
-        ),
+        pageBuilder: (context, _, _) => const WelcomeScreen(showDemo: false),
       ),
     );
   }
