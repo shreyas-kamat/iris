@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/result.dart';
+import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
@@ -20,6 +21,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import 'attachment_picker.dart';
 import 'chat_controller.dart';
 import 'chat_state.dart';
 import 'composer.dart';
@@ -52,10 +54,14 @@ class ChatScreen extends StatefulWidget {
     this.title,
     this.archived = false,
     this.suggestions,
+    this.pickFiles,
     super.key,
   });
 
   final ChatBackend backend;
+
+  /// Opens the file picker. Tests pass a fake; null uses the system picker.
+  final PickFiles? pickFiles;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -155,12 +161,38 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  final List<Attachment> _draft = [];
+
+  Future<void> _attach() async {
+    final picked = await (widget.pickFiles ?? pickFiles)();
+    if (!mounted || picked.isEmpty) return;
+    final tooBig = picked.where((f) => f.bytes.length > Attachment.maxBytes);
+    final fits = picked
+        .where((f) => f.bytes.length <= Attachment.maxBytes)
+        .toList();
+    final room = Attachment.maxPerMessage - _draft.length;
+    setState(() => _draft.addAll(fits.take(room)));
+    if (tooBig.isNotEmpty) {
+      showIrisToast(
+        context,
+        message: '${tooBig.first.name} is over 20 MB, so it was left out.',
+      );
+    } else if (fits.length > room) {
+      showIrisToast(
+        context,
+        message: 'Up to ${Attachment.maxPerMessage} files per message.',
+      );
+    }
+  }
+
   Future<void> _send() async {
     final text = _text.text;
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty && _draft.isEmpty) return;
     if (!await _confirmUnarchive()) return;
+    final files = List.of(_draft);
     _text.clear();
-    unawaited(_chat.send(text));
+    setState(_draft.clear);
+    unawaited(_chat.send(text, attachments: files));
   }
 
   /// A suggestion takes the same path as typing it and pressing send, so it
@@ -218,6 +250,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? () => unawaited(showModelPicker(context, _chat))
                 : null,
             contextUsage: state.context,
+            attachments: [for (final f in _draft) f.name],
+            onAttach: () => unawaited(_attach()),
+            onRemoveAttachment: (i) => setState(() => _draft.removeAt(i)),
             onContext: state.context == null
                 ? null
                 : () => unawaited(

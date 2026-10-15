@@ -19,6 +19,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import 'attachment_chip.dart';
 
 class Composer extends StatelessWidget {
   const Composer({
@@ -32,6 +33,9 @@ class Composer extends StatelessWidget {
     this.onModel,
     this.state = AgentState.idle,
     this.contextUsage,
+    this.attachments = const [],
+    this.onAttach,
+    this.onRemoveAttachment,
     this.onContext,
     super.key,
   });
@@ -65,6 +69,13 @@ class Composer extends StatelessWidget {
   /// Opens the context sheet.
   final VoidCallback? onContext;
 
+  /// Files waiting to go with the next message.
+  final List<String> attachments;
+
+  /// Opens the file picker. Null hides the button.
+  final VoidCallback? onAttach;
+  final ValueChanged<int>? onRemoveAttachment;
+
   /// At most this many suggestions show, so they never hide the transcript.
   static const suggestions = 5;
 
@@ -97,7 +108,8 @@ class Composer extends StatelessWidget {
       valueListenable: controller,
       builder: (context, value, _) {
         final matching = _matching(value.text);
-        final canSend = enabled && value.text.trim().isNotEmpty;
+        final canSend =
+            enabled && (value.text.trim().isNotEmpty || attachments.isNotEmpty);
         // Text during a run steers it. A slash command is not a steer, so it
         // gets no button.
         final canSteer =
@@ -163,6 +175,22 @@ class Composer extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (attachments.isNotEmpty) ...[
+                      Wrap(
+                        spacing: IrisSpace.xs,
+                        runSpacing: IrisSpace.xs,
+                        children: [
+                          for (final (i, name) in attachments.indexed)
+                            AttachmentChip(
+                              name: name,
+                              onRemove: onRemoveAttachment == null
+                                  ? null
+                                  : () => onRemoveAttachment!(i),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: IrisSpace.sm),
+                    ],
                     // Borderless: the box is the chrome, so the field inside
                     // it must not draw its own.
                     TextField(
@@ -194,6 +222,18 @@ class Composer extends StatelessWidget {
                     const SizedBox(height: IrisSpace.xs),
                     Row(
                       children: [
+                        if (onAttach != null && !running) ...[
+                          IrisPressable(
+                            onTap: enabled ? onAttach : null,
+                            semanticLabel: 'Attach',
+                            child: Icon(
+                              Icons.add,
+                              size: 20,
+                              color: palette.inkMuted,
+                            ),
+                          ),
+                          const SizedBox(width: IrisSpace.xs),
+                        ],
                         if (model case final model?) ...[
                           _ModelChip(model: model, onTap: onModel),
                           const SizedBox(width: IrisSpace.xs),

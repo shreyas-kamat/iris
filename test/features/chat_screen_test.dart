@@ -1,10 +1,13 @@
 /// A whole conversation screen against a scripted backend.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
@@ -366,5 +369,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(backend.submitted, isEmpty);
     expect(find.text('hello'), findsOneWidget);
+  });
+
+  testWidgets('picked files show as chips and go with the message', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          pickFiles: () async => [
+            Attachment(name: 'n.txt', bytes: Uint8List(1)),
+          ],
+        ),
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Attach'));
+    await tester.pump();
+    expect(find.text('n.txt'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'read it');
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pump();
+    await settle(tester);
+    expect(backend.attached.single.$2, 'n.txt');
+    // The draft chip clears once sent; the bubble keeps its own.
+    expect(find.bySemanticsLabel('Remove n.txt'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('a file over 20 MB is refused before upload', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          pickFiles: () async => [
+            Attachment(
+              name: 'big.bin',
+              bytes: Uint8List(Attachment.maxBytes + 1),
+            ),
+          ],
+        ),
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Attach'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('big.bin'), findsNothing);
+    expect(find.textContaining('20 MB'), findsOneWidget);
+    semantics.dispose();
   });
 }
