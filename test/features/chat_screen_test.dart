@@ -1,15 +1,19 @@
 /// A whole conversation screen against a scripted backend.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/decision_cards.dart';
+import 'package:iris/features/chat/voice_recorder.dart';
 
 import '../support/fake_chat_backend.dart';
 import '../support/harness.dart';
@@ -61,7 +65,8 @@ void main() {
     expect(find.bySemanticsLabel('Stop'), findsOneWidget);
     backend.emit(const MessageCompleted('run-1'));
     await settle(tester);
-    expect(find.bySemanticsLabel('Send'), findsOneWidget);
+    // An empty composer offers the mic in Send's place.
+    expect(find.bySemanticsLabel('Dictate'), findsOneWidget);
     semantics.dispose();
   });
 
@@ -292,7 +297,7 @@ void main() {
     await settle(tester);
     expect(backend.slashes, ['/usage']);
     expect(find.text('Tokens: 12k'), findsOneWidget);
-    expect(find.bySemanticsLabel('Send'), findsOneWidget);
+    expect(find.bySemanticsLabel('Dictate'), findsOneWidget);
     semantics.dispose();
   });
 
@@ -367,4 +372,134 @@ void main() {
     expect(backend.submitted, isEmpty);
     expect(find.text('hello'), findsOneWidget);
   });
+
+  testWidgets('picked files show as chips and go with the message', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          pickFiles: () async => [
+            Attachment(name: 'n.txt', bytes: Uint8List(1)),
+          ],
+        ),
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Attach'));
+    await tester.pump();
+    expect(find.text('n.txt'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'read it');
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pump();
+    await settle(tester);
+    expect(backend.attached.single.$2, 'n.txt');
+    // The draft chip clears once sent; the bubble keeps its own.
+    expect(find.bySemanticsLabel('Remove n.txt'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('a file over 20 MB is refused before upload', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          pickFiles: () async => [
+            Attachment(
+              name: 'big.bin',
+              bytes: Uint8List(Attachment.maxBytes + 1),
+            ),
+          ],
+        ),
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Attach'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('big.bin'), findsNothing);
+    expect(find.textContaining('20 MB'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('dictation puts the words in the composer', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final recorder = FakeRecorder();
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, recorder: recorder)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Dictate'));
+    await tester.pump();
+    expect(recorder.recording, isTrue);
+    await tester.tap(find.bySemanticsLabel('Stop recording'));
+    await tester.pumpAndSettle();
+    expect(find.text('dictated words'), findsOneWidget);
+    // Nothing sends until the person does.
+    expect(backend.submitted, isEmpty);
+    semantics.dispose();
+  });
+
+  testWidgets('a refused mic says how to fix it', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final recorder = FakeRecorder()..allowed = false;
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, recorder: recorder)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Dictate'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('microphone'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('Hermes without speech-to-text leaves the draft alone', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    backend.transcribeResult = const Err(
+      IrisFailure(
+        FailureKind.server,
+        message: 'No speech-to-text provider is configured',
+      ),
+    );
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, recorder: FakeRecorder())),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Dictate'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Stop recording'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('speech-to-text'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      isEmpty,
+    );
+    semantics.dispose();
+  });
+}
+
+final class FakeRecorder implements VoiceRecorder {
+  bool allowed = true;
+  bool recording = false;
+
+  @override
+  Future<bool> start() async => recording = allowed;
+
+  @override
+  Future<Uint8List?> stop() async {
+    recording = false;
+    return Uint8List.fromList([1]);
+  }
+
+  @override
+  Future<void> cancel() async => recording = false;
 }

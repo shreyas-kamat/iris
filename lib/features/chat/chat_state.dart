@@ -210,13 +210,18 @@ final class ChatState {
   );
 
   /// The person's message, shown at once.
-  ChatState withUserTurn(String text) => copyWith(
-    items: [
-      ..._settled(items),
-      UserTurn(id: 'local-${items.length}', text: text),
-    ],
-    turn: TurnPhase.thinking,
-  );
+  ChatState withUserTurn(String text, {List<String> attachments = const []}) =>
+      copyWith(
+        items: [
+          ..._settled(items),
+          UserTurn(
+            id: 'local-${items.length}',
+            text: text,
+            attachments: attachments,
+          ),
+        ],
+        turn: TurnPhase.thinking,
+      );
 
   /// The person steered the running turn. The reply so far is finished, so
   /// what the agent says next starts below the steer, and the turn carries on.

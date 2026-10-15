@@ -43,13 +43,20 @@ sealed class TranscriptItem {
 
 /// Something the person said.
 final class UserTurn extends TranscriptItem {
-  const UserTurn({required String id, required this.text, this.steered = false})
-    : super(id);
+  const UserTurn({
+    required String id,
+    required this.text,
+    this.steered = false,
+    this.attachments = const [],
+  }) : super(id);
 
   final String text;
 
   /// Sent mid-turn to steer the agent, rather than as a prompt of its own.
   final bool steered;
+
+  /// The names of the files sent with it.
+  final List<String> attachments;
 }
 
 /// Something the agent said, possibly still arriving.

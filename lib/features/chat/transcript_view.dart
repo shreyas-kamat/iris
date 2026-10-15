@@ -16,6 +16,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import 'attachment_chip.dart';
 import 'links.dart';
 
 /// One entry, dispatched on its kind.
@@ -81,7 +82,19 @@ class _UserBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            ConstrainedBox(
+            if (turn.attachments.isNotEmpty)
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: IrisSpace.xs,
+                runSpacing: IrisSpace.xs,
+                children: [
+                  for (final name in turn.attachments) AttachmentChip(name: name),
+                ],
+              ),
+            if (turn.attachments.isNotEmpty && turn.text.isNotEmpty)
+              const SizedBox(height: IrisSpace.xs),
+            if (turn.text.isNotEmpty)
+              ConstrainedBox(
               constraints: BoxConstraints(maxWidth: constraints.maxWidth * .82),
               child: DecoratedBox(
                 decoration: BoxDecoration(

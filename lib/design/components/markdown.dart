@@ -22,6 +22,10 @@ import '../theme/iris_theme.dart';
 import '../tokens/code_colors.dart';
 import '../tokens/metrics.dart';
 import '../tokens/motion.dart';
+import '../tokens/palette.dart';
+import 'markdown_image.dart';
+import 'markdown_syntax.dart';
+import 'math.dart';
 import 'primitives.dart';
 
 class IrisMarkdown extends StatefulWidget {
@@ -68,10 +72,7 @@ class _IrisMarkdownState extends State<IrisMarkdown> {
   @override
   Widget build(BuildContext context) {
     _clearRecognizers();
-    final nodes = md.Document(
-      extensionSet: md.ExtensionSet.gitHubFlavored,
-      encodeHtml: false,
-    ).parse(widget.data);
+    final nodes = irisDocument().parse(widget.data);
     final renderer = _Renderer(
       context.iris,
       widget.onTapLink,
@@ -114,6 +115,9 @@ final class _Renderer {
     'pre',
     'hr',
     'table',
+    'div',
+    'section',
+    'math-display',
   };
 
   TextStyle get body =>
@@ -141,6 +145,13 @@ final class _Renderer {
       return node.text.trim().isEmpty ? null : _rich(inline([node], body));
     }
     if (node is! md.Element) return null;
+    final image = node.tag == 'p' ? _soleImage(node) : null;
+    if (image != null) {
+      return MarkdownImage(
+        url: image.attributes['src']!,
+        alt: image.attributes['alt'],
+      );
+    }
     return switch (node.tag) {
       'h1' ||
       'h2' ||
@@ -157,8 +168,26 @@ final class _Renderer {
         color: theme.palette.line,
       ),
       'table' => table(node),
+      'div' => alert(node),
+      'section' => footnotes(node),
+      mathDisplayTag => IrisMath(node.textContent, display: true, style: body),
       _ => _rich(inline(node.children, body)),
     };
+  }
+
+  /// The image a paragraph holds and nothing else, if its source can be shown.
+  static md.Element? _soleImage(md.Element p) {
+    final children = [
+      for (final c in p.children ?? const <md.Node>[])
+        if (c is! md.Text || c.text.trim().isNotEmpty) c,
+    ];
+    if (children.length != 1) return null;
+    final only = children.single;
+    return only is md.Element &&
+            only.tag == 'img' &&
+            MarkdownImage.canShow(only.attributes['src'])
+        ? only
+        : null;
   }
 
   Widget _rich(List<InlineSpan> spans) => Text.rich(TextSpan(children: spans));
@@ -241,6 +270,43 @@ final class _Renderer {
             style: style,
           ),
         ];
+      case 'sup' when node.attributes['class'] == 'footnote-ref':
+        return [TextSpan(text: _superscript(node.textContent), style: style)];
+      case 'sub' || 'sup':
+        return inline(
+          node.children,
+          style.copyWith(
+            fontSize: (style.fontSize ?? 16) * 0.72,
+            fontFeatures: [
+              node.tag == 'sub'
+                  ? const FontFeature.subscripts()
+                  : const FontFeature.superscripts(),
+            ],
+          ),
+          link,
+        );
+      case 'kbd':
+        return [
+          TextSpan(text: ' ${node.textContent} ', style: _inlineCode(style)),
+        ];
+      case 'mark':
+        return inline(
+          node.children,
+          style.copyWith(backgroundColor: theme.palette.accentQuiet),
+          link,
+        );
+      case mathInlineTag || mathDisplayTag:
+        return [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: IrisMath(
+              node.textContent,
+              display: node.tag == mathDisplayTag,
+              style: style,
+            ),
+          ),
+        ];
       default:
         return inline(node.children, style, link);
     }
@@ -259,6 +325,120 @@ final class _Renderer {
     recognizers.add(recognizer);
     return recognizer;
   }
+
+  static const _alerts = {
+    'note': ('Note', Icons.info_outline, AgentState.idle),
+    'tip': ('Tip', Icons.lightbulb_outline, AgentState.done),
+    'important': ('Important', Icons.priority_high, AgentState.thinking),
+    'warning': ('Warning', Icons.warning_amber_outlined, AgentState.working),
+    'caution': ('Caution', Icons.dangerous_outlined, AgentState.failed),
+  };
+
+  /// A GitHub alert: `> [!NOTE]` and its kin. Any other `div` draws its
+  /// children as ordinary blocks.
+  Widget alert(md.Element node) {
+    final kind = RegExp(r'markdown-alert-(\w+)')
+        .firstMatch(node.attributes['class'] ?? '')?[1];
+    final style = _alerts[kind];
+    final children = [
+      for (final child in node.children ?? const <md.Node>[])
+        if (child is! md.Element ||
+            child.attributes['class'] != 'markdown-alert-title')
+          child,
+    ];
+    if (style == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: spaced(blocks(children), IrisSpace.sm),
+      );
+    }
+    final (title, icon, state) = style;
+    final color = theme.palette.colorFor(state);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: color, width: IrisStroke.ring)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: IrisSpace.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: IrisSize.iconSmall, color: color),
+                const SizedBox(width: IrisSpace.xs),
+                Text(
+                  title,
+                  style: body.copyWith(color: color, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: IrisSpace.xs),
+            ...spaced(blocks(children), IrisSpace.sm),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The footnotes block GitHub puts at the end: a numbered list, smaller and
+  /// muted, under a hairline. The ↩ back-links go nowhere in an app, so they
+  /// are dropped.
+  Widget footnotes(md.Element node) {
+    final small = body.copyWith(
+      fontSize: (body.fontSize ?? 16) * 0.85,
+      color: theme.palette.inkMuted,
+    );
+    final items = elementsIn(node).where((e) => e.tag == 'li').toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(
+          height: IrisSpace.md,
+          thickness: IrisStroke.hairline,
+          color: theme.palette.line,
+        ),
+        for (final (i, item) in items.indexed)
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: '${i + 1}. ', style: small),
+                ...inline(_withoutBackrefs(item.children), small),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  static Iterable<md.Element> elementsIn(md.Element node) sync* {
+    for (final child in node.children ?? const <md.Node>[]) {
+      if (child is md.Element) {
+        yield child;
+        yield* elementsIn(child);
+      }
+    }
+  }
+
+  /// A footnote's content without its ↩ links. Its paragraph is flattened to
+  /// inline nodes so the number and the text share a line.
+  static List<md.Node> _withoutBackrefs(List<md.Node>? nodes) => [
+    for (final node in nodes ?? const <md.Node>[])
+      if (node is md.Element && node.attributes['class'] == 'footnote-backref')
+        ...const <md.Node>[]
+      else if (node is md.Element && node.tag == 'p')
+        ..._withoutBackrefs(node.children)
+      else
+        node,
+  ];
+
+  static String _superscript(String digits) => digits
+      .split('')
+      .map((d) => const {
+            '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+            '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+          }[d] ?? d)
+      .join();
 
   Widget list(md.Element node) {
     final ordered = node.tag == 'ol';
@@ -339,11 +519,11 @@ final class _Renderer {
 
   Widget code(md.Element node) {
     final text = node.textContent.replaceFirst(RegExp(r'\n$'), '');
-    return _CodeBlock(
-      code: text,
-      language: _languageOf(node),
-      highlight: highlight,
-    );
+    final language = _languageOf(node);
+    if (language == 'math') {
+      return IrisMath(text, display: true, style: body);
+    }
+    return _CodeBlock(code: text, language: language, highlight: highlight);
   }
 
   /// The fence's language, from the `language-xxx` class the parser puts on
@@ -374,12 +554,19 @@ final class _Renderer {
                     horizontal: IrisSpace.sm,
                     vertical: IrisSpace.xs,
                   ),
-                  child: _rich(
-                    inline(
-                      cell.children,
-                      cell.tag == 'th'
-                          ? body.copyWith(fontWeight: FontWeight.w600)
-                          : body,
+                  child: Align(
+                    alignment: switch (cell.attributes['align']) {
+                      'center' => Alignment.center,
+                      'right' => Alignment.centerRight,
+                      _ => Alignment.centerLeft,
+                    },
+                    child: _rich(
+                      inline(
+                        cell.children,
+                        cell.tag == 'th'
+                            ? body.copyWith(fontWeight: FontWeight.w600)
+                            : body,
+                      ),
                     ),
                   ),
                 ),
@@ -441,14 +628,38 @@ const _aliases = {
   'golang': 'go',
 };
 
-/// The grammar for a fence's language, or null when there is none. There is
-/// no guessing: detection is slow and often wrong, and a wrongly coloured
-/// block reads worse than a plain one.
+/// The grammar for a fence's language, or null when there is none.
 String? highlightLanguage(String? fence) {
   final name = fence?.trim().toLowerCase();
   if (name == null || name.isEmpty) return null;
   final resolved = _aliases[name] ?? name;
   return _highlighter.getLanguage(resolved) == null ? null : resolved;
+}
+
+/// The languages an unlabelled block may be detected as. A short list is
+/// fast and rarely wrong; the full grammar set mislabels prose and logs.
+const _detectable = [
+  'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'sql',
+  'go', 'rust', 'java', 'kotlin', 'swift', 'dart', 'dockerfile',
+];
+
+final Map<String, String?> _detected = {};
+
+/// The language an unlabelled block is clearly written in, or null. It must
+/// score well and clearly beat the runner-up: a wrongly coloured block reads
+/// worse than a plain one.
+String? detectLanguage(String code) {
+  if (code.length < 20 || code.length > maxHighlightLength) return null;
+  if (_detected.containsKey(code)) return _detected[code];
+  final best = _highlighter.highlightAuto(code, _detectable);
+  final runnerUp = best.secondBest?.relevance ?? 0;
+  final language = best.language != null &&
+          best.relevance >= 4 &&
+          best.relevance >= runnerUp * 1.5
+      ? best.language
+      : null;
+  if (_detected.length > 200) _detected.clear();
+  return _detected[code] = language;
 }
 
 /// Highlighted spans, by palette, language and code. A transcript rebuilds
@@ -503,6 +714,10 @@ class _CodeBlockState extends State<_CodeBlock> {
     });
   }
 
+  /// The fence's language, or the detected one for a finished, unlabelled block.
+  String? get _language =>
+      widget.language ?? (widget.highlight ? detectLanguage(widget.code) : null);
+
   Widget _codeText(BuildContext context) {
     final palette = context.palette;
     final style = context.type.code.copyWith(
@@ -512,7 +727,7 @@ class _CodeBlockState extends State<_CodeBlock> {
     );
     final colors = IrisCodeColors.of(palette);
     final span = widget.highlight
-        ? _highlighted(widget.code, widget.language, colors)
+        ? _highlighted(widget.code, _language, colors)
         : null;
     if (span == null) {
       return Text(widget.code, key: const ValueKey('plain'), style: style);
@@ -558,7 +773,7 @@ class _CodeBlockState extends State<_CodeBlock> {
                 children: [
                   Expanded(
                     child: Text(
-                      widget.language ?? 'code',
+                      _language ?? 'code',
                       style: type.codeSmall.copyWith(
                         fontSize: 11,
                         color: palette.inkFaint,

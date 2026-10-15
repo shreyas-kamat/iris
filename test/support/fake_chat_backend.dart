@@ -3,8 +3,10 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
@@ -146,6 +148,16 @@ final class FakeChatBackend implements ChatBackend {
     return submitResult;
   }
 
+  final List<(String, String)> attached = [];
+  Result<String?> Function(Attachment file) attachResult =
+      (file) => Ok(file.isImage ? null : '@file:/s/${file.name}');
+
+  @override
+  Future<Result<String?>> attach(String runtimeId, Attachment file) async {
+    attached.add((runtimeId, file.name));
+    return attachResult(file);
+  }
+
   @override
   Future<Result<void>> interrupt(String runtimeId) async {
     calls.add('interrupt $runtimeId');
@@ -241,6 +253,11 @@ final class FakeChatBackend implements ChatBackend {
       (items) => ConversationPage(items: items, total: items.length),
     );
   }
+
+  Result<String> transcribeResult = const Ok('dictated words');
+
+  @override
+  Future<Result<String>> transcribe(Uint8List wav) async => transcribeResult;
 
   @override
   Future<Result<List<SearchHit>>> search(String query) async {

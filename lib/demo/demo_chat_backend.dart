@@ -1,7 +1,10 @@
 /// The demo, seen through one profile, as the `ChatBackend` the screens use.
 library;
 
+import 'dart:typed_data';
+
 import '../core/result.dart';
+import '../data/chat/attachment.dart';
 import '../data/chat/chat_backend.dart';
 import '../data/chat/chat_event.dart';
 import '../data/chat/chat_models.dart';
@@ -49,6 +52,10 @@ final class DemoChatBackend implements ChatBackend {
     _world.submit(runtimeId, text);
     return const Ok(null);
   }
+
+  @override
+  Future<Result<String?>> attach(String runtimeId, Attachment file) async =>
+      Ok('@file:/demo/${file.name}');
 
   @override
   Future<Result<void>> interrupt(String runtimeId) async {
@@ -117,6 +124,10 @@ final class DemoChatBackend implements ChatBackend {
     _world.setArchived(storedId, archived: archived);
     return const Ok(null);
   }
+
+  @override
+  Future<Result<String>> transcribe(Uint8List wav) async =>
+      const Ok('How much disk space is left on the NAS?');
 
   @override
   Future<Result<List<SearchHit>>> search(String query) async =>

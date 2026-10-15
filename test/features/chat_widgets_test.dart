@@ -363,4 +363,32 @@ void main() {
     );
     expect(find.text('Steered'), findsOneWidget);
   });
+
+  testWidgets('a user turn shows its files as chips', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            UserTurn(id: 'u', text: 'see', attachments: ['a.png']),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('a.png'), findsOneWidget);
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+  });
+
+  testWidgets('a user turn with only files draws no empty bubble', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            UserTurn(id: 'u', text: '', attachments: ['n.txt']),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('n.txt'), findsOneWidget);
+    expect(find.byType(SelectableText), findsNothing);
+  });
 }

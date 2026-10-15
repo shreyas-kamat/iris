@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/design/components/markdown.dart';
+import 'package:iris/design/components/markdown_image.dart';
+import 'package:iris/design/components/math.dart';
 
 import '../support/harness.dart';
 
@@ -152,6 +154,33 @@ void main() {
   });
 
   group('highlighting', () {
+    test('a clear unlabelled block is detected; a vague one is not', () {
+      expect(
+        detectLanguage(
+          'def greet(name):\n    print(f"hi {name}")\n\nfor i in range(3):\n    greet(i)\n',
+        ),
+        'python',
+      );
+      expect(
+        detectLanguage('SELECT id, name FROM users WHERE active = 1 ORDER BY name;'),
+        'sql',
+      );
+      expect(detectLanguage('hello there'), isNull);
+      expect(detectLanguage('x'), isNull);
+    });
+
+    testWidgets('a finished unlabelled block is coloured and named', (tester) async {
+      await tester.pumpWidget(
+        themed(
+          const IrisMarkdown(
+            '```\ndef greet(name):\n    print(f"hi {name}")\n\nfor i in range(3):\n    greet(i)\n```',
+          ),
+        ),
+      );
+      expect(find.byKey(const ValueKey('highlighted')), findsOneWidget);
+      expect(find.text('python'), findsOneWidget);
+    });
+
     test('fence names resolve through aliases; unknown ones do not', () {
       expect(highlightLanguage('sh'), 'bash');
       expect(highlightLanguage('zsh'), 'bash');
@@ -204,5 +233,105 @@ void main() {
       await tester.pumpAndSettle();
       expect(codeSpan(tester, code).children, isNull);
     });
+  });
+
+  testWidgets('an alert shows its title and body', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('> [!TIP]\n> Use a cache.')),
+    );
+    expect(find.text('Tip'), findsOneWidget);
+    expect(find.text('Use a cache.'), findsOneWidget);
+    expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
+  });
+
+  testWidgets('footnotes are superscript and listed at the end', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('Fact.[^1]\n\n[^1]: Source.')),
+    );
+    expect(find.textContaining('¹'), findsOneWidget);
+    expect(find.textContaining('Source.'), findsOneWidget);
+    expect(find.textContaining('↩'), findsNothing);
+  });
+
+  testWidgets('sub, sup, kbd and mark are styled', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('H<sub>2</sub>O and <kbd>Esc</kbd>')),
+    );
+    final spans = spansOf(tester, find.textContaining('H'));
+    final two = spans.firstWhere((s) => s.text == '2');
+    expect(two.style?.fontSize, lessThan(16));
+    expect(
+      spans.firstWhere((s) => s.text?.trim() == 'Esc').style?.fontFamily,
+      contains('Mono'),
+    );
+  });
+
+  testWidgets('table cells follow the column alignment', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('| a | b |\n|:-:|--:|\n| 1 | 2 |')),
+    );
+    final aligns = tester
+        .widgetList<Align>(find.byType(Align))
+        .map((a) => a.alignment)
+        .toSet();
+    expect(aligns, containsAll([Alignment.center, Alignment.centerRight]));
+  });
+
+  testWidgets('an image waits for a tap before loading', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('![chart](https://img.example/c.png)')),
+    );
+    expect(find.byType(Image), findsNothing);
+    expect(find.textContaining('img.example'), findsOneWidget);
+    await tester.tap(find.byType(MarkdownImage));
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('an image inside a sentence stays its alt text', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('See ![chart](https://img.example/c.png) here')),
+    );
+    expect(find.byType(MarkdownImage), findsNothing);
+    expect(find.textContaining('chart'), findsOneWidget);
+  });
+
+  testWidgets('a non-web image source is not offered', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('![x](file:///etc/passwd)')),
+    );
+    expect(find.byType(MarkdownImage), findsNothing);
+  });
+
+  testWidgets('maths renders as maths, inline and display', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('Area \$\\pi r^2\$.\n\n\$\$\nE=mc^2\n\$\$')),
+    );
+    expect(find.byType(IrisMath), findsNWidgets(2));
+    expect(find.text(r'\pi r^2'), findsNothing);
+  });
+
+  testWidgets('TeX that does not parse shows its source', (tester) async {
+    await tester.pumpWidget(themed(const IrisMarkdown(r'$\frac{a}{$')));
+    expect(find.textContaining(r'\frac{a}{'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('physics, units and chemistry lay out, not fall back', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown(r'$\dv{f}{x}$ and $\ce{H2O}$ and $\SI{3}{m}$')),
+    );
+    expect(find.byType(IrisMath), findsNWidgets(3));
+    expect(find.textContaining(r'\dv'), findsNothing);
+    expect(find.textContaining(r'\ce'), findsNothing);
+    expect(find.textContaining(r'\SI'), findsNothing);
+  });
+
+  testWidgets('a math fence is maths, a latex fence is code', (tester) async {
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('```math\nx^2\n```\n\n```latex\nx^2\n```')),
+    );
+    expect(find.byType(IrisMath), findsOneWidget);
+    expect(find.text('latex'), findsOneWidget);
   });
 }

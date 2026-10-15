@@ -6,6 +6,17 @@ All notable changes to Iris are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Replies render TeX maths (inline and display, AMS environments, physics notation, SI units and chemistry),
+  GitHub alerts, footnotes, emoji shortcodes and table alignment.
+- Images in Markdown show a placeholder and load only when tapped.
+- Code blocks with no language label are detected and highlighted once the reply finishes.
+- Attach photos and files to a message (up to 5, 20 MB each).
+- Dictate a message with the mic; Hermes turns the recording into text, which lands in the composer unsent.
+
+### Changed
+- The Android release now also declares `RECORD_AUDIO`, used only for dictation.
+
 ## [1.0.0] - not yet released
 
 The first release.
@@ -25,5 +36,5 @@ The first release.
 - Passwords and access tokens are stored in the platform keystore only.
 - Plain `http` is allowed only for private addresses; self-signed certificates only by explicit choice, per
   server.
-- No camera, location, contacts or microphone permission; the Android release declares only `INTERNET`.
+- No camera, location or contacts permission; the microphone is asked for only when dictating.
 - Android backup is disabled.

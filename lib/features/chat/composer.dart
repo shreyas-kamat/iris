@@ -19,6 +19,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import 'attachment_chip.dart';
 
 class Composer extends StatelessWidget {
   const Composer({
@@ -32,6 +33,14 @@ class Composer extends StatelessWidget {
     this.onModel,
     this.state = AgentState.idle,
     this.contextUsage,
+    this.attachments = const [],
+    this.onAttach,
+    this.onRemoveAttachment,
+    this.recording,
+    this.transcribing = false,
+    this.onMic,
+    this.onStopRecording,
+    this.onCancelRecording,
     this.onContext,
     super.key,
   });
@@ -65,6 +74,22 @@ class Composer extends StatelessWidget {
   /// Opens the context sheet.
   final VoidCallback? onContext;
 
+  /// Files waiting to go with the next message.
+  final List<String> attachments;
+
+  /// Opens the file picker. Null hides the button.
+  final VoidCallback? onAttach;
+  final ValueChanged<int>? onRemoveAttachment;
+
+  /// How long the current clip has run; null when not recording.
+  final Duration? recording;
+
+  /// The clip is with Hermes being turned into text.
+  final bool transcribing;
+  final VoidCallback? onMic;
+  final VoidCallback? onStopRecording;
+  final VoidCallback? onCancelRecording;
+
   /// At most this many suggestions show, so they never hide the transcript.
   static const suggestions = 5;
 
@@ -97,7 +122,8 @@ class Composer extends StatelessWidget {
       valueListenable: controller,
       builder: (context, value, _) {
         final matching = _matching(value.text);
-        final canSend = enabled && value.text.trim().isNotEmpty;
+        final canSend =
+            enabled && (value.text.trim().isNotEmpty || attachments.isNotEmpty);
         // Text during a run steers it. A slash command is not a steer, so it
         // gets no button.
         final canSteer =
@@ -163,8 +189,31 @@ class Composer extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (attachments.isNotEmpty) ...[
+                      Wrap(
+                        spacing: IrisSpace.xs,
+                        runSpacing: IrisSpace.xs,
+                        children: [
+                          for (final (i, name) in attachments.indexed)
+                            AttachmentChip(
+                              name: name,
+                              onRemove: onRemoveAttachment == null
+                                  ? null
+                                  : () => onRemoveAttachment!(i),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: IrisSpace.sm),
+                    ],
                     // Borderless: the box is the chrome, so the field inside
                     // it must not draw its own.
+                    if (recording case final elapsed?)
+                      _RecordingStrip(
+                        elapsed: elapsed,
+                        onStop: onStopRecording ?? () {},
+                        onCancel: onCancelRecording ?? () {},
+                      )
+                    else
                     TextField(
                       controller: controller,
                       minLines: 1,
@@ -194,7 +243,19 @@ class Composer extends StatelessWidget {
                     const SizedBox(height: IrisSpace.xs),
                     Row(
                       children: [
-                        if (model case final model?) ...[
+                        if (onAttach != null && !running && recording == null) ...[
+                          IrisPressable(
+                            onTap: enabled ? onAttach : null,
+                            semanticLabel: 'Attach',
+                            child: Icon(
+                              Icons.add,
+                              size: 20,
+                              color: palette.inkMuted,
+                            ),
+                          ),
+                          const SizedBox(width: IrisSpace.xs),
+                        ],
+                        if (model case final model? when recording == null) ...[
                           _ModelChip(model: model, onTap: onModel),
                           const SizedBox(width: IrisSpace.xs),
                         ],
@@ -253,6 +314,12 @@ class Composer extends StatelessWidget {
                                   key: const ValueKey('stop'),
                                   state: state,
                                   onTap: onStop,
+                                )
+                              : !canSend && onMic != null && recording == null
+                              ? _MicButton(
+                                  key: const ValueKey('mic'),
+                                  busy: transcribing,
+                                  onTap: enabled && !transcribing ? onMic : null,
                                 )
                               : _SendButton(
                                   key: const ValueKey('send'),
@@ -456,6 +523,99 @@ class _ContextRing extends StatelessWidget {
           value: usage.percent / 100,
           semanticLabel: 'Context window, $percent percent',
         ),
+      ),
+    );
+  }
+}
+
+class _RecordingStrip extends StatelessWidget {
+  const _RecordingStrip({
+    required this.elapsed,
+    required this.onStop,
+    required this.onCancel,
+  });
+
+  final Duration elapsed;
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.iris;
+    final palette = theme.palette;
+    final seconds = elapsed.inSeconds;
+    final clock =
+        '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+    return Row(
+      children: [
+        Icon(
+          Icons.fiber_manual_record,
+          size: 12,
+          color: palette.colorFor(AgentState.failed),
+        ),
+        const SizedBox(width: IrisSpace.sm),
+        Text(
+          clock,
+          style: theme.typography.numeric.copyWith(color: palette.ink),
+        ),
+        const Spacer(),
+        IrisPressable(
+          onTap: onCancel,
+          semanticLabel: 'Cancel recording',
+          child: ExcludeSemantics(
+            child: Text(
+              'Cancel',
+              style: theme.typography.label.copyWith(color: palette.inkMuted),
+            ),
+          ),
+        ),
+        const SizedBox(width: IrisSpace.md),
+        IrisPressable(
+          onTap: onStop,
+          semanticLabel: 'Stop recording',
+          child: ExcludeSemantics(
+            child: Text(
+              'Done',
+              style: theme.typography.label.copyWith(color: palette.accent),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MicButton extends StatelessWidget {
+  const _MicButton({required this.busy, required this.onTap, super.key});
+
+  final bool busy;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.iris.palette;
+    return IrisPressable(
+      onTap: onTap,
+      semanticLabel: busy ? 'Transcribing' : 'Dictate',
+      ensureTapTarget: false,
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: palette.surfaceSunken,
+          shape: BoxShape.circle,
+        ),
+        child: busy
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: palette.accent,
+                ),
+              )
+            : Icon(Icons.mic_none, size: 20, color: palette.ink),
       ),
     );
   }

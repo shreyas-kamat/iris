@@ -2,10 +2,12 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/json.dart';
+import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
@@ -252,6 +254,50 @@ void main() {
     expect(sent['params']['session_id'].stringOrNull, 'run-1');
     expect(sent['params']['text'].stringOrNull, 'hello');
     expect((await future).isOk, isTrue);
+  });
+
+  group('attachments', () {
+    final png = Attachment(name: 'a.png', bytes: Uint8List.fromList([1]));
+    final txt = Attachment(name: 'n.txt', bytes: Uint8List.fromList([104]));
+
+    test('an image goes up as image bytes and needs no reference', () async {
+      final future = chat.attach('run-1', png);
+      final sent = await answer({'path': '/s/a.png'});
+      expect(sent['method'].stringOrNull, 'image.attach_bytes');
+      expect(sent['params']['content_base64'].stringOrNull, 'AQ==');
+      expect(sent['params']['filename'].stringOrNull, 'a.png');
+      expect((await future).valueOrNull, isNull);
+    });
+
+    test('a file goes up as a data URL and returns its reference', () async {
+      final future = chat.attach('run-1', txt);
+      final sent = await answer({'ref_text': '@file:/s/n.txt'});
+      expect(sent['method'].stringOrNull, 'file.attach');
+      expect(sent['params']['data_url'].stringOrNull, 'data:text/plain;base64,aA==');
+      expect((await future).valueOrNull, '@file:/s/n.txt');
+    });
+
+    test('a reply with only a path builds a quoted reference', () async {
+      final future = chat.attach('run-1', txt);
+      await answer({'path': '/s/my notes.txt'});
+      expect((await future).valueOrNull, '@file:`/s/my notes.txt`');
+    });
+
+    test('an image Hermes refuses as an image goes up as a file', () async {
+      final future = chat.attach('run-1', png);
+      await Future<void>.delayed(Duration.zero);
+      socket.replyToLast(error: {'code': 4016, 'message': 'unsupported image'});
+      final sent = await answer({'ref_text': '@file:/s/a.png'});
+      expect(sent['method'].stringOrNull, 'file.attach');
+      expect((await future).valueOrNull, '@file:/s/a.png');
+    });
+
+    test('any other image failure is reported', () async {
+      final future = chat.attach('run-1', png);
+      await Future<void>.delayed(Duration.zero);
+      socket.replyToLast(error: {'code': 5000, 'message': 'disk full'});
+      expect((await future).failureOrNull?.kind, FailureKind.rejected);
+    });
   });
 
   test('interrupt stops the runtime session', () async {
@@ -626,6 +672,39 @@ void main() {
         'info': {'model': 'm', 'context_used': 30, 'context_max': 120},
       });
       expect((await resumed).valueOrNull?.context?.percent, 25);
+    });
+  });
+
+  group('transcription', () {
+    test('posts the clip as a WAV data URL and returns the words', () async {
+      Object? body;
+      http.on('POST', '/api/audio/transcribe', (request) {
+        body = request.data;
+        return FakeReply.json({'transcript': '  hello there '});
+      });
+      final result = await chat.transcribe(Uint8List.fromList([1, 2]));
+      expect(result.valueOrNull, 'hello there');
+      expect((body as Map)['data_url'], 'data:audio/wav;base64,AQI=');
+      expect((body as Map)['mime_type'], 'audio/wav');
+    });
+
+    test('an error field is a failure in Hermes words', () async {
+      http.on('POST', '/api/audio/transcribe',
+          (_) => FakeReply.json({'error': 'No speech-to-text provider is configured'}));
+      final result = await chat.transcribe(Uint8List(1));
+      expect(result.failureOrNull?.message, contains('speech-to-text'));
+    });
+
+    test('a named profile is passed along', () async {
+      Map<String, dynamic>? query;
+      http.on('POST', '/api/audio/transcribe', (request) {
+        query = request.queryParameters;
+        return FakeReply.json({'text': 'hi'});
+      });
+      final named = DashboardChat(session, profile: 'work');
+      addTearDown(named.dispose);
+      await named.transcribe(Uint8List(1));
+      expect(query?['profile'], 'work');
     });
   });
 }
