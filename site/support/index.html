@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iris Support</title>
+<meta name="description" content="Help with connecting Iris to your Hermes server, and how to reach us.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="../site.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="../" aria-label="Iris home"><span class="mark" aria-hidden="true"></span>Iris</a>
+  <nav><a href="../privacy-policy/">Privacy Policy</a></nav>
+</header>
+
+<main>
+  <h1>Iris Support</h1>
+  <p class="lede">Iris is a phone app for your own Hermes agent. It needs a Hermes dashboard to talk to,
+  which you run yourself. Most problems are about reaching that server, and the answers are below.</p>
+
+  <div class="card">
+    <h2>Contact us</h2>
+    <p>Email <a href="mailto:shreyaskamat13@gmail.com">shreyaskamat13@gmail.com</a>. Please include your phone
+    model, its Android or iOS version, the version of Iris (shown in your store listing), and what you
+    were doing when the problem happened. A screenshot helps. Please do <strong>not</strong> send passwords
+    or access tokens.</p>
+    <p><a class="button" href="mailto:shreyaskamat13@gmail.com?subject=Iris%20support">Email support</a></p>
+  </div>
+
+  <h2>Getting connected</h2>
+  <ol>
+    <li>Open Iris and enter the address of your Hermes dashboard: the one you open in a browser, usually on
+    port 9119. A tunnel, Tailscale or a local address on the same network all work.</li>
+    <li>If the dashboard is published behind Cloudflare Access, Iris asks for a service token (a client ID
+    and a client secret). See the question below.</li>
+    <li>Sign in with your dashboard username and password.</li>
+  </ol>
+  <p>Instead of typing, you can scan the pairing QR code your dashboard shows. Iris asks for camera access
+  only for that.</p>
+
+  <h2>Questions</h2>
+
+  <details>
+    <summary>Do I need my own server?</summary>
+    <p>Yes. Iris does not include an agent or a hosted service. It is a client for a Hermes dashboard that you
+    run, or that someone you trust runs for you.</p>
+  </details>
+
+  <details>
+    <summary>It says it could not connect</summary>
+    <p>Check that the address starts with <code>https://</code> (or <code>http://</code> for a private network),
+    that the dashboard is running, and that your phone can reach it. Try opening the same address in your
+    phone&rsquo;s browser. If you are away from home and the server is on your home network, you will need a tunnel or
+    Tailscale. The connection screen in Iris shows whether the link is connecting, live or reconnecting.</p>
+  </details>
+
+  <details>
+    <summary>What is a Cloudflare Access service token?</summary>
+    <p>If your dashboard is behind Cloudflare Access, the app cannot complete Cloudflare&rsquo;s browser login, so
+    it uses a service token instead. In Cloudflare Zero Trust, create one under Access &rarr; Service
+    credentials, then add a <em>Service Auth</em> policy for it on the application that protects your
+    dashboard. Paste its client ID and secret into Iris. Iris sends the token only over HTTPS.</p>
+  </details>
+
+  <details>
+    <summary>My server uses a self-signed certificate</summary>
+    <p>Iris can accept a self-signed certificate if you choose to trust it. That trust applies to that one
+    server only.</p>
+  </details>
+
+  <details>
+    <summary>I see &ldquo;Reconnecting&rdquo;</summary>
+    <p>Iris reconnects by itself after a dropped connection, for example when you change networks or the phone
+    sleeps. If it does not recover, check that your server is up.</p>
+  </details>
+
+  <details>
+    <summary>Can I have more than one agent profile?</summary>
+    <p>Yes, if your Hermes server has several profiles. Tap the profile pill at the top of the home screen to
+    switch. Iris remembers your choice.</p>
+  </details>
+
+  <details>
+    <summary>How do I archive or rename a conversation?</summary>
+    <p>Press and hold a conversation on the home screen. Archived conversations are under
+    <em>Archived</em> at the bottom of the list, where you can bring them back.</p>
+  </details>
+
+  <details>
+    <summary>How do I start over or remove my saved login?</summary>
+    <p>Uninstall and reinstall Iris. On an iPhone, a saved login can remain in the Keychain after deletion, so
+    to make it unusable, change that password or revoke that service token on your server.</p>
+  </details>
+
+  <details>
+    <summary>Where is my data?</summary>
+    <p>Your conversations live on your Hermes server. Iris sends nothing to us. The
+    <a href="../privacy-policy/">Privacy Policy</a> has the details.</p>
+  </details>
+</main>
+
+<footer>
+  <p>&copy; 2026 Ashish Kamat (iFloTech). Developed by Shreyas Kamat.</p>
+  <p><a href="../">Iris</a> &middot; <a href="../privacy-policy/">Privacy Policy</a></p>
+</footer>
+</body>
+</html>
