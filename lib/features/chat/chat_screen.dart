@@ -29,6 +29,7 @@ import 'context_sheet.dart';
 import 'decision_cards.dart';
 import 'model_sheet.dart';
 import 'transcript_view.dart';
+import 'voice_recorder.dart';
 
 /// The orb state for what the agent is doing.
 AgentState agentStateFor(TurnPhase turn) => switch (turn) {
@@ -55,6 +56,7 @@ class ChatScreen extends StatefulWidget {
     this.archived = false,
     this.suggestions,
     this.pickFiles,
+    this.recorder,
     super.key,
   });
 
@@ -62,6 +64,9 @@ class ChatScreen extends StatefulWidget {
 
   /// Opens the file picker. Tests pass a fake; null uses the system picker.
   final PickFiles? pickFiles;
+
+  /// Records dictation. Tests pass a fake; null uses the microphone.
+  final VoiceRecorder? recorder;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -99,6 +104,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _text.removeListener(_watchForSlash);
+    _clock?.cancel();
+    unawaited(_recorder.cancel());
     _chat.dispose();
     _text.dispose();
     super.dispose();
@@ -162,6 +169,69 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   final List<Attachment> _draft = [];
+
+  late final VoiceRecorder _recorder = widget.recorder ?? RecordVoiceRecorder();
+  static const _maxRecording = Duration(minutes: 2);
+  Duration? _recording;
+  bool _transcribing = false;
+  Timer? _clock;
+
+  Future<void> _startDictation() async {
+    if (!await _recorder.start()) {
+      if (mounted) {
+        showIrisToast(
+          context,
+          message: 'Iris needs the microphone. Allow it in Settings to dictate.',
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _recording = Duration.zero);
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      final next = (_recording ?? Duration.zero) + const Duration(seconds: 1);
+      if (next >= _maxRecording) {
+        unawaited(_stopDictation());
+      } else {
+        setState(() => _recording = next);
+      }
+    });
+  }
+
+  Future<void> _stopDictation() async {
+    _clock?.cancel();
+    setState(() {
+      _recording = null;
+      _transcribing = true;
+    });
+    final clip = await _recorder.stop();
+    final result = clip == null
+        ? const Ok<String>('')
+        : await widget.backend.transcribe(clip);
+    if (!mounted) return;
+    setState(() => _transcribing = false);
+    switch (result) {
+      case Ok(value: ''):
+        showIrisToast(
+          context,
+          message: "Didn't catch that. Try again a little closer.",
+        );
+      case Ok(:final value):
+        final before = _text.text.trimRight();
+        _text.text = before.isEmpty ? value : '$before $value';
+      case Err(:final failure):
+        showIrisToast(
+          context,
+          message: "Couldn't transcribe: ${ChatController.describe(failure)}",
+        );
+    }
+  }
+
+  Future<void> _cancelDictation() async {
+    _clock?.cancel();
+    setState(() => _recording = null);
+    await _recorder.cancel();
+  }
 
   Future<void> _attach() async {
     final picked = await (widget.pickFiles ?? pickFiles)();
@@ -253,6 +323,11 @@ class _ChatScreenState extends State<ChatScreen> {
             attachments: [for (final f in _draft) f.name],
             onAttach: () => unawaited(_attach()),
             onRemoveAttachment: (i) => setState(() => _draft.removeAt(i)),
+            recording: _recording,
+            transcribing: _transcribing,
+            onMic: () => unawaited(_startDictation()),
+            onStopRecording: () => unawaited(_stopDictation()),
+            onCancelRecording: () => unawaited(_cancelDictation()),
             onContext: state.context == null
                 ? null
                 : () => unawaited(
