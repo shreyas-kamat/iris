@@ -1,31 +1,19 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Iris Support</title>
-<meta name="description" content="Help with connecting Iris to your Hermes server, and how to reach us.">
-<meta name="color-scheme" content="light dark">
-<link rel="stylesheet" href="../site.css">
-</head>
-<body>
-<header class="top">
-  <a class="brand" href="../" aria-label="Iris home"><span class="mark" aria-hidden="true"></span>Iris</a>
-  <nav><a href="../privacy-policy/">Privacy Policy</a></nav>
-</header>
+import { Link } from 'react-router-dom';
 
-<main>
-  <h1>Iris Support</h1>
-  <p class="lede">Iris is a phone app for your own Hermes agent. It needs a Hermes dashboard to talk to,
+export function Support() {
+  return (
+    <main className="wrap prose">
+<h1>Iris Support</h1>
+  <p className="lede">Iris is a phone app for your own Hermes agent. It needs a Hermes dashboard to talk to,
   which you run yourself. Most problems are about reaching that server, and the answers are below.</p>
 
-  <div class="card">
+  <div className="card">
     <h2>Contact us</h2>
     <p>Email <a href="mailto:shreyaskamat13@gmail.com">shreyaskamat13@gmail.com</a>. Please include your phone
     model, its Android or iOS version, the version of Iris (shown in your store listing), and what you
     were doing when the problem happened. A screenshot helps. Please do <strong>not</strong> send passwords
     or access tokens.</p>
-    <p><a class="button" href="mailto:shreyaskamat13@gmail.com?subject=Iris%20support">Email support</a></p>
+    <p><a className="button" href="mailto:shreyaskamat13@gmail.com?subject=Iris%20support">Email support</a></p>
   </div>
 
   <h2>Getting connected</h2>
@@ -48,14 +36,14 @@
     <summary>It says it could not connect</summary>
     <p>Check that the address starts with <code>https://</code> (or <code>http://</code> for a private network),
     that the dashboard is running, and that your phone can reach it. Try opening the same address in your
-    phone&rsquo;s browser. If you are away from home and the server is on your home network, you will need a tunnel or
+    phone’s browser. If you are away from home and the server is on your home network, you will need a tunnel or
     Tailscale. The connection screen in Iris shows whether the link is connecting, live or reconnecting.</p>
   </details>
 
   <details>
     <summary>What is a Cloudflare Access service token?</summary>
-    <p>If your dashboard is behind Cloudflare Access, the app cannot complete Cloudflare&rsquo;s browser login, so
-    it uses a service token instead. In Cloudflare Zero Trust, create one under Access &rarr; Service
+    <p>If your dashboard is behind Cloudflare Access, the app cannot complete Cloudflare’s browser login, so
+    it uses a service token instead. In Cloudflare Zero Trust, create one under Access → Service
     credentials, then add a <em>Service Auth</em> policy for it on the application that protects your
     dashboard. Paste its client ID and secret into Iris. Iris sends the token only over HTTPS.</p>
   </details>
@@ -67,7 +55,7 @@
   </details>
 
   <details>
-    <summary>I see &ldquo;Reconnecting&rdquo;</summary>
+    <summary>I see “Reconnecting”</summary>
     <p>Iris reconnects by itself after a dropped connection, for example when you change networks or the phone
     sleeps. If it does not recover, check that your server is up.</p>
   </details>
@@ -93,13 +81,8 @@
   <details>
     <summary>Where is my data?</summary>
     <p>Your conversations live on your Hermes server. Iris sends nothing to us. The
-    <a href="../privacy-policy/">Privacy Policy</a> has the details.</p>
+    <Link to="/privacy-policy">Privacy Policy</Link> has the details.</p>
   </details>
-</main>
-
-<footer>
-  <p>&copy; 2026 Ashish Kamat (iFloTech). Developed by Shreyas Kamat.</p>
-  <p><a href="../">Iris</a> &middot; <a href="../privacy-policy/">Privacy Policy</a></p>
-</footer>
-</body>
-</html>
+    </main>
+  );
+}
