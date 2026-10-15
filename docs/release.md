@@ -8,10 +8,16 @@ first build is uploaded.
 Generate the key outside the repository and keep a backup somewhere safe. Losing it means going
 through Google's upload-key reset.
 
+One line, in **PowerShell**:
+
 ```
-keytool -genkeypair -v -keystore %USERPROFILE%\iris-upload.jks -alias upload ^
-  -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkeypair -v -keystore "$env:USERPROFILE\iris-upload.jks" -alias upload -keyalg RSA -keysize 2048 -validity 10000
 ```
+
+In **Git Bash**, use `"$USERPROFILE/iris-upload.jks"` for the path. In the old `cmd.exe` it is
+`%USERPROFILE%\iris-upload.jks`; that form is taken literally anywhere else and fails with
+"path not found". keytool asks for a password and for your name and organisation. The password
+protects the key, so pick a strong one and store it in a password manager with the file.
 
 Create `android/key.properties` (git-ignored, as are `*.jks` and `*.keystore`):
 
