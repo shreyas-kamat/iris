@@ -86,6 +86,7 @@ final class ApiClient {
     Map<String, Object?>? body,
     Map<String, Object?>? query,
     CancelToken? cancelToken,
+    Duration? receiveTimeout,
   }) => _send(
     path,
     () => _dio.post<String>(
@@ -96,6 +97,7 @@ final class ApiClient {
       options: Options(
         responseType: ResponseType.plain,
         contentType: Headers.jsonContentType,
+        receiveTimeout: receiveTimeout,
       ),
     ),
   );

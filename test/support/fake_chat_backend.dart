@@ -3,6 +3,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/chat_backend.dart';
@@ -241,6 +242,11 @@ final class FakeChatBackend implements ChatBackend {
       (items) => ConversationPage(items: items, total: items.length),
     );
   }
+
+  Result<String> transcribeResult = const Ok('dictated words');
+
+  @override
+  Future<Result<String>> transcribe(Uint8List wav) async => transcribeResult;
 
   @override
   Future<Result<List<SearchHit>>> search(String query) async {
