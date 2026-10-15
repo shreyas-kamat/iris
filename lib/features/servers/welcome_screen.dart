@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/net/connection_mode.dart';
 import '../../data/net/server_config.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/iris_orb.dart';
+import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
@@ -89,6 +91,21 @@ class WelcomeScreen extends ConsumerWidget {
                     onTap: () => open(mode),
                   ),
                 ),
+              if (showDemo) ...[
+                const SizedBox(height: IrisSpace.xl),
+                IrisLabel('No server yet?', color: palette.inkFaint),
+                const SizedBox(height: IrisSpace.sm),
+                IrisListRow(
+                  title: 'Try the demo',
+                  subtitle: 'Sample conversations. No server needed.',
+                  leading: Icon(
+                    Icons.play_circle_outline,
+                    size: IrisSize.icon,
+                    color: palette.inkMuted,
+                  ),
+                  onTap: () => ref.read(demoSessionProvider.notifier).enter(),
+                ),
+              ],
               const SizedBox(height: IrisSpace.xxl),
             ],
           ),

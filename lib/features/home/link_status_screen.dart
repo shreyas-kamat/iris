@@ -15,6 +15,7 @@ import '../../core/failure.dart';
 import '../../data/net/capabilities.dart';
 import '../../data/net/server_config.dart';
 import '../../data/rpc/dashboard_session.dart';
+import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -111,7 +112,10 @@ class LinkStatusScreen extends ConsumerWidget {
                     '${server.baseUrl} · ${mode.title}',
                   _ => server.baseUrl,
                 },
-                onTap: () => unawaited(showServerSwitcher(context)),
+                // The demo has no other server to switch to or add.
+                onTap: ref.watch(demoModeProvider)
+                    ? null
+                    : () => unawaited(showServerSwitcher(context)),
               ),
               if (capabilities.serverVersion case final version?) ...[
                 const SizedBox(height: IrisSpace.sm),

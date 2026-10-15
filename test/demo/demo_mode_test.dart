@@ -4,8 +4,10 @@ library;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/preferences.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/data/db/database.dart';
+import 'package:iris/data/prefs/preferences_store.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/demo/demo_chat_backend.dart';
 import 'package:iris/demo/demo_mode.dart';
@@ -78,5 +80,20 @@ void main() {
     expect(container.read(demoModeProvider), isFalse);
     expect(container.read(activeServerProvider), isNull);
     expect(await container.read(activeChatProvider.future), isNull);
+  });
+
+  test('choices made in the demo are never written to the store', () async {
+    final store = MemoryPreferencesStore();
+    final scoped = ProviderContainer(
+      overrides: [preferencesStoreProvider.overrideWithValue(store)],
+    );
+    addTearDown(scoped.dispose);
+    final prefs = scoped.read(preferencesProvider.notifier);
+    prefs.set(demoServer.id, PreferenceKeys.profile, 'homelab');
+    prefs.set('real-server', PreferenceKeys.profile, 'ananta');
+    await Future<void>.delayed(Duration.zero);
+    // Kept in memory for the session, but nothing reaches the store.
+    expect(prefs.get(demoServer.id, PreferenceKeys.profile), 'homelab');
+    expect(store.values.keys.map((key) => key.$1), ['real-server']);
   });
 }

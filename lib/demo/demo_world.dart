@@ -271,12 +271,19 @@ final class DemoWorld {
     return null;
   }
 
-  ModelOptions get modelOptions =>
+  /// The same object until the model changes: a provider that reads it sees
+  /// no change on a rebuild, so nothing downstream is invalidated.
+  late ModelOptions _options = _buildOptions();
+
+  ModelOptions _buildOptions() =>
       demoModelOptions(_clock(), model: _model, provider: _provider);
+
+  ModelOptions get modelOptions => _options;
 
   ModelSwitch switchModel(String runtimeId, String model, String provider) {
     _model = model;
     _provider = provider;
+    _options = _buildOptions();
     _events.add(ModelChanged(runtimeId, model: model, provider: provider));
     return ModelSwitch(model: model);
   }

@@ -64,5 +64,10 @@ final demoCapabilities = ServerCapabilities(
 void leaveDemo(BuildContext context) {
   final container = ProviderScope.containerOf(context, listen: false);
   Navigator.of(context).popUntil((route) => route.isFirst);
-  container.read(demoSessionProvider.notifier).leave();
+  // After the frame that reveals the screen underneath, not in the same tap:
+  // changing the switch as that screen is revealed rebuilds its providers
+  // mid-build, which Riverpod asserts against.
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => container.read(demoSessionProvider.notifier).leave(),
+  );
 }
