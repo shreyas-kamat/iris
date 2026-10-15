@@ -62,6 +62,10 @@ and no data collected).
 
 - **Internet.** To reach the user's own Hermes server.
 - **Local network (iOS).** To reach a server on the same Wi-Fi or tailnet.
-- Nothing else: no camera, microphone, location, contacts or notifications. QR pairing was dropped
+- **Microphone.** Only when the person taps the mic to dictate; the clip goes to their own server for
+  speech-to-text and is not kept. Android declares `RECORD_AUDIO`; iOS has a microphone usage string.
+- **Photos and files.** Chosen through the system picker, so Android needs no storage permission; iOS has a
+  photo library usage string.
+- Nothing else: no camera, location, contacts or notifications. QR pairing was dropped
   for 1.0 because no screen used it; if it returns, the camera permission and its usage string come
   back with it, along with the privacy policy and support wording.

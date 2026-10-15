@@ -44,13 +44,16 @@ export function Privacy() {
   terms. Iris has no control over it and we have no access to it.</p>
   <p>If your server is published through Cloudflare, your traffic passes through Cloudflare under your own
   Cloudflare account and its terms. Iris sends the service token only over encrypted (HTTPS) connections.</p>
+  <p>Files, photos and voice recordings you choose to send go only to your own Hermes server. Iris doesn’t keep the
+  recordings. An image linked in a reply is fetched from its website only when you tap it.</p>
   <p>If you choose to trust a server that uses a self-signed certificate, Iris accepts that certificate for
   that one server only.</p>
 
   <h2>Permissions</h2>
   <p>Iris uses the internet to reach your server. On an iPhone, iOS also asks permission to connect to devices on
-  your local network, which Iris uses only to reach the server address you entered. Iris does not use your camera,
-  microphone, location, contacts or photos.</p>
+  your local network, which Iris uses only to reach the server address you entered. Iris asks for the microphone only when you
+  tap the mic to dictate a message, and it reads a photo or file only when you pick one. Iris does not use your
+  camera, location or contacts.</p>
 
   <h2>Links</h2>
   <p>A link in a conversation opens in your phone’s browser when you tap it. Those sites have their own
