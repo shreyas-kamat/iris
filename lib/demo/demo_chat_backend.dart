@@ -4,6 +4,7 @@ library;
 import 'dart:typed_data';
 
 import '../core/result.dart';
+import '../data/chat/attachment.dart';
 import '../data/chat/chat_backend.dart';
 import '../data/chat/chat_event.dart';
 import '../data/chat/chat_models.dart';
@@ -51,6 +52,10 @@ final class DemoChatBackend implements ChatBackend {
     _world.submit(runtimeId, text);
     return const Ok(null);
   }
+
+  @override
+  Future<Result<String?>> attach(String runtimeId, Attachment file) async =>
+      Ok('@file:/demo/${file.name}');
 
   @override
   Future<Result<void>> interrupt(String runtimeId) async {

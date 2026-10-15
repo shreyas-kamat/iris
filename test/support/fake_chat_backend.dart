@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
@@ -145,6 +146,16 @@ final class FakeChatBackend implements ChatBackend {
   Future<Result<void>> submit(String runtimeId, String text) async {
     submitted.add((runtimeId, text));
     return submitResult;
+  }
+
+  final List<(String, String)> attached = [];
+  Result<String?> Function(Attachment file) attachResult =
+      (file) => Ok(file.isImage ? null : '@file:/s/${file.name}');
+
+  @override
+  Future<Result<String?>> attach(String runtimeId, Attachment file) async {
+    attached.add((runtimeId, file.name));
+    return attachResult(file);
   }
 
   @override

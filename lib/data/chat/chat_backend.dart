@@ -17,6 +17,7 @@ import '../../core/json.dart';
 import '../../core/result.dart';
 import '../rpc/dashboard_session.dart';
 import '../rpc/rpc_frame.dart';
+import 'attachment.dart';
 import 'catalog_parser.dart';
 import 'chat_event.dart';
 import 'chat_models.dart';
@@ -111,6 +112,10 @@ abstract interface class ChatBackend {
   Future<Result<NewConversation>> create();
 
   Future<Result<void>> submit(String runtimeId, String text);
+
+  /// Stages [file] in the runtime session. Returns the `@file:` reference
+  /// the prompt must carry, or null for an image Hermes took as an image.
+  Future<Result<String?>> attach(String runtimeId, Attachment file);
 
   Future<Result<void>> interrupt(String runtimeId);
 
@@ -434,6 +439,62 @@ final class DashboardChat implements ChatBackend {
         params: {'session_id': runtimeId, 'text': text},
         timeout: submitTimeout,
       )).map((_) {});
+
+  /// Long enough to send 20 MB as base64 over a slow uplink.
+  static const attachTimeout = Duration(seconds: 120);
+
+  @override
+  Future<Result<String?>> attach(String runtimeId, Attachment file) async {
+    if (file.isImage) {
+      final sent = await _session.call(
+        'image.attach_bytes',
+        params: {
+          'session_id': runtimeId,
+          'content_base64': base64Encode(file.bytes),
+          'filename': file.name,
+        },
+        timeout: attachTimeout,
+      );
+      switch (sent) {
+        case Ok():
+          return const Ok(null);
+        case Err(:final failure) when !_refusedAsImage(failure):
+          return Err(failure);
+        case Err():
+        // Hermes won't take it as an image (a format it doesn't list, or past
+        // its image size cap). It still goes up, as a file.
+      }
+    }
+    final staged = await _session.call(
+      'file.attach',
+      params: {
+        'session_id': runtimeId,
+        'data_url': file.dataUrl,
+        'name': file.name,
+        'path': '',
+      },
+      timeout: attachTimeout,
+    );
+    return staged.map(_fileReference);
+  }
+
+  static bool _refusedAsImage(IrisFailure failure) =>
+      switch (failure.cause) {
+        RpcError(code: 4016 || 4018) => true,
+        _ => false,
+      };
+
+  /// The reply's `ref_text`, or one built from the staged path.
+  static String? _fileReference(Json result) {
+    final text = result['ref_text'].stringOrNull?.trim();
+    if (text != null && text.startsWith('@file:') && text.length > 6) {
+      return text;
+    }
+    final path = [result['ref_path'].stringOrNull, result['path'].stringOrNull]
+        .map((s) => s?.trim())
+        .firstWhere((s) => s != null && s.isNotEmpty, orElse: () => null);
+    return path == null ? null : '@file:${formatReferenceValue(path)}';
+  }
 
   @override
   Future<Result<void>> interrupt(String runtimeId) async =>
