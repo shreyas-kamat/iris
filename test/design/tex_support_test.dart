@@ -128,6 +128,16 @@ void main() {
     );
   });
 
+  test('a derivative with one argument is an operator, not a fraction', () {
+    expect(
+      prepareTex(r'i\hbar \pdv{t}\ket{\psi}'),
+      r'i\hbar \frac{\partial}{\partial t}\ket{\psi}',
+    );
+    expect(prepareTex(r'\dv{x} f'), r'\frac{\mathrm{d}}{\mathrm{d} x} f');
+    // Two arguments stay a fraction.
+    expect(prepareTex(r'\pdv{f}{x}'), r'\pdv{f}{x}');
+  });
+
   test('an unclosed \\ce is left for the error fallback', () {
     expect(prepareTex(r'\ce{H2O'), r'\ce{H2O');
   });

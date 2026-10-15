@@ -95,6 +95,14 @@ String prepareTex(String tex) => _replaceCe(tex)
       RegExp(r'\\(dv|pdv)\[([^\]]*)\]'),
       (m) => '\\iris${m[1]}n{${m[2]}}',
     )
+    // One argument is the variable of an operator: physics reads \pdv{t} as
+    // ∂/∂t, and only a second group makes it a fraction.
+    .replaceAllMapped(
+      RegExp(r'\\(dv|pdv)\{([^{}]*)\}(?!\s*\{)'),
+      (m) => m[1] == 'dv'
+          ? '\\frac{\\mathrm{d}}{\\mathrm{d} ${m[2]}}'
+          : '\\frac{\\partial}{\\partial ${m[2]}}',
+    )
     .replaceAllMapped(
       RegExp(r'\\(begin|end)\{(align|flalign|eqnarray|split)\*?\}'),
       (m) => '\\${m[1]}{aligned}',
