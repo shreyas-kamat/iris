@@ -14,6 +14,10 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Iris uses the camera only to scan the pairing QR code shown by your Hermes dashboard.</string>
 	<key>CFBundleName</key>
 	<string>iris</string>
 	<key>CFBundlePackageType</key>
