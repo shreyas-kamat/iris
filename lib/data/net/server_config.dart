@@ -7,6 +7,7 @@
 library;
 
 import '../../core/json.dart';
+import 'connection_mode.dart';
 
 /// A server the user has added, without its secrets.
 final class ServerConfig {
@@ -17,6 +18,7 @@ final class ServerConfig {
     this.requiresPassword = false,
     this.usesAccessToken = false,
     this.allowSelfSignedCertificate = false,
+    this.mode,
   });
 
   factory ServerConfig.fromJson(Json json) => ServerConfig(
@@ -26,6 +28,7 @@ final class ServerConfig {
     requiresPassword: json['requires_password'].boolean(),
     usesAccessToken: json['uses_access_token'].boolean(),
     allowSelfSignedCertificate: json['allow_self_signed'].boolean(),
+    mode: ConnectionMode.fromStoredName(json['connection_mode'].stringOrNull),
   );
 
   /// Stable local identifier. Also the secure-storage key for this server's
@@ -50,6 +53,10 @@ final class ServerConfig {
   /// servers behind a self-signed cert are common, but silently accepting one
   /// would defeat the point of using HTTPS at all.
   final bool allowSelfSignedCertificate;
+
+  /// How the user said this phone reaches the server, or null for a server
+  /// added before modes existed.
+  final ConnectionMode? mode;
 
   Uri get uri => Uri.parse(baseUrl);
 
@@ -83,6 +90,7 @@ final class ServerConfig {
     'requires_password': requiresPassword,
     'uses_access_token': usesAccessToken,
     'allow_self_signed': allowSelfSignedCertificate,
+    'connection_mode': mode?.storedName,
   };
 
   ServerConfig copyWith({
@@ -91,6 +99,7 @@ final class ServerConfig {
     bool? requiresPassword,
     bool? usesAccessToken,
     bool? allowSelfSignedCertificate,
+    ConnectionMode? mode,
   }) => ServerConfig(
     id: id,
     baseUrl: baseUrl ?? this.baseUrl,
@@ -99,6 +108,7 @@ final class ServerConfig {
     usesAccessToken: usesAccessToken ?? this.usesAccessToken,
     allowSelfSignedCertificate:
         allowSelfSignedCertificate ?? this.allowSelfSignedCertificate,
+    mode: mode ?? this.mode,
   );
 
   @override

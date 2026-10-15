@@ -36,6 +36,10 @@ class Servers extends Table {
   BoolColumn get usesAccessToken =>
       boolean().withDefault(const Constant(false))();
 
+  /// How the user said this phone reaches the server (`ConnectionMode`'s
+  /// stored name). Null for servers added before modes existed.
+  TextColumn get connectionMode => text().nullable()();
+
   /// What `/api/status` last reported, for display. Never used to gate a
   /// feature.
   TextColumn get serverVersion => text().nullable()();
@@ -206,7 +210,7 @@ class IrisDatabase extends _$IrisDatabase {
   IrisDatabase(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -222,6 +226,9 @@ class IrisDatabase extends _$IrisDatabase {
       }
       if (from < 3) {
         await migrator.createTable(preferences);
+      }
+      if (from < 4) {
+        await migrator.addColumn(servers, servers.connectionMode);
       }
     },
     beforeOpen: (details) async {

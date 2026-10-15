@@ -45,6 +45,8 @@ CREATE TABLE servers (
     expect(row.serverVersion, isNull);
     expect(row.capabilitiesJson, '[]');
     expect(row.probedAt, isNull);
+    // v4 adds the connection mode; servers from before it have none.
+    expect(row.connectionMode, isNull);
 
     // v3 adds the preferences table on the way up.
     final prefs = DriftPreferencesStore(db);
