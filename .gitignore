@@ -46,3 +46,16 @@ app.*.map.json
 
 # Nested Gradle/Xcode build output (the root-anchored /build/ misses android/build)
 **/build/
+
+# Secrets and signing material. None of these may ever be committed.
+*.jks
+*.keystore
+*.p12
+*.pem
+*.mobileprovision
+key.properties
+.env
+.env.*
+.iris-live.json
+google-services.json
+GoogleService-Info.plist

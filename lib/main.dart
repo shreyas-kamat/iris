@@ -2,12 +2,14 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/iris_app.dart';
+import 'app/licenses.dart';
 import 'app/preferences.dart';
 import 'app/providers.dart';
 import 'data/prefs/preferences_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerFontLicenses();
 
   // Opened before the first frame rather than lazily: every screen reads from
   // it, and an app that renders an empty state for a moment before its own data
