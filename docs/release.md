@@ -8,10 +8,16 @@ first build is uploaded.
 Generate the key outside the repository and keep a backup somewhere safe. Losing it means going
 through Google's upload-key reset.
 
+One line, in **PowerShell**:
+
 ```
-keytool -genkeypair -v -keystore %USERPROFILE%\iris-upload.jks -alias upload ^
-  -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkeypair -v -keystore "$env:USERPROFILE\iris-upload.jks" -alias upload -keyalg RSA -keysize 2048 -validity 10000
 ```
+
+In **Git Bash**, use `"$USERPROFILE/iris-upload.jks"` for the path. In the old `cmd.exe` it is
+`%USERPROFILE%\iris-upload.jks`; that form is taken literally anywhere else and fails with
+"path not found". keytool asks for a password and for your name and organisation. The password
+protects the key, so pick a strong one and store it in a password manager with the file.
 
 Create `android/key.properties` (git-ignored, as are `*.jks` and `*.keystore`):
 
@@ -49,10 +55,13 @@ the upload key.
 Iris has not been built for iOS yet; every device check so far was on an Android emulator. It
 needs a Mac or a cloud build service, and an Apple Developer account, to build, sign and upload.
 The project is set up for it: bundle ID, icons, `ITSAppUsesNonExemptEncryption = false` (the app
-only uses standard HTTPS), a camera usage string for QR pairing, and `PrivacyInfo.xcprivacy`
-(no tracking and no data collected).
+only uses standard HTTPS), a Local Network usage string, and `PrivacyInfo.xcprivacy` (no tracking
+and no data collected).
 
 ## Permissions the store forms must match
 
 - **Internet.** To reach the user's own Hermes server.
-- **Camera.** Only for scanning the pairing QR code. Nothing is recorded or stored.
+- **Local network (iOS).** To reach a server on the same Wi-Fi or tailnet.
+- Nothing else: no camera, microphone, location, contacts or notifications. QR pairing was dropped
+  for 1.0 because no screen used it; if it returns, the camera permission and its usage string come
+  back with it, along with the privacy policy and support wording.

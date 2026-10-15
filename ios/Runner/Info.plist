@@ -18,8 +18,6 @@
 	<string>Iris connects to your Hermes server on your local network.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSCameraUsageDescription</key>
-	<string>Iris uses the camera only to scan the pairing QR code shown by your Hermes dashboard.</string>
 	<key>CFBundleName</key>
 	<string>iris</string>
 	<key>CFBundlePackageType</key>
