@@ -388,8 +388,8 @@ class _ChatScreenState extends State<ChatScreen> {
     await _recorder.cancel();
   }
 
-  Future<void> _attach() async {
-    final picked = await (widget.pickFiles ?? pickFiles)();
+  Future<void> _attach(AttachSource source) async {
+    final picked = await (widget.pickFiles ?? pickFiles)(source);
     if (!mounted || picked.isEmpty) return;
     final tooBig = picked.where((f) => f.bytes.length > Attachment.maxBytes);
     final fits = picked
@@ -400,7 +400,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (tooBig.isNotEmpty) {
       showIrisToast(
         context,
-        message: '${tooBig.first.name} is over 20 MB, so it was left out.',
+        message: '${tooBig.first.name} is too large. Files can be up to 20 MB.',
+        top: true,
       );
     } else if (fits.length > room) {
       showIrisToast(
@@ -514,8 +515,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? () => unawaited(showModelPicker(context, _chat))
                 : null,
             contextUsage: state.context,
-            attachments: [for (final f in _draft) f.name],
-            onAttach: () => unawaited(_attach()),
+            attachments: _draft,
+            onAttach: (source) => unawaited(_attach(source)),
             onRemoveAttachment: (i) => setState(() => _draft.removeAt(i)),
             recording: _recording,
             transcribing: _transcribing,

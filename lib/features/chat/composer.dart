@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
@@ -21,6 +22,8 @@ import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import 'attachment_chip.dart';
+import 'attachment_menu.dart';
+import 'attachment_picker.dart';
 
 class Composer extends StatelessWidget {
   const Composer({
@@ -81,10 +84,11 @@ class Composer extends StatelessWidget {
   final VoidCallback? onContext;
 
   /// Files waiting to go with the next message.
-  final List<String> attachments;
+  final List<Attachment> attachments;
 
-  /// Opens the file picker. Null hides the button.
-  final VoidCallback? onAttach;
+  /// Called with what the person chose from the "+" menu. Null hides the
+  /// button.
+  final ValueChanged<AttachSource>? onAttach;
   final ValueChanged<int>? onRemoveAttachment;
 
   /// How long the current clip has run; null when not recording.
@@ -205,18 +209,22 @@ class Composer extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (attachments.isNotEmpty) ...[
-                      Wrap(
-                        spacing: IrisSpace.xs,
-                        runSpacing: IrisSpace.xs,
-                        children: [
-                          for (final (i, name) in attachments.indexed)
-                            AttachmentChip(
-                              name: name,
-                              onRemove: onRemoveAttachment == null
-                                  ? null
-                                  : () => onRemoveAttachment!(i),
-                            ),
-                        ],
+                      SizedBox(
+                        height: 52,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: attachments.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(width: IrisSpace.xs),
+                          itemBuilder: (context, i) => AttachmentChip(
+                            name: attachments[i].name,
+                            bytes: attachments[i].bytes,
+                            size: attachments[i].bytes.length,
+                            onRemove: onRemoveAttachment == null
+                                ? null
+                                : () => onRemoveAttachment!(i),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: IrisSpace.sm),
                     ],
@@ -263,15 +271,14 @@ class Composer extends StatelessWidget {
                         if (onAttach != null &&
                             !running &&
                             recording == null) ...[
-                          IrisPressable(
-                            onTap: enabled ? onAttach : null,
-                            semanticLabel: 'Attach',
-                            child: Icon(
-                              Icons.add,
-                              size: 20,
-                              color: palette.inkMuted,
-                            ),
+                          _AttachButton(
+                            enabled: enabled,
+                            full:
+                                attachments.length >= Attachment.maxPerMessage,
+                            onPick: onAttach!,
                           ),
+                          if (attachments.length >= Attachment.maxPerMessage)
+                            const IrisLabel('5 / 5 files', small: true),
                           const SizedBox(width: IrisSpace.xs),
                         ],
                         if (model case final model? when recording == null) ...[
@@ -563,6 +570,55 @@ class _ContextRing extends StatelessWidget {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The "+" : rotates to an x while its menu is open, and is off at the limit.
+class _AttachButton extends StatefulWidget {
+  const _AttachButton({
+    required this.enabled,
+    required this.full,
+    required this.onPick,
+  });
+
+  final bool enabled;
+  final bool full;
+  final ValueChanged<AttachSource> onPick;
+
+  @override
+  State<_AttachButton> createState() => _AttachButtonState();
+}
+
+class _AttachButtonState extends State<_AttachButton> {
+  bool _open = false;
+
+  Future<void> _show() async {
+    final box = context.findRenderObject()! as RenderBox;
+    final anchor = box.localToGlobal(Offset.zero) & box.size;
+    setState(() => _open = true);
+    final source = await showAttachMenu(context, anchor: anchor);
+    if (!mounted) return;
+    setState(() => _open = false);
+    if (source != null) widget.onPick(source);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final off = !widget.enabled || widget.full;
+    return Opacity(
+      opacity: widget.full ? .38 : 1,
+      child: IrisPressable(
+        onTap: off ? null : () => unawaited(_show()),
+        semanticLabel: 'Attach',
+        child: AnimatedRotation(
+          turns: _open ? .125 : 0,
+          duration: context.reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
+          child: Icon(Icons.add, size: 20, color: context.palette.inkMuted),
         ),
       ),
     );

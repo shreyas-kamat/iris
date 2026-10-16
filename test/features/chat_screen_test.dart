@@ -13,6 +13,7 @@ import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/chat/connection_models.dart';
+import 'package:iris/features/chat/attachment_picker.dart';
 import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/composer.dart';
 import 'package:iris/features/chat/decision_cards.dart';
@@ -499,7 +500,7 @@ void main() {
         ChatScreen(
           backend: backend,
           conversationId: 'stored-1',
-          pickFiles: () async => [
+          pickFiles: (_) async => [
             Attachment(name: 'n.txt', bytes: Uint8List(1)),
           ],
         ),
@@ -508,7 +509,9 @@ void main() {
     await settle(tester);
     await settle(tester);
     await tester.tap(find.bySemanticsLabel('Attach'));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Files'));
+    await tester.pumpAndSettle();
     expect(find.text('n.txt'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'read it');
     await tester.tap(find.bySemanticsLabel('Send'));
@@ -527,7 +530,7 @@ void main() {
         ChatScreen(
           backend: backend,
           conversationId: 'stored-1',
-          pickFiles: () async => [
+          pickFiles: (_) async => [
             Attachment(
               name: 'big.bin',
               bytes: Uint8List(Attachment.maxBytes + 1),
@@ -539,10 +542,14 @@ void main() {
     await settle(tester);
     await settle(tester);
     await tester.tap(find.bySemanticsLabel('Attach'));
-    await tester.pump();
-    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Files'));
+    await tester.pumpAndSettle();
     expect(find.text('big.bin'), findsNothing);
-    expect(find.textContaining('20 MB'), findsOneWidget);
+    expect(
+      find.text('big.bin is too large. Files can be up to 20 MB.'),
+      findsOneWidget,
+    );
     semantics.dispose();
   });
 
@@ -781,6 +788,59 @@ void main() {
       expect(backend.compressions, ['run-branch']);
     },
   );
+
+  testWidgets('picking more than the room left adds what fits and says so', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    var round = 0;
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          pickFiles: (_) async => [
+            for (var i = 0; i < (round++ == 0 ? 4 : 3); i++)
+              Attachment(name: 'f$round$i.txt', bytes: Uint8List(8)),
+          ],
+        ),
+      ),
+    );
+    await settle(tester);
+    for (var pick = 0; pick < 2; pick++) {
+      await tester.tap(find.bySemanticsLabel('Attach'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Files'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Up to 5 files per message.'), findsOneWidget);
+    expect(find.text('5 / 5 FILES'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('the Photos row asks the picker for photos', (tester) async {
+    final semantics = tester.ensureSemantics();
+    AttachSource? asked;
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          pickFiles: (source) async {
+            asked = source;
+            return const [];
+          },
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Attach'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Photos'));
+    await tester.pumpAndSettle();
+    expect(asked, AttachSource.photos);
+    semantics.dispose();
+  });
 }
 
 final class FakeRecorder implements VoiceRecorder {
