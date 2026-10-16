@@ -161,6 +161,31 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('the busy-mode button is a 44 pt target', (tester) async {
+    final text = TextEditingController(text: 'Also node-4');
+    addTearDown(text.dispose);
+    await tester.pumpWidget(
+      themed(
+        Composer(
+          controller: text,
+          running: true,
+          busyMode: BusyMode.queue,
+          onSend: () {},
+          onStop: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    final button = find.byKey(const ValueKey('busy-queue'));
+    expect(button, findsOneWidget);
+    expect(
+      tester.getSize(
+        find.descendant(of: button, matching: find.byType(Container)).last,
+      ),
+      const Size(44, 44),
+    );
+  });
+
   testWidgets(
     'typing a slash suggests commands, and a pick fills the composer',
     (tester) async {

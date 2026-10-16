@@ -542,9 +542,10 @@ class _ModeButton extends StatelessWidget {
       semanticLabel: _hint(kind),
       scale: .92,
       ensureTapTarget: false,
+      // 44, as frame A4 draws it and as every new target is.
       child: Container(
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: palette.accent,
