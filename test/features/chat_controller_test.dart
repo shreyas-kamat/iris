@@ -889,6 +889,54 @@ void main() {
       expect(backend.slashes, isEmpty);
     });
   });
+
+  group('effort and fast', () {
+    test('setting the effort tells Hermes and shows at once', () async {
+      final controller = controllerFor();
+      await controller.open();
+      expect(await controller.setEffort(ReasoningEffort.high), isTrue);
+      expect(backend.efforts, [ReasoningEffort.high]);
+      expect(controller.value.effort, ReasoningEffort.high);
+    });
+
+    test(
+      'a failure is toasted and a known previous value comes back',
+      () async {
+        final toasts = <String>[];
+        final controller = controllerFor()
+          ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+        await controller.open();
+        backend.emit(
+          const SessionInfoChanged('run-1', effort: ReasoningEffort.low),
+        );
+        await settle();
+        backend.effortResult = const Err(
+          IrisFailure(FailureKind.rejected, message: 'no'),
+        );
+        expect(await controller.setEffort(ReasoningEffort.max), isFalse);
+        expect(controller.value.effort, ReasoningEffort.low);
+        expect(toasts.single, startsWith('Could not change'));
+      },
+    );
+
+    test('a server without the setting says so', () async {
+      final toasts = <String>[];
+      final controller = controllerFor()
+        ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+      await controller.open();
+      backend.fastResult = Err(unknownMethod('config.set'));
+      expect(await controller.setFast(fast: true), isFalse);
+      expect(toasts.single, "This server can't change that.");
+    });
+
+    test('fast mode goes through', () async {
+      final controller = controllerFor();
+      await controller.open();
+      expect(await controller.setFast(fast: true), isTrue);
+      expect(backend.fasts, [true]);
+      expect(controller.value.fast, isTrue);
+    });
+  });
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

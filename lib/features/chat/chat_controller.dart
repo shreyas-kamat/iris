@@ -688,6 +688,45 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
+  /// Sets how hard the model thinks, for this conversation. Shown at once;
+  /// a refusal brings the previous value back and says why. False when
+  /// Hermes did not take it.
+  Future<bool> setEffort(ReasoningEffort effort) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return false;
+    final before = value.effort;
+    _update(value.copyWith(effort: effort));
+    final result = await _backend.setReasoning(runtimeId, effort);
+    if (_disposed) return false;
+    if (result case Err(:final failure)) {
+      if (before != null) _update(value.copyWith(effort: before));
+      onToast?.call(_changeFailed(failure));
+      return false;
+    }
+    return true;
+  }
+
+  /// Turns fast mode on or off for this conversation, as [setEffort] does.
+  Future<bool> setFast({required bool fast}) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return false;
+    final before = value.fast;
+    _update(value.copyWith(fast: fast));
+    final result = await _backend.setFast(runtimeId, fast: fast);
+    if (_disposed) return false;
+    if (result case Err(:final failure)) {
+      if (before != null) _update(value.copyWith(fast: before));
+      onToast?.call(_changeFailed(failure));
+      return false;
+    }
+    return true;
+  }
+
+  static String _changeFailed(IrisFailure failure) =>
+      (failure.rpcError?.isMethodNotFound ?? false)
+      ? "This server can't change that."
+      : 'Could not change that: ${describe(failure)}';
+
   /// Stops the running turn.
   Future<void> stop() async {
     final runtimeId = _runtimeId;

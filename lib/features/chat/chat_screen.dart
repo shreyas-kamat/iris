@@ -490,7 +490,11 @@ class _ChatScreenState extends State<ChatScreen> {
             busyMode: state.busyMode,
             enabled: state.phase == ChatPhase.ready,
             commands: state.commands,
-            model: state.model,
+            model: state.model == null
+                ? null
+                : state.effort == null
+                ? state.model
+                : '${state.model} · ${state.effort!.wire}',
             onModel: _chat.isLive
                 ? () => unawaited(showModelPicker(context, _chat))
                 : null,
