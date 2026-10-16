@@ -214,6 +214,50 @@ void main() {
       },
     );
 
+    test(
+      'Send next while a new turn runs waits for it instead of sending into it',
+      () async {
+        final controller = await running(mode: BusyMode.queue);
+        await controller.send('one');
+        backend.emit(const TurnFailed('run-1', 'boom'));
+        await settle();
+        expect(controller.value.queuePaused, isTrue);
+        // The person starts a fresh turn; the paused tray still shows.
+        await controller.send('something else');
+        backend.emit(const MessageStarted('run-1'));
+        await settle();
+        expect(controller.value.running, isTrue);
+
+        await controller.sendNextQueued();
+        expect(
+          backend.submits.map((s) => s.$2),
+          ['something else'],
+          reason: 'a submit on a busy session would apply its busy policy',
+        );
+        expect(controller.value.queuePaused, isFalse);
+
+        await finish();
+        expect(backend.submits.map((s) => s.$2), ['something else', 'one']);
+      },
+    );
+
+    test('a queued message that fails to send pauses the tray', () async {
+      final controller = await running(mode: BusyMode.queue);
+      await controller.send('one');
+      await controller.send('two');
+      backend.submitResult = Err(
+        const IrisFailure(FailureKind.offline, message: 'gone'),
+      );
+      await finish();
+      expect(backend.submits.map((s) => s.$2), ['one']);
+      expect(controller.value.running, isFalse);
+      expect(
+        controller.value.queuePaused,
+        isTrue,
+        reason: 'otherwise "two" waits with no Send next and no turn to end',
+      );
+    });
+
     test('one message can be removed', () async {
       final controller = await running(mode: BusyMode.queue);
       await controller.send('one');

@@ -455,11 +455,14 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
-  Future<void> _submit(String runtimeId, String text) async {
+  /// False when the prompt did not go, after saying why in the transcript.
+  Future<bool> _submit(String runtimeId, String text) async {
     final sent = await _backend.submit(runtimeId, text);
     if (sent case Err(:final failure)) {
       _update(value.withError(describe(failure)));
+      return false;
     }
+    return true;
   }
 
   Future<void> _sendWhileRunning(String text, RegExpMatch? command) async {
@@ -525,18 +528,25 @@ final class ChatController extends ValueNotifier<ChatState> {
   void clearQueue() =>
       _update(value.copyWith(queue: const [], queuePaused: false));
 
-  /// Sends the next queued message now, after a failed or stopped turn
-  /// paused the tray.
+  /// Resumes a tray a failed or stopped turn paused: the next message goes
+  /// now, or, if the person has started another turn since, when it ends.
   Future<void> sendNextQueued() async {
     _update(value.copyWith(queuePaused: false));
     await _drain();
   }
 
-  /// Sends the oldest queued message as a new turn. The turn is marked
-  /// running at once, so a second "turn ended" can never send a second
-  /// message before this one has finished.
+  /// Sends the oldest queued message as a new turn. Never while a turn
+  /// runs: Hermes would apply its busy policy and could cut that turn off.
+  /// The turn is marked running at once, so a second "turn ended" can never
+  /// send a second message before this one has finished. A message that
+  /// fails to go pauses the tray, as a failed turn does.
   Future<void> _drain() async {
-    if (_draining || value.queue.isEmpty || value.queuePaused) return;
+    if (_draining ||
+        value.running ||
+        value.queue.isEmpty ||
+        value.queuePaused) {
+      return;
+    }
     final runtimeId = _runtimeId;
     if (runtimeId == null) return;
     _draining = true;
@@ -544,8 +554,11 @@ final class ChatController extends ValueNotifier<ChatState> {
     _update(
       value.withoutQueued(next.id).withUserTurn(next.text, fromQueue: true),
     );
-    await _submit(runtimeId, next.text);
+    final sent = await _submit(runtimeId, next.text);
     _draining = false;
+    if (!sent && !_disposed && value.queue.isNotEmpty) {
+      _update(value.copyWith(queuePaused: true));
+    }
   }
 
   void _turnEnded({required bool failedOrStopped}) {
