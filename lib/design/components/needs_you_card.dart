@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../theme/iris_theme.dart';
 import '../tokens/metrics.dart';
 import '../tokens/palette.dart';
+import 'dashed_border.dart';
 import 'iris_orb.dart';
 import 'primitives.dart';
 
@@ -140,7 +141,10 @@ class SettledLine extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       border: outcome == SettledOutcome.expired
           ? null
-          : Border.all(color: tint.withValues(alpha: .25), width: IrisStroke.hairline),
+          : Border.all(
+              color: tint.withValues(alpha: .25),
+              width: IrisStroke.hairline,
+            ),
     );
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -181,7 +185,10 @@ class SettledLine extends StatelessWidget {
       excludeSemantics: true,
       child: outcome == SettledOutcome.expired
           ? CustomPaint(
-              painter: _DashedBorder(palette.lineStrong),
+              painter: DashedRRectPainter(
+                color: palette.lineStrong,
+                radius: BorderRadius.circular(18),
+              ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 56),
                 child: Align(alignment: Alignment.centerLeft, child: row),
@@ -196,32 +203,4 @@ class SettledLine extends StatelessWidget {
             ),
     );
   }
-}
-
-class _DashedBorder extends CustomPainter {
-  const _DashedBorder(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(18)),
-      );
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (final metric in path.computeMetrics()) {
-      var at = 0.0;
-      while (at < metric.length) {
-        canvas.drawPath(metric.extractPath(at, at + 5), paint);
-        at += 9;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedBorder old) => old.color != color;
 }

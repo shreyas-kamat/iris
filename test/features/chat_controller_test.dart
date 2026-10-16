@@ -126,10 +126,9 @@ void main() {
       attachments: [Attachment(name: 'a.png', bytes: Uint8List(1))],
     );
     expect(backend.submitted.single.$2, '');
-    expect(
-      controller.value.items.whereType<UserTurn>().single.attachments,
-      ['a.png'],
-    );
+    expect(controller.value.items.whereType<UserTurn>().single.attachments, [
+      'a.png',
+    ]);
   });
 
   test('a failed upload is reported and nothing is submitted', () async {
@@ -170,6 +169,7 @@ void main() {
   });
 
   test('nothing is sent while a turn is running', () async {
+    backend.busyModeResult = const Ok(BusyMode.queue);
     final controller = controllerFor();
     await controller.open();
     await controller.send('one');
@@ -268,7 +268,9 @@ void main() {
       ..historyResult = const Ok([UserTurn(id: '65', text: 'newest')])
       ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
       ..earlierResult = const Ok(
-        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+        HistoryPage(
+          items: [UserTurn(id: '1', text: 'oldest')],
+        ),
       );
     final controller = controllerFor();
     await controller.open();
@@ -297,7 +299,11 @@ void main() {
 
   test('a switch that needs confirming changes nothing', () async {
     backend.switchResult = const Ok(
-      ModelSwitch(model: 'big', confirmRequired: true, confirmMessage: 'Costly'),
+      ModelSwitch(
+        model: 'big',
+        confirmRequired: true,
+        confirmMessage: 'Costly',
+      ),
     );
     final controller = controllerFor();
     await controller.open();
@@ -337,10 +343,10 @@ void main() {
     await controller.send('/usage');
     expect(backend.slashes, ['/usage']);
     expect(backend.submitted, isEmpty);
-    expect(
-      controller.value.items.map((i) => i.runtimeType),
-      [UserTurn, Notice],
-    );
+    expect(controller.value.items.map((i) => i.runtimeType), [
+      UserTurn,
+      Notice,
+    ]);
     expect(
       controller.value.items.last,
       isA<Notice>().having((n) => n.text, 'text', 'Tokens: 12k'),
@@ -375,23 +381,26 @@ void main() {
     expect(controller.value.turn, TurnPhase.idle);
   });
 
-  test('an alias runs its target with the same arguments, three deep at most', () async {
-    backend.slashResult = const Ok(
-      SlashOutcome(kind: SlashKind.alias, target: 'new'),
-    );
-    final controller = controllerFor();
-    await controller.open();
-    await controller.send('/n now');
-    expect(backend.slashes, ['/n now', '/new now', '/new now', '/new now']);
-    expect(
-      controller.value.items.last,
-      isA<Notice>().having(
-        (n) => n.text,
-        'text',
-        'That command points nowhere.',
-      ),
-    );
-  });
+  test(
+    'an alias runs its target with the same arguments, three deep at most',
+    () async {
+      backend.slashResult = const Ok(
+        SlashOutcome(kind: SlashKind.alias, target: 'new'),
+      );
+      final controller = controllerFor();
+      await controller.open();
+      await controller.send('/n now');
+      expect(backend.slashes, ['/n now', '/new now', '/new now', '/new now']);
+      expect(
+        controller.value.items.last,
+        isA<Notice>().having(
+          (n) => n.text,
+          'text',
+          'That command points nowhere.',
+        ),
+      );
+    },
+  );
 
   test('commands load once, on demand', () async {
     backend.commandsResult = const Ok([
@@ -409,8 +418,10 @@ void main() {
 
   group('steering', () {
     Future<ChatController> running() async {
+      backend.busyModeResult = const Ok(BusyMode.steer);
       final controller = controllerFor();
       await controller.open();
+      await settle();
       backend.emit(const MessageStarted('run-1'));
       await settle();
       expect(controller.value.running, isTrue);
@@ -435,16 +446,19 @@ void main() {
       expect(backend.slashes, isEmpty);
     });
 
-    test('a rejected steer comes back to the composer while the run goes on', () async {
-      backend.steerResult = const Ok(SteerOutcome.rejected);
-      final controller = await running();
-      String? returned;
-      controller.onSteerReturned = (text) => returned = text;
-      await controller.send('wait');
-      expect(returned, 'wait');
-      expect(controller.value.items.last, isA<Notice>());
-      expect(backend.submitted, isEmpty);
-    });
+    test(
+      'a rejected steer comes back to the composer while the run goes on',
+      () async {
+        backend.steerResult = const Ok(SteerOutcome.rejected);
+        final controller = await running();
+        String? returned;
+        controller.onSteerReturned = (text) => returned = text;
+        await controller.send('wait');
+        expect(returned, 'wait');
+        expect(controller.value.items.last, isA<Notice>());
+        expect(backend.submitted, isEmpty);
+      },
+    );
 
     test('a rejected steer after the turn ended is sent as a prompt', () async {
       backend
@@ -471,26 +485,34 @@ void main() {
   });
 
   group('retry', () {
-    test('runs /retry, then shows the transcript as Hermes now has it', () async {
-      backend.slashResult = const Ok(SlashOutcome(kind: SlashKind.send, text: 'hello'));
-      final controller = controllerFor();
-      await controller.open();
-      backend.emit(const TurnFailed('run-1', 'Gateway timed out'));
-      await settle();
-      expect(controller.value.items.whereType<Notice>().single.retryable, isTrue);
+    test(
+      'runs /retry, then shows the transcript as Hermes now has it',
+      () async {
+        backend.slashResult = const Ok(
+          SlashOutcome(kind: SlashKind.send, text: 'hello'),
+        );
+        final controller = controllerFor();
+        await controller.open();
+        backend.emit(const TurnFailed('run-1', 'Gateway timed out'));
+        await settle();
+        expect(
+          controller.value.items.whereType<Notice>().single.retryable,
+          isTrue,
+        );
 
-      backend.historyResult = const Ok([UserTurn(id: '9', text: 'hello')]);
-      await controller.retry();
-      expect(backend.slashes, ['/retry']);
-      expect(controller.value.retrying, isTrue);
+        backend.historyResult = const Ok([UserTurn(id: '9', text: 'hello')]);
+        await controller.retry();
+        expect(backend.slashes, ['/retry']);
+        expect(controller.value.retrying, isTrue);
 
-      backend.emit(const MessageCompleted('run-1', content: 'Hi'));
-      await settle();
-      await settle();
-      expect(backend.calls.where((c) => c == 'history stored-1').length, 2);
-      expect(controller.value.retrying, isFalse);
-      expect(controller.value.items.single, isA<UserTurn>());
-    });
+        backend.emit(const MessageCompleted('run-1', content: 'Hi'));
+        await settle();
+        await settle();
+        expect(backend.calls.where((c) => c == 'history stored-1').length, 2);
+        expect(controller.value.retrying, isFalse);
+        expect(controller.value.items.single, isA<UserTurn>());
+      },
+    );
 
     test('does nothing while a turn runs', () async {
       final controller = controllerFor();
@@ -520,7 +542,10 @@ void main() {
       await controller.answerInput(sudo, 'hunter2');
       expect(backend.inputAnswers, [('srq-1', 'hunter2')]);
       expect(controller.value.inputs, isEmpty);
-      expect((controller.value.items.last as Notice).text, 'Sent your sudo password.');
+      expect(
+        (controller.value.items.last as Notice).text,
+        'Sent your sudo password.',
+      );
       expect(_mentions(controller.value, 'hunter2'), isFalse);
     });
 
@@ -534,38 +559,54 @@ void main() {
       expect((controller.value.items.last as Notice).text, 'Skipped.');
     });
 
-    test('a failed input answer brings the card back without the value', () async {
-      backend.answerResult = const Err(IrisFailure(FailureKind.offline));
-      final controller = controllerFor();
-      await controller.open();
-      backend.emit(InputAsked(sudo));
-      await settle();
-      await controller.answerInput(sudo, 'hunter2');
-      expect(controller.value.inputs.single.requestId, 'srq-1');
-      expect(controller.value.items.last, isA<Notice>().having((n) => n.isError, 'error', isTrue));
-      expect(_mentions(controller.value, 'hunter2'), isFalse);
-    });
+    test(
+      'a failed input answer brings the card back without the value',
+      () async {
+        backend.answerResult = const Err(IrisFailure(FailureKind.offline));
+        final controller = controllerFor();
+        await controller.open();
+        backend.emit(InputAsked(sudo));
+        await settle();
+        await controller.answerInput(sudo, 'hunter2');
+        expect(controller.value.inputs.single.requestId, 'srq-1');
+        expect(
+          controller.value.items.last,
+          isA<Notice>().having((n) => n.isError, 'error', isTrue),
+        );
+        expect(_mentions(controller.value, 'hunter2'), isFalse);
+      },
+    );
   });
 
-  test('a password card from before a reconnect goes; the resume re-announces', () async {
-    final controller = controllerFor();
-    await controller.open();
-    backend.emit(
-      InputAsked(
-        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.sudo),
-      ),
-    );
-    await settle();
-    expect(controller.value.inputs, isNotEmpty);
-    backend.reconnect();
-    await settle();
-    await settle();
-    expect(controller.value.inputs, isEmpty);
-  });
+  test(
+    'a password card from before a reconnect goes; the resume re-announces',
+    () async {
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(
+        InputAsked(
+          const InputRequest(
+            requestId: 'srq-1',
+            sessionId: 'run-1',
+            kind: InputKind.sudo,
+          ),
+        ),
+      );
+      await settle();
+      expect(controller.value.inputs, isNotEmpty);
+      backend.reconnect();
+      await settle();
+      await settle();
+      expect(controller.value.inputs, isEmpty);
+    },
+  );
 
   test('the context window from the resume shows at once', () async {
     backend.resumeResult = const Ok(
-      ResumedConversation(runtimeId: 'run-1', context: ContextUsage(percent: 40, used: 4, max: 10)),
+      ResumedConversation(
+        runtimeId: 'run-1',
+        context: ContextUsage(percent: 40, used: 4, max: 10),
+      ),
     );
     final controller = controllerFor();
     await controller.open();
@@ -588,37 +629,48 @@ void main() {
       return (controller, toasts);
     }
 
-    test('removes the last exchange, returns the prompt, and says so', () async {
-      final (controller, toasts) = await opened();
-      String? returned;
-      controller.onPromptReturned = (text) => returned = text;
-      await controller.undo();
-      expect(backend.undos, ['run-1']);
-      expect(controller.value.items.map((i) => i.id), ['1', '2']);
-      expect(returned, 'Draft the fix as a PR.');
-      expect(toasts.single, 'Undid the last turn');
-    });
+    test(
+      'removes the last exchange, returns the prompt, and says so',
+      () async {
+        final (controller, toasts) = await opened();
+        String? returned;
+        controller.onPromptReturned = (text) => returned = text;
+        await controller.undo();
+        expect(backend.undos, ['run-1']);
+        expect(controller.value.items.map((i) => i.id), ['1', '2']);
+        expect(returned, 'Draft the fix as a PR.');
+        expect(toasts.single, 'Undid the last turn');
+      },
+    );
 
-    test('is refused while a reply is running, without calling the server', () async {
-      final (controller, toasts) = await opened();
-      backend.emit(const MessageStarted('run-1'));
-      await settle();
-      await controller.undo();
-      expect(backend.undos, isEmpty);
-      expect(toasts.single, 'Stop the reply first to undo.');
-    });
+    test(
+      'is refused while a reply is running, without calling the server',
+      () async {
+        final (controller, toasts) = await opened();
+        backend.emit(const MessageStarted('run-1'));
+        await settle();
+        await controller.undo();
+        expect(backend.undos, isEmpty);
+        expect(toasts.single, 'Stop the reply first to undo.');
+      },
+    );
 
-    test('a 4009 from Hermes gives the same advice and keeps the transcript', () async {
-      final (controller, toasts) = await opened();
-      backend.undoResult = const Err(IrisFailure(
-        FailureKind.rejected,
-        message: 'session busy',
-        cause: RpcError(code: 4009, message: 'session busy'),
-      ));
-      await controller.undo();
-      expect(toasts.single, 'Stop the reply first to undo.');
-      expect(controller.value.items, hasLength(4));
-    });
+    test(
+      'a 4009 from Hermes gives the same advice and keeps the transcript',
+      () async {
+        final (controller, toasts) = await opened();
+        backend.undoResult = const Err(
+          IrisFailure(
+            FailureKind.rejected,
+            message: 'session busy',
+            cause: RpcError(code: 4009, message: 'session busy'),
+          ),
+        );
+        await controller.undo();
+        expect(toasts.single, 'Stop the reply first to undo.');
+        expect(controller.value.items, hasLength(4));
+      },
+    );
 
     test('a server without session.undo says so', () async {
       final (controller, toasts) = await opened();
@@ -636,52 +688,67 @@ void main() {
       expect(controller.value.items, hasLength(4));
     });
 
-    test('steered turns inside the exchange go with it, and files are noted', () async {
-      backend.historyResult = const Ok([
-        UserTurn(id: '1', text: 'go', attachments: ['log.txt']),
-        AssistantTurn(id: '2', text: 'working'),
-        UserTurn(id: '3', text: 'only prod', steered: true),
-        AssistantTurn(id: '4', text: 'done'),
-      ]);
-      final toasts = <String>[];
-      final controller = controllerFor()
-        ..collapseDelay = Duration.zero
-        ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
-      await controller.open();
-      String? returned;
-      controller.onPromptReturned = (text) => returned = text;
-      await controller.undo();
-      expect(controller.value.items, isEmpty);
-      expect(returned, 'go');
-      expect(toasts.single, 'Undid the last turn. Re-attach any files.');
-    });
+    test(
+      'steered turns inside the exchange go with it, and files are noted',
+      () async {
+        backend.historyResult = const Ok([
+          UserTurn(id: '1', text: 'go', attachments: ['log.txt']),
+          AssistantTurn(id: '2', text: 'working'),
+          UserTurn(id: '3', text: 'only prod', steered: true),
+          AssistantTurn(id: '4', text: 'done'),
+        ]);
+        final toasts = <String>[];
+        final controller = controllerFor()
+          ..collapseDelay = Duration.zero
+          ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+        await controller.open();
+        String? returned;
+        controller.onPromptReturned = (text) => returned = text;
+        await controller.undo();
+        expect(controller.value.items, isEmpty);
+        expect(returned, 'go');
+        expect(toasts.single, 'Undid the last turn. Re-attach any files.');
+      },
+    );
 
-    test('typing /undo runs undo, not a slash command, and adds no bubble', () async {
-      final (controller, _) = await opened();
-      await controller.send('/undo');
-      expect(backend.undos, ['run-1']);
-      expect(backend.slashes, isEmpty);
-    });
+    test(
+      'typing /undo runs undo, not a slash command, and adds no bubble',
+      () async {
+        final (controller, _) = await opened();
+        await controller.send('/undo');
+        expect(backend.undos, ['run-1']);
+        expect(backend.slashes, isEmpty);
+      },
+    );
 
-    test('with the user turn off the loaded page the newest page is reloaded', () async {
-      backend.historyResult = const Ok([AssistantTurn(id: '9', text: 'tail of a long reply')]);
-      final controller = controllerFor()..collapseDelay = Duration.zero;
-      await controller.open();
-      backend.calls.clear();
-      await controller.undo();
-      expect(backend.calls, contains('history stored-1'));
-    });
+    test(
+      'with the user turn off the loaded page the newest page is reloaded',
+      () async {
+        backend.historyResult = const Ok([
+          AssistantTurn(id: '9', text: 'tail of a long reply'),
+        ]);
+        final controller = controllerFor()..collapseDelay = Duration.zero;
+        await controller.open();
+        backend.calls.clear();
+        await controller.undo();
+        expect(backend.calls, contains('history stored-1'));
+      },
+    );
   });
 
   test('the local slash commands are always offered', () async {
-    backend.commandsResult = const Ok([SlashCommand(name: '/help', description: 'Help')]);
+    backend.commandsResult = const Ok([
+      SlashCommand(name: '/help', description: 'Help'),
+    ]);
     final controller = controllerFor();
     await controller.open();
     await controller.loadCommands();
     final names = controller.value.commands.map((c) => c.name);
-    expect(names, containsAll(['/help', '/queue', '/steer', '/undo', '/branch']));
+    expect(
+      names,
+      containsAll(['/help', '/queue', '/steer', '/undo', '/branch']),
+    );
   });
-
 
   group('branch', () {
     List<TranscriptItem> history() => const [
@@ -692,19 +759,25 @@ void main() {
       AssistantTurn(id: '4', text: 'Opened #482.'),
     ];
 
-    test('the seed keeps user and assistant text and drops tool calls and notices', () {
-      final seed = ChatController.seedFrom([
-        ...history(),
-        const Notice(id: 'n', text: 'Stopped.'),
-        const AssistantTurn(id: '5', text: '   '),
-      ]);
-      expect([for (final m in seed) (m.role, m.content)], [
-        ('user', 'Why did it fail?'),
-        ('assistant', 'The backup job.'),
-        ('user', 'Draft the fix.'),
-        ('assistant', 'Opened #482.'),
-      ]);
-    });
+    test(
+      'the seed keeps user and assistant text and drops tool calls and notices',
+      () {
+        final seed = ChatController.seedFrom([
+          ...history(),
+          const Notice(id: 'n', text: 'Stopped.'),
+          const AssistantTurn(id: '5', text: '   '),
+        ]);
+        expect(
+          [for (final m in seed) (m.role, m.content)],
+          [
+            ('user', 'Why did it fail?'),
+            ('assistant', 'The backup job.'),
+            ('user', 'Draft the fix.'),
+            ('assistant', 'Opened #482.'),
+          ],
+        );
+      },
+    );
 
     test('the newest reply branches the whole stored chat', () async {
       backend.historyResult = Ok(history());
@@ -712,22 +785,29 @@ void main() {
       await controller.open();
       final outcome = (await controller.branch(fromItemId: '4')).valueOrNull!;
       expect(backend.branches, ['stored-1']);
-      expect(backend.branchPrefixes.single, isEmpty, reason: 'branchWhole carries no prefix');
+      expect(
+        backend.branchPrefixes.single,
+        isEmpty,
+        reason: 'branchWhole carries no prefix',
+      );
       expect(outcome.conversation.storedId, 'stored-branch');
       expect(outcome.summarised, isFalse);
     });
 
-    test('an older reply seeds a new session with the prefix through that reply', () async {
-      backend.historyResult = Ok(history());
-      final controller = controllerFor();
-      await controller.open();
-      final outcome = (await controller.branch(fromItemId: '2')).valueOrNull!;
-      expect([for (final m in backend.branchPrefixes.single) m.content], [
-        'Why did it fail?',
-        'The backup job.',
-      ]);
-      expect(outcome.count, 2);
-    });
+    test(
+      'an older reply seeds a new session with the prefix through that reply',
+      () async {
+        backend.historyResult = Ok(history());
+        final controller = controllerFor();
+        await controller.open();
+        final outcome = (await controller.branch(fromItemId: '2')).valueOrNull!;
+        expect(
+          [for (final m in backend.branchPrefixes.single) m.content],
+          ['Why did it fail?', 'The backup job.'],
+        );
+        expect(outcome.count, 2);
+      },
+    );
 
     test('earlier pages are loaded before the prefix is built', () async {
       backend
@@ -736,10 +816,14 @@ void main() {
           AssistantTurn(id: '4', text: 'Opened #482.'),
         ])
         ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
-        ..earlierResult = const Ok(HistoryPage(items: [
-          UserTurn(id: '1', text: 'Why did it fail?'),
-          AssistantTurn(id: '2', text: 'The backup job.'),
-        ]));
+        ..earlierResult = const Ok(
+          HistoryPage(
+            items: [
+              UserTurn(id: '1', text: 'Why did it fail?'),
+              AssistantTurn(id: '2', text: 'The backup job.'),
+            ],
+          ),
+        );
       final controller = controllerFor();
       await controller.open();
       await controller.branch(fromItemId: '2');
@@ -765,19 +849,22 @@ void main() {
       expect(controller.canBranchFrom('2'), isTrue);
     });
 
-    test('summarise runs compress on the new chat, and a failure still opens it', () async {
-      backend.historyResult = Ok(history());
-      final controller = controllerFor();
-      await controller.open();
-      var outcome = (await controller.branch(summarise: true)).valueOrNull!;
-      expect(backend.compressions, ['run-branch']);
-      expect(outcome.summarised, isTrue);
+    test(
+      'summarise runs compress on the new chat, and a failure still opens it',
+      () async {
+        backend.historyResult = Ok(history());
+        final controller = controllerFor();
+        await controller.open();
+        var outcome = (await controller.branch(summarise: true)).valueOrNull!;
+        expect(backend.compressions, ['run-branch']);
+        expect(outcome.summarised, isTrue);
 
-      backend.compressResult = Err(unknownMethod('session.compress'));
-      outcome = (await controller.branch(summarise: true)).valueOrNull!;
-      expect(outcome.summarised, isFalse);
-      expect(outcome.conversation.storedId, 'stored-branch');
-    });
+        backend.compressResult = Err(unknownMethod('session.compress'));
+        outcome = (await controller.branch(summarise: true)).valueOrNull!;
+        expect(outcome.summarised, isFalse);
+        expect(outcome.conversation.storedId, 'stored-branch');
+      },
+    );
 
     test('a server without session.branch_stored says so', () async {
       backend.historyResult = Ok(history());
@@ -785,7 +872,10 @@ void main() {
       final controller = controllerFor();
       await controller.open();
       final result = await controller.branch();
-      expect(result.failureOrNull?.message, "This server can't branch conversations.");
+      expect(
+        result.failureOrNull?.message,
+        "This server can't branch conversations.",
+      );
     });
 
     test('/branch branches the whole chat', () async {
@@ -799,7 +889,6 @@ void main() {
       expect(backend.slashes, isEmpty);
     });
   });
-
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

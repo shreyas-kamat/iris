@@ -14,6 +14,7 @@ import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/send_glyph.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
@@ -42,13 +43,18 @@ class Composer extends StatelessWidget {
     this.onStopRecording,
     this.onCancelRecording,
     this.onContext,
+    this.busyMode = BusyMode.interrupt,
     super.key,
   });
 
   final TextEditingController controller;
 
-  /// A turn is in progress: the action becomes Stop, and text steers the turn.
+  /// A turn is in progress: the action is Stop until there is text, then it is
+  /// the glyph of what sending will do ([busyMode]).
   final bool running;
+
+  /// What sending does while a turn runs; picks the glyph and its tag.
+  final BusyMode busyMode;
   final VoidCallback onSend;
   final VoidCallback onStop;
 
@@ -124,10 +130,19 @@ class Composer extends StatelessWidget {
         final matching = _matching(value.text);
         final canSend =
             enabled && (value.text.trim().isNotEmpty || attachments.isNotEmpty);
-        // Text during a run steers it. A slash command is not a steer, so it
-        // gets no button.
-        final canSteer =
-            running && canSend && !value.text.trimLeft().startsWith('/');
+        final typed = value.text.trimLeft();
+        final busyCommand = RegExp(r'^/(queue|steer)\s+\S').firstMatch(typed);
+        // While a reply runs, the action is Stop until there is something to
+        // send; then it is the glyph of what sending will do.
+        final busyKind = !running || !canSend
+            ? null
+            : busyCommand != null
+            ? (busyCommand.group(1) == 'queue'
+                  ? SendKind.queue
+                  : SendKind.steer)
+            : typed.startsWith('/')
+            ? null
+            : SendKind.forMode(busyMode);
         final border = running
             ? palette.colorFor(state).withValues(alpha: .33)
             : palette.line;
@@ -214,36 +229,40 @@ class Composer extends StatelessWidget {
                         onCancel: onCancelRecording ?? () {},
                       )
                     else
-                    TextField(
-                      controller: controller,
-                      minLines: 1,
-                      maxLines: 5,
-                      keyboardType: TextInputType.multiline,
-                      cursorColor: palette.accent,
-                      style: theme.typography.body.copyWith(
-                        fontSize: 15,
-                        height: 1.45,
-                        color: palette.ink,
-                      ),
-                      decoration: InputDecoration(
-                        isCollapsed: true,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        disabledBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 2),
-                        hintText: 'Message Iris…',
-                        hintStyle: theme.typography.body.copyWith(
+                      TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        keyboardType: TextInputType.multiline,
+                        cursorColor: palette.accent,
+                        style: theme.typography.body.copyWith(
                           fontSize: 15,
                           height: 1.45,
-                          color: palette.inkFaint,
+                          color: palette.ink,
+                        ),
+                        decoration: InputDecoration(
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 2,
+                          ),
+                          hintText: 'Message Iris…',
+                          hintStyle: theme.typography.body.copyWith(
+                            fontSize: 15,
+                            height: 1.45,
+                            color: palette.inkFaint,
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: IrisSpace.xs),
                     Row(
                       children: [
-                        if (onAttach != null && !running && recording == null) ...[
+                        if (onAttach != null &&
+                            !running &&
+                            recording == null) ...[
                           IrisPressable(
                             onTap: enabled ? onAttach : null,
                             semanticLabel: 'Attach',
@@ -262,35 +281,6 @@ class Composer extends StatelessWidget {
                         if (contextUsage case final usage?)
                           _ContextRing(usage: usage, onTap: onContext),
                         const Spacer(),
-                        AnimatedSwitcher(
-                          duration: context.reduceMotion
-                              ? Duration.zero
-                              : IrisDurations.normal,
-                          switchInCurve: IrisCurves.standard,
-                          switchOutCurve: IrisCurves.exit,
-                          transitionBuilder: (child, animation) =>
-                              FadeTransition(
-                                opacity: animation,
-                                child: ScaleTransition(
-                                  scale: Tween(
-                                    begin: .8,
-                                    end: 1.0,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              ),
-                          child: canSteer
-                              ? Padding(
-                                  key: const ValueKey('steer'),
-                                  padding: const EdgeInsets.only(
-                                    right: IrisSpace.sm,
-                                  ),
-                                  child: _SteerButton(onTap: onSend),
-                                )
-                              : const SizedBox.shrink(
-                                  key: ValueKey('no-steer'),
-                                ),
-                        ),
                         // Send and Stop share one slot, so the action changes
                         // in place rather than the row reflowing.
                         AnimatedSwitcher(
@@ -309,7 +299,29 @@ class Composer extends StatelessWidget {
                                   child: child,
                                 ),
                               ),
-                          child: running
+                          child: busyKind != null
+                              ? Row(
+                                  key: ValueKey('busy-${busyKind.name}'),
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        right: IrisSpace.sm,
+                                      ),
+                                      child: Text(
+                                        busyKind.semanticLabel.toUpperCase(),
+                                        style: theme.typography.codeSmall
+                                            .copyWith(
+                                              fontSize: 10.5,
+                                              letterSpacing: 1,
+                                              color: palette.inkMuted,
+                                            ),
+                                      ),
+                                    ),
+                                    _ModeButton(kind: busyKind, onTap: onSend),
+                                  ],
+                                )
+                              : running
                               ? _StopButton(
                                   key: const ValueKey('stop'),
                                   state: state,
@@ -319,7 +331,9 @@ class Composer extends StatelessWidget {
                               ? _MicButton(
                                   key: const ValueKey('mic'),
                                   busy: transcribing,
-                                  onTap: enabled && !transcribing ? onMic : null,
+                                  onTap: enabled && !transcribing
+                                      ? onMic
+                                      : null,
                                 )
                               : _SendButton(
                                   key: const ValueKey('send'),
@@ -417,7 +431,7 @@ class _SendButton extends StatelessWidget {
             color: palette.accent,
             shape: BoxShape.circle,
           ),
-          child: Icon(Icons.arrow_upward, size: 18, color: palette.accentInk),
+          child: SendGlyph(SendKind.send, color: palette.accentInk, size: 22),
         ),
       ),
     );
@@ -468,22 +482,30 @@ class _StopButton extends StatelessWidget {
   }
 }
 
-/// Steer: a ring of the thinking hue around a turning arrow. It sits beside
-/// Stop rather than replacing it, because during a run both are real choices.
-class _SteerButton extends StatelessWidget {
-  const _SteerButton({required this.onTap});
+/// The action while a reply runs and text is typed: an accent button with
+/// the glyph of what sending will do (frame A4).
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({required this.kind, required this.onTap});
 
+  final SendKind kind;
   final VoidCallback onTap;
+
+  static String _hint(SendKind kind) => switch (kind) {
+    SendKind.queue => 'Queue, sends after the running reply',
+    SendKind.steer => 'Steer, joins the running reply at its next step',
+    SendKind.interrupt => 'Interrupt, stops the running reply and sends this',
+    _ => 'Send',
+  };
 
   @override
   Widget build(BuildContext context) {
-    final thinking = context.palette.colorFor(AgentState.thinking);
+    final palette = context.palette;
     return IrisPressable(
       onTap: () {
         unawaited(IrisHaptics.commit());
         onTap();
       },
-      semanticLabel: 'Steer',
+      semanticLabel: _hint(kind),
       scale: .92,
       ensureTapTarget: false,
       child: Container(
@@ -491,14 +513,10 @@ class _SteerButton extends StatelessWidget {
         height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: thinking.withValues(alpha: .14),
+          color: palette.accent,
           shape: BoxShape.circle,
-          border: Border.all(
-            color: thinking.withValues(alpha: .4),
-            width: IrisStroke.hairline,
-          ),
         ),
-        child: Icon(Icons.subdirectory_arrow_right, size: 18, color: thinking),
+        child: SendGlyph(kind, color: palette.accentInk, size: 22),
       ),
     );
   }

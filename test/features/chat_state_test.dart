@@ -40,7 +40,10 @@ void main() {
         .withUserTurn('hi')
         .apply(const MessageStarted('r'))
         .apply(const MessageCompleted('r', content: 'All of it'));
-    expect(state.items.last, isA<AssistantTurn>().having((t) => t.text, 'text', 'All of it'));
+    expect(
+      state.items.last,
+      isA<AssistantTurn>().having((t) => t.text, 'text', 'All of it'),
+    );
   });
 
   test('completion does not repeat text from before a tool', () {
@@ -49,9 +52,20 @@ void main() {
         .apply(const MessageStarted('r'))
         .apply(const TextDelta('r', 'Checking.'))
         .apply(const ToolStarted('r', toolId: 't1', name: 'terminal'))
-        .apply(const ToolCompleted('r', toolId: 't1', name: 'terminal', output: 'ok'))
+        .apply(
+          const ToolCompleted(
+            'r',
+            toolId: 't1',
+            name: 'terminal',
+            output: 'ok',
+          ),
+        )
         .apply(const MessageCompleted('r', content: 'Checking. Done.'));
-    expect(state.items.map((i) => i.runtimeType), [UserTurn, AssistantTurn, ToolCall]);
+    expect(state.items.map((i) => i.runtimeType), [
+      UserTurn,
+      AssistantTurn,
+      ToolCall,
+    ]);
     expect((state.items[1] as AssistantTurn).text, 'Checking.');
   });
 
@@ -75,7 +89,9 @@ void main() {
   test('a tool without ids is matched by name', () {
     final state = ready
         .apply(const ToolStarted('r', name: 'web'))
-        .apply(const ToolCompleted('r', name: 'web', output: 'page', failed: true));
+        .apply(
+          const ToolCompleted('r', name: 'web', output: 'page', failed: true),
+        );
     final call = state.items.single as ToolCall;
     expect(call.status, ToolStatus.failed);
     expect(call.output, 'page');
@@ -87,7 +103,11 @@ void main() {
         .apply(const TextDelta('r', 'Let me look.'))
         .apply(const ToolStarted('r', toolId: 't1', name: 'web'))
         .apply(const TextDelta('r', 'Found it.'));
-    expect(state.items.map((i) => i.runtimeType), [AssistantTurn, ToolCall, AssistantTurn]);
+    expect(state.items.map((i) => i.runtimeType), [
+      AssistantTurn,
+      ToolCall,
+      AssistantTurn,
+    ]);
     final first = state.items[0] as AssistantTurn;
     final last = state.items[2] as AssistantTurn;
     expect(first.text, 'Let me look.');
@@ -120,7 +140,10 @@ void main() {
         .apply(const MessageStarted('r'))
         .apply(const TextDelta('r', 'Part'))
         .apply(const TurnInterrupted('r'));
-    expect(state.items.last, isA<Notice>().having((n) => n.text, 'text', 'Stopped.'));
+    expect(
+      state.items.last,
+      isA<Notice>().having((n) => n.text, 'text', 'Stopped.'),
+    );
     expect((state.items[1] as AssistantTurn).streaming, isFalse);
     expect(state.turn, TurnPhase.idle);
   });
@@ -157,7 +180,9 @@ void main() {
     });
 
     test('the same approval announced twice shows once', () {
-      final state = ready.apply(ApprovalAsked(approval)).apply(ApprovalAsked(approval));
+      final state = ready
+          .apply(ApprovalAsked(approval))
+          .apply(ApprovalAsked(approval));
       expect(state.approvals, hasLength(1));
     });
 
@@ -182,7 +207,10 @@ void main() {
       state = state.withoutQuestion(request, request.questions.first);
       expect(state.questions.single.questions.single.id, 'b');
       expect(state.turn, TurnPhase.waiting);
-      state = state.withoutQuestion(state.questions.single, state.questions.single.questions.single);
+      state = state.withoutQuestion(
+        state.questions.single,
+        state.questions.single.questions.single,
+      );
       expect(state.questions, isEmpty);
       expect(state.turn, TurnPhase.thinking);
     });
@@ -198,7 +226,10 @@ void main() {
 
   test('a notice keeps the turn; settled ends it', () {
     final running = ready.withUserTurn('/usage').withNotice('Tokens: 12k');
-    expect(running.items.last, isA<Notice>().having((n) => n.text, 'text', 'Tokens: 12k'));
+    expect(
+      running.items.last,
+      isA<Notice>().having((n) => n.text, 'text', 'Tokens: 12k'),
+    );
     expect(running.turn, TurnPhase.thinking);
     expect(running.settled().turn, TurnPhase.idle);
     expect(ready.withNotice('   ').items, isEmpty);
@@ -206,14 +237,13 @@ void main() {
 
   test('an earlier page goes above, and the cursor moves', () {
     const cursor = HistoryCursor(offset: 64, fromNewest: false);
-    final newest = ready.withNewestPage(
-      const [UserTurn(id: '65', text: 'newer')],
-      cursor,
-    );
+    final newest = ready.withNewestPage(const [
+      UserTurn(id: '65', text: 'newer'),
+    ], cursor);
     expect(newest.earlier?.offset, 64);
-    final both = newest
-        .copyWith(loadingEarlier: true)
-        .withEarlierPage(const [UserTurn(id: '1', text: 'older')], null);
+    final both = newest.copyWith(loadingEarlier: true).withEarlierPage(const [
+      UserTurn(id: '1', text: 'older'),
+    ], null);
     expect(both.items.map((i) => i.id), ['1', '65']);
     expect(both.earlier, isNull);
     expect(both.loadingEarlier, isFalse);
@@ -228,21 +258,30 @@ void main() {
     );
 
     test('an input prompt waits for the person', () {
-      final next = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final next = const ChatState(
+        phase: ChatPhase.ready,
+      ).apply(InputAsked(sudo));
       expect(next.inputs.single.requestId, 'srq-1');
       expect(next.turn, TurnPhase.waiting);
     });
 
     test('a withdrawn prompt goes, with a line saying so', () {
-      final asked = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final asked = const ChatState(
+        phase: ChatPhase.ready,
+      ).apply(InputAsked(sudo));
       final next = asked.apply(const RequestWithdrawn('run-1', 'srq-1'));
       expect(next.inputs, isEmpty);
       expect(next.turn, TurnPhase.thinking);
-      expect((next.items.last as Notice).text, 'Hermes stopped waiting for that.');
+      expect(
+        (next.items.last as Notice).text,
+        'Hermes stopped waiting for that.',
+      );
     });
 
     test('answering removes it and the turn carries on', () {
-      final asked = const ChatState(phase: ChatPhase.ready).apply(InputAsked(sudo));
+      final asked = const ChatState(
+        phase: ChatPhase.ready,
+      ).apply(InputAsked(sudo));
       final next = asked.withoutInput(sudo);
       expect(next.inputs, isEmpty);
       expect(next.turn, TurnPhase.thinking);
@@ -251,7 +290,10 @@ void main() {
 
   test('the context window follows the gateway', () {
     final next = const ChatState().apply(
-      const ContextChanged('run-1', ContextUsage(percent: 18, used: 10, max: 55)),
+      const ContextChanged(
+        'run-1',
+        ContextUsage(percent: 18, used: 10, max: 55),
+      ),
     );
     expect(next.context?.percent, 18);
     // A newer page of history keeps it.
@@ -269,12 +311,16 @@ void main() {
       expect(last.text, 'use staging');
       expect(next.turn, running.turn);
       // The reply before the steer is finished, so later text starts anew.
-      expect((next.items[next.items.length - 2] as AssistantTurn).streaming, isFalse);
+      expect(
+        (next.items[next.items.length - 2] as AssistantTurn).streaming,
+        isFalse,
+      );
     });
 
     test('only the newest failure can be retried', () {
-      final first = const ChatState(phase: ChatPhase.ready)
-          .apply(const TurnFailed('run-1', 'Gateway timed out'));
+      final first = const ChatState(
+        phase: ChatPhase.ready,
+      ).apply(const TurnFailed('run-1', 'Gateway timed out'));
       final second = first.apply(const TurnFailed('run-1', 'Again'));
       final notices = second.items.whereType<Notice>().toList();
       expect(notices.map((n) => n.retryable), [false, true]);
@@ -282,9 +328,9 @@ void main() {
     });
 
     test('a retry that starts streaming lets go of its button', () {
-      final failed = const ChatState(phase: ChatPhase.ready)
-          .apply(const TurnFailed('run-1', 'x'))
-          .copyWith(retrying: true);
+      final failed = const ChatState(
+        phase: ChatPhase.ready,
+      ).apply(const TurnFailed('run-1', 'x')).copyWith(retrying: true);
       final next = failed.apply(const MessageStarted('run-1'));
       expect(next.items.whereType<Notice>().single.retryable, isFalse);
     });
@@ -319,7 +365,12 @@ void main() {
           'op_id': 'op1',
           'timeout_seconds': 60,
           'targets': [
-            {'name': 'Linear', 'kind': 'connector', 'action': 'authorize', 'state': 'pending'},
+            {
+              'name': 'Linear',
+              'kind': 'connector',
+              'action': 'authorize',
+              'state': 'pending',
+            },
           ],
         }),
         sessionId: 'r',
@@ -335,7 +386,10 @@ void main() {
           settled: false,
         ),
       );
-      expect(state.connections.single.targets.single.state, TargetState.connected);
+      expect(
+        state.connections.single.targets.single.state,
+        TargetState.connected,
+      );
       state = state.apply(
         const ConnectionChanged('r', opId: 'op1', targets: [], settled: true),
       );
@@ -350,16 +404,23 @@ void main() {
       expect(state.connections, isEmpty);
     });
 
-    test('session info sets the effort and fast mode, and keeps them when absent', () {
-      var state = ready.apply(
-        const SessionInfoChanged('r', effort: ReasoningEffort.high, fast: true),
-      );
-      expect(state.effort, ReasoningEffort.high);
-      expect(state.fast, isTrue);
-      state = state.apply(const SessionInfoChanged('r', fast: false));
-      expect(state.effort, ReasoningEffort.high);
-      expect(state.fast, isFalse);
-    });
+    test(
+      'session info sets the effort and fast mode, and keeps them when absent',
+      () {
+        var state = ready.apply(
+          const SessionInfoChanged(
+            'r',
+            effort: ReasoningEffort.high,
+            fast: true,
+          ),
+        );
+        expect(state.effort, ReasoningEffort.high);
+        expect(state.fast, isTrue);
+        state = state.apply(const SessionInfoChanged('r', fast: false));
+        expect(state.effort, ReasoningEffort.high);
+        expect(state.fast, isFalse);
+      },
+    );
 
     test('vault prompts use the same input list as sudo and secret', () {
       const unlock = InputRequest(
@@ -373,4 +434,59 @@ void main() {
     });
   });
 
+  group('busy policy state', () {
+    test('queued messages keep their order and can be removed', () {
+      var state = ready.withQueued('q0', 'first').withQueued('q1', 'second');
+      expect(state.queue.map((q) => q.text), ['first', 'second']);
+      state = state.withoutQueued('q0');
+      expect(state.queue.map((q) => q.id), ['q1']);
+    });
+
+    test(
+      'a steer waits for the next step, then records which step picked it up',
+      () {
+        var state = ready
+            .withUserTurn('go')
+            .apply(const MessageStarted('r'))
+            .apply(const ToolStarted('r', name: 'list_nodes', toolId: 'a'))
+            .withSteer('only prod');
+        var steer = state.items.whereType<UserTurn>().last;
+        expect(steer.steered, isTrue);
+        expect(steer.steerPending, isTrue);
+        expect(steer.steerStep, isNull);
+
+        state = state.apply(
+          const ToolStarted('r', name: 'read_logs', toolId: 'b'),
+        );
+        steer = state.items.whereType<UserTurn>().last;
+        expect(steer.steerPending, isFalse);
+        expect(steer.steerStep, 2, reason: 'the second tool of the turn');
+      },
+    );
+
+    test('a redirect marks the cut reply and starts a new turn', () {
+      final state = ready
+          .withUserTurn('go')
+          .apply(const MessageStarted('r'))
+          .apply(const TextDelta('r', 'Three things broke'))
+          .withRedirect('Just restart the worker');
+      final reply = state.items.whereType<AssistantTurn>().single;
+      expect(reply.redirected, isTrue);
+      expect(reply.streaming, isFalse);
+      expect(
+        state.items.last,
+        isA<UserTurn>().having(
+          (t) => t.text,
+          'text',
+          'Just restart the worker',
+        ),
+      );
+      expect(state.turn, TurnPhase.thinking);
+    });
+
+    test('a message from the queue is marked, so the bubble can say so', () {
+      final state = ready.withUserTurn('later', fromQueue: true);
+      expect((state.items.single as UserTurn).fromQueue, isTrue);
+    });
+  });
 }

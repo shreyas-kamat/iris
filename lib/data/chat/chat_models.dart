@@ -69,6 +69,26 @@ final class UserTurn extends TranscriptItem {
 
   /// Sent from the queue tray when the previous turn finished.
   final bool fromQueue;
+
+  UserTurn copyWith({bool? steerPending, int? steerStep}) => UserTurn(
+    id: id,
+    text: text,
+    steered: steered,
+    attachments: attachments,
+    steerPending: steerPending ?? this.steerPending,
+    steerStep: steerStep ?? this.steerStep,
+    fromQueue: fromQueue,
+  );
+}
+
+/// A message waiting in the tray for the running reply to finish. Held in
+/// memory on this phone only.
+@immutable
+final class QueuedMessage {
+  const QueuedMessage({required this.id, required this.text});
+
+  final String id;
+  final String text;
 }
 
 /// Something the agent said, possibly still arriving.

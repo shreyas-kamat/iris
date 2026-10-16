@@ -49,6 +49,9 @@ final class ChatState {
     this.effort,
     this.fast,
     this.collapsing = const {},
+    this.queue = const [],
+    this.queuePaused = false,
+    this.busyMode = BusyMode.interrupt,
   });
 
   final ChatPhase phase;
@@ -95,6 +98,15 @@ final class ChatState {
   /// The ids of an undone exchange, folding away before it leaves.
   final Set<String> collapsing;
 
+  /// Messages waiting for the running reply to finish, oldest first.
+  final List<QueuedMessage> queue;
+
+  /// A failed or stopped turn paused the tray until the person says.
+  final bool queuePaused;
+
+  /// What sending does while a reply runs.
+  final BusyMode busyMode;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -118,6 +130,9 @@ final class ChatState {
     ReasoningEffort? effort,
     bool? fast,
     Set<String>? collapsing,
+    List<QueuedMessage>? queue,
+    bool? queuePaused,
+    BusyMode? busyMode,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
@@ -139,6 +154,9 @@ final class ChatState {
     effort: effort ?? this.effort,
     fast: fast ?? this.fast,
     collapsing: collapsing ?? this.collapsing,
+    queue: queue ?? this.queue,
+    queuePaused: queuePaused ?? this.queuePaused,
+    busyMode: busyMode ?? this.busyMode,
   );
 
   /// The state after [event].
@@ -160,7 +178,7 @@ final class ChatState {
       turn: _waitingOr(TurnPhase.idle),
     ),
     ToolStarted(:final toolId, :final name, :final input) => copyWith(
-      items: [
+      items: _pickedUp([
         ..._settled(items),
         ToolCall(
           id: toolId ?? 'tool-${items.length}',
@@ -168,7 +186,7 @@ final class ChatState {
           arguments: input,
           status: ToolStatus.running,
         ),
-      ],
+      ]),
       turn: TurnPhase.working,
     ),
     final ToolCompleted done => copyWith(
@@ -225,6 +243,9 @@ final class ChatState {
         connections: connections,
         effort: effort,
         fast: fast,
+        queue: queue,
+        queuePaused: queuePaused,
+        busyMode: busyMode,
       );
 
   /// An earlier page, above what is shown.
@@ -250,6 +271,9 @@ final class ChatState {
     effort: effort,
     fast: fast,
     collapsing: collapsing,
+    queue: queue,
+    queuePaused: queuePaused,
+    busyMode: busyMode,
   );
 
   /// The id of the last turn the person started: where "the last exchange"
@@ -281,26 +305,70 @@ final class ChatState {
   }
 
   /// The person's message, shown at once.
-  ChatState withUserTurn(String text, {List<String> attachments = const []}) =>
-      copyWith(
-        items: [
-          ..._settled(items),
-          UserTurn(
-            id: 'local-${items.length}',
-            text: text,
-            attachments: attachments,
-          ),
-        ],
-        turn: TurnPhase.thinking,
-      );
+  ChatState withUserTurn(
+    String text, {
+    List<String> attachments = const [],
+    bool fromQueue = false,
+  }) => copyWith(
+    items: [
+      ..._settled(items),
+      UserTurn(
+        id: 'local-${items.length}',
+        text: text,
+        attachments: attachments,
+        fromQueue: fromQueue,
+      ),
+    ],
+    turn: TurnPhase.thinking,
+  );
 
   /// The person steered the running turn. The reply so far is finished, so
   /// what the agent says next starts below the steer, and the turn carries on.
   ChatState withSteer(String text) => copyWith(
     items: [
       ..._settled(items),
-      UserTurn(id: 'local-${items.length}', text: text, steered: true),
+      UserTurn(
+        id: 'local-${items.length}',
+        text: text,
+        steered: true,
+        steerPending: true,
+      ),
     ],
+  );
+
+  /// The person redirected the running turn: Hermes stopped it to answer
+  /// this. What was said so far stays, marked as cut off.
+  ChatState withRedirect(String text) {
+    final settled = _settled(items);
+    final last = settled.isEmpty ? null : settled.last;
+    final marked = last is AssistantTurn
+        ? [
+            ...settled.sublist(0, settled.length - 1),
+            last.copyWith(redirected: true),
+          ]
+        : settled;
+    return copyWith(
+      items: [
+        ...marked,
+        UserTurn(id: 'local-${items.length}', text: text),
+      ],
+      turn: TurnPhase.thinking,
+    );
+  }
+
+  ChatState withQueued(String id, String text) => copyWith(
+    queue: [
+      ...queue,
+      QueuedMessage(id: id, text: text),
+    ],
+  );
+
+  ChatState withoutQueued(String id) => copyWith(
+    queue: [
+      for (final q in queue)
+        if (q.id != id) q,
+    ],
+    queuePaused: queue.length <= 1 ? false : queuePaused,
   );
 
   /// The turn failed. Only the newest failure can be retried: retrying an
@@ -551,6 +619,23 @@ final class ChatState {
 
   /// [items] with the live assistant turn finished: kept if it says
   /// anything, dropped if it never did.
+  /// Steers waiting for a step are picked up by the tool that just started:
+  /// its position among this turn's tools is the step.
+  static List<TranscriptItem> _pickedUp(List<TranscriptItem> items) {
+    var tools = 0;
+    for (final item in items.reversed) {
+      if (item is UserTurn && !item.steered) break;
+      if (item is ToolCall) tools++;
+    }
+    return [
+      for (final item in items)
+        if (item is UserTurn && item.steerPending)
+          item.copyWith(steerPending: false, steerStep: tools)
+        else
+          item,
+    ];
+  }
+
   static List<TranscriptItem> _settled(List<TranscriptItem> items) {
     final last = items.isEmpty ? null : items.last;
     if (last is! AssistantTurn || !last.streaming) return items;

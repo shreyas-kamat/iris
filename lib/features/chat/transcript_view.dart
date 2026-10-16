@@ -8,9 +8,11 @@ import 'package:flutter/material.dart';
 import '../../data/chat/chat_models.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
+import '../../design/components/dashed_border.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/markdown.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/send_glyph.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
@@ -133,6 +135,15 @@ class _UserBubble extends StatelessWidget {
     bottomLeft: Radius.circular(20),
   );
 
+  /// A steer points back up into the turn it joins, so its pulled-in corner
+  /// is the top right.
+  static const _steerShape = BorderRadius.only(
+    topLeft: Radius.circular(18),
+    topRight: Radius.circular(6),
+    bottomRight: Radius.circular(18),
+    bottomLeft: Radius.circular(18),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = context.iris;
@@ -145,6 +156,7 @@ class _UserBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (turn.fromQueue) const _FromQueueTag(),
             if (turn.attachments.isNotEmpty)
               Wrap(
                 alignment: WrapAlignment.end,
@@ -162,22 +174,30 @@ class _UserBubble extends StatelessWidget {
                 constraints: BoxConstraints(
                   maxWidth: constraints.maxWidth * .82,
                 ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: theme.palette.accentQuiet,
-                    borderRadius: _shape,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 15,
-                      vertical: 11,
+                child: CustomPaint(
+                  foregroundPainter: turn.steered
+                      ? DashedRRectPainter(
+                          color: theme.palette.accent,
+                          radius: _steerShape,
+                        )
+                      : null,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: theme.palette.accentQuiet,
+                      borderRadius: turn.steered ? _steerShape : _shape,
                     ),
-                    child: Text(
-                      turn.text,
-                      style: theme.typography.body.copyWith(
-                        fontSize: 15,
-                        height: 1.45,
-                        color: theme.palette.ink,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 11,
+                      ),
+                      child: Text(
+                        turn.text,
+                        style: theme.typography.body.copyWith(
+                          fontSize: 15,
+                          height: 1.45,
+                          color: theme.palette.ink,
+                        ),
                       ),
                     ),
                   ),
@@ -188,16 +208,22 @@ class _UserBubble extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.subdirectory_arrow_right,
-                    size: 12,
-                    color: theme.palette.inkMuted,
+                  SendGlyph(
+                    SendKind.steer,
+                    color: theme.palette.accent,
+                    size: 13,
                   ),
                   const SizedBox(width: IrisSpace.xxs),
                   Text(
-                    'Steered',
-                    style: theme.typography.caption.copyWith(
-                      color: theme.palette.inkMuted,
+                    turn.steerPending
+                        ? 'WAITING FOR NEXT STEP'
+                        : turn.steerStep != null
+                        ? 'STEER · PICKED UP AT STEP ${turn.steerStep}'
+                        : 'STEERED',
+                    style: theme.typography.codeSmall.copyWith(
+                      fontSize: 10.5,
+                      letterSpacing: .8,
+                      color: theme.palette.accent,
                     ),
                   ),
                 ],
@@ -208,6 +234,52 @@ class _UserBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "FROM QUEUE" in the accent colour, fading after two seconds (frame A4).
+class _FromQueueTag extends StatefulWidget {
+  const _FromQueueTag();
+
+  @override
+  State<_FromQueueTag> createState() => _FromQueueTagState();
+}
+
+class _FromQueueTagState extends State<_FromQueueTag> {
+  bool _visible = true;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+    opacity: _visible ? 1 : 0,
+    duration: context.reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 300),
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: IrisSpace.xs),
+      child: Text(
+        'FROM QUEUE',
+        style: context.type.codeSmall.copyWith(
+          fontSize: 10.5,
+          letterSpacing: .8,
+          color: context.palette.accent,
+        ),
+      ),
+    ),
+  );
 }
 
 /// The agent's turn: a header with the orb and the live state, the thoughts,
@@ -255,6 +327,16 @@ class _AssistantBlock extends StatelessWidget {
             ],
           ],
         ),
+        if (turn.redirected) ...[
+          const SizedBox(height: IrisSpace.xxs),
+          Text(
+            'stopped · redirected',
+            style: theme.typography.codeSmall.copyWith(
+              fontSize: 11,
+              color: palette.inkMuted,
+            ),
+          ),
+        ],
         const SizedBox(height: IrisSpace.sm),
         if (reasoning.isNotEmpty) ...[
           _ThoughtsCard(
@@ -265,12 +347,15 @@ class _AssistantBlock extends StatelessWidget {
           const SizedBox(height: IrisSpace.sm),
         ],
         if (hasText)
-          IrisMarkdown(
-            turn.text,
-            highlight: !streaming,
-            onTapLink: (href) => href == leaveDemoLink
-                ? leaveDemo(context)
-                : unawaited(openLink(href)),
+          Opacity(
+            opacity: turn.redirected ? .7 : 1,
+            child: IrisMarkdown(
+              turn.text,
+              highlight: !streaming,
+              onTapLink: (href) => href == leaveDemoLink
+                  ? leaveDemo(context)
+                  : unawaited(openLink(href)),
+            ),
           ),
         if (streaming) ...[
           if (hasText) const SizedBox(height: IrisSpace.xs),

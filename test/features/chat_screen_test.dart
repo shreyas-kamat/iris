@@ -1,7 +1,6 @@
 /// A whole conversation screen against a scripted backend.
 library;
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,6 +86,37 @@ void main() {
     expect(find.text('Run the tests'), findsOneWidget);
     semantics.dispose();
   });
+
+  testWidgets(
+    'in queue mode, sending mid-reply fills the tray, which can be emptied',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      backend.busyModeResult = const Ok(BusyMode.queue);
+      await tester.pumpWidget(
+        themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+      );
+      await settle(tester);
+      await settle(tester);
+      backend.emit(const MessageStarted('run-1'));
+      await settle(tester);
+      await tester.enterText(find.byType(EditableText), 'Also check node-4');
+      await tester.pump();
+      expect(find.text('QUEUE'), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel(RegExp('^Queue')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(backend.submits, isEmpty);
+      expect(find.text('Also check node-4'), findsOneWidget);
+      expect(
+        find.text('Queued messages are held on this phone'),
+        findsOneWidget,
+      );
+      await tester.tap(find.bySemanticsLabel('Remove message 1'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Queued messages are held on this phone'), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+      semantics.dispose();
+    },
+  );
 
   testWidgets('an approval shows above the composer and is answered', (
     tester,
@@ -319,31 +349,51 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('a sudo prompt shows its card and the answer reaches the backend', (tester) async {
-    await tester.pumpWidget(themed(ChatScreen(backend: backend, conversationId: 'stored-1')));
-    await settle(tester);
-    await settle(tester);
-    backend.emit(
-      InputAsked(
-        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.sudo),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Hermes needs your sudo password'), findsOneWidget);
-    await tester.enterText(
-      find.descendant(of: find.byType(InputCard), matching: find.byType(EditableText)),
-      'pw',
-    );
-    await tester.pump();
-    await tester.tap(find.text('Submit'));
-    await tester.pumpAndSettle();
-    expect(backend.inputAnswers, [('srq-1', 'pw')]);
-    expect(find.byType(InputCard), findsNothing);
-  });
+  testWidgets(
+    'a sudo prompt shows its card and the answer reaches the backend',
+    (tester) async {
+      await tester.pumpWidget(
+        themed(ChatScreen(backend: backend, conversationId: 'stored-1')),
+      );
+      await settle(tester);
+      await settle(tester);
+      backend.emit(
+        InputAsked(
+          const InputRequest(
+            requestId: 'srq-1',
+            sessionId: 'run-1',
+            kind: InputKind.sudo,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hermes needs your sudo password'), findsOneWidget);
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(InputCard),
+          matching: find.byType(EditableText),
+        ),
+        'pw',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Submit'));
+      await tester.pumpAndSettle();
+      expect(backend.inputAnswers, [('srq-1', 'pw')]);
+      expect(find.byType(InputCard), findsNothing);
+    },
+  );
 
-  testWidgets('sending in an archived chat asks to unarchive first', (tester) async {
+  testWidgets('sending in an archived chat asks to unarchive first', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      themed(ChatScreen(backend: backend, conversationId: 'stored-1', archived: true)),
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          archived: true,
+        ),
+      ),
     );
     await settle(tester);
     await settle(tester);
@@ -358,9 +408,17 @@ void main() {
     expect(backend.submitted.single.$2, 'hello');
   });
 
-  testWidgets('declining to unarchive keeps the text and sends nothing', (tester) async {
+  testWidgets('declining to unarchive keeps the text and sends nothing', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      themed(ChatScreen(backend: backend, conversationId: 'stored-1', archived: true)),
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          archived: true,
+        ),
+      ),
     );
     await settle(tester);
     await settle(tester);
@@ -508,40 +566,55 @@ void main() {
     await settle(tester);
   }
 
+  testWidgets(
+    'long-press on your latest message offers Copy and Undo; older ones Copy only',
+    (tester) async {
+      await pumpChat(tester);
+      await tester.longPress(find.text('Draft the fix.'));
+      await tester.pumpAndSettle();
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      await tester.longPress(find.text('Why?'));
+      await tester.pumpAndSettle();
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Undo'), findsNothing);
+    },
+  );
 
-  testWidgets('long-press on your latest message offers Copy and Undo; older ones Copy only', (tester) async {
-    await pumpChat(tester);
-    await tester.longPress(find.text('Draft the fix.'));
-    await tester.pumpAndSettle();
-    expect(find.text('Copy'), findsOneWidget);
-    expect(find.text('Undo'), findsOneWidget);
-    await tester.tapAt(const Offset(5, 5));
-    await tester.pumpAndSettle();
-    await tester.longPress(find.text('Why?'));
-    await tester.pumpAndSettle();
-    expect(find.text('Copy'), findsOneWidget);
-    expect(find.text('Undo'), findsNothing);
-  });
-
-  testWidgets('Undo from the menu removes the exchange and refills the composer', (tester) async {
-    await pumpChat(tester);
-    await tester.longPress(find.text('Draft the fix.'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Undo'));
-    await tester.pumpAndSettle();
-    expect(backend.undos, ['run-1']);
-    expect(find.text('Done.'), findsNothing);
-    final field = tester.widget<EditableText>(find.byType(EditableText));
-    expect(field.controller.text, 'Draft the fix.');
-  });
+  testWidgets(
+    'Undo from the menu removes the exchange and refills the composer',
+    (tester) async {
+      await pumpChat(tester);
+      await tester.longPress(find.text('Draft the fix.'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(backend.undos, ['run-1']);
+      expect(find.text('Done.'), findsNothing);
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.controller.text, 'Draft the fix.');
+    },
+  );
 
   testWidgets('Copy puts the whole message on the clipboard', (tester) async {
     String? copied;
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String;
-      return null;
-    });
-    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     await pumpChat(tester);
     await tester.longPress(find.text('Done.'));
     await tester.pumpAndSettle();
@@ -550,31 +623,37 @@ void main() {
     expect(copied, 'Done.');
   });
 
-  testWidgets('long-press on a finished reply offers Branch from here; a streaming one does not', (tester) async {
-    await pumpChat(tester);
-    await tester.longPress(find.text('Done.'));
-    await tester.pumpAndSettle();
-    expect(find.text('Branch from here'), findsOneWidget);
-    await tester.tapAt(const Offset(5, 5));
-    await tester.pumpAndSettle();
-    backend
-      ..emit(const MessageStarted('run-1'))
-      ..emit(const TextDelta('run-1', 'typing'));
-    await settle(tester);
-    await tester.longPress(find.text('typing'));
-    await tester.pumpAndSettle();
-    expect(find.text('Branch from here'), findsNothing);
-  });
+  testWidgets(
+    'long-press on a finished reply offers Branch from here; a streaming one does not',
+    (tester) async {
+      await pumpChat(tester);
+      await tester.longPress(find.text('Done.'));
+      await tester.pumpAndSettle();
+      expect(find.text('Branch from here'), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      backend
+        ..emit(const MessageStarted('run-1'))
+        ..emit(const TextDelta('run-1', 'typing'));
+      await settle(tester);
+      await tester.longPress(find.text('typing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Branch from here'), findsNothing);
+    },
+  );
 
-  testWidgets('branching from the newest reply copies the whole chat and opens the child', (tester) async {
-    await pumpChat(tester);
-    await tester.longPress(find.text('Done.'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Branch from here'));
-    await tester.pumpAndSettle();
-    expect(backend.branches, ['stored-1']);
-    expect(find.textContaining('Branched from'), findsOneWidget);
-  });
+  testWidgets(
+    'branching from the newest reply copies the whole chat and opens the child',
+    (tester) async {
+      await pumpChat(tester);
+      await tester.longPress(find.text('Done.'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Branch from here'));
+      await tester.pumpAndSettle();
+      expect(backend.branches, ['stored-1']);
+      expect(find.textContaining('Branched from'), findsOneWidget);
+    },
+  );
 
   testWidgets('branching from an older reply seeds the prefix', (tester) async {
     await pumpChat(tester);
@@ -582,23 +661,31 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Branch from here'));
     await tester.pumpAndSettle();
-    expect([for (final m in backend.branchPrefixes.first) m.content], ['Why?', 'Because.']);
-  });
-
-  testWidgets('a chat opened with a record shows the header line and the divider', (tester) async {
-    await pumpChat(
-      tester,
-      branch: BranchRecord(
-        parentId: 'p',
-        parentTitle: 'Parent chat',
-        count: 2,
-        at: DateTime(2026, 10, 16, 14, 2).millisecondsSinceEpoch,
-      ),
+    expect(
+      [for (final m in backend.branchPrefixes.first) m.content],
+      ['Why?', 'Because.'],
     );
-    expect(find.textContaining('Parent chat', findRichText: true), findsOneWidget);
-    expect(find.text('BRANCHED HERE · 14:02'), findsOneWidget);
   });
 
+  testWidgets(
+    'a chat opened with a record shows the header line and the divider',
+    (tester) async {
+      await pumpChat(
+        tester,
+        branch: BranchRecord(
+          parentId: 'p',
+          parentTitle: 'Parent chat',
+          count: 2,
+          at: DateTime(2026, 10, 16, 14, 2).millisecondsSinceEpoch,
+        ),
+      );
+      expect(
+        find.textContaining('Parent chat', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.text('BRANCHED HERE · 14:02'), findsOneWidget);
+    },
+  );
 }
 
 final class FakeRecorder implements VoiceRecorder {
@@ -616,5 +703,4 @@ final class FakeRecorder implements VoiceRecorder {
 
   @override
   Future<void> cancel() async => recording = false;
-
 }

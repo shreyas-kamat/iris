@@ -153,6 +153,8 @@ void main() {
     await tester.pump();
     await tester.tap(find.bySemanticsLabel('Send'));
     expect(sent, 1);
+    // Stop is for an empty field; typed text shows the busy-mode glyph.
+    text.clear();
     await tester.pumpWidget(composer(running: true));
     await tester.tap(find.bySemanticsLabel('Stop'));
     expect(stopped, 1);
@@ -193,6 +195,7 @@ void main() {
     Widget composer({
       required TextEditingController text,
       bool running = false,
+      BusyMode mode = BusyMode.interrupt,
       ContextUsage? usage,
       VoidCallback? onSend,
       VoidCallback? onContext,
@@ -202,6 +205,7 @@ void main() {
         child: Composer(
           controller: text,
           running: running,
+          busyMode: mode,
           onSend: onSend ?? () {},
           onStop: () {},
           contextUsage: usage,
@@ -210,29 +214,83 @@ void main() {
       ),
     );
 
-    testWidgets('during a run, text offers a steer beside stop', (tester) async {
-      final text = TextEditingController();
-      var sent = 0;
-      await tester.pumpWidget(composer(text: text, running: true, onSend: () => sent++));
-      expect(find.bySemanticsLabel('Steer'), findsNothing);
+    testWidgets('while running, an empty field keeps Stop', (tester) async {
+      await tester.pumpWidget(
+        composer(
+          text: TextEditingController(),
+          running: true,
+          mode: BusyMode.queue,
+        ),
+      );
       expect(find.bySemanticsLabel('Stop'), findsOneWidget);
-
-      text.text = 'use staging';
-      await tester.pumpAndSettle();
-      expect(find.bySemanticsLabel('Steer'), findsOneWidget);
-      expect(find.bySemanticsLabel('Stop'), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel('Steer'));
-      expect(sent, 1);
+      expect(
+        find.bySemanticsLabel(RegExp('Queue|Steer|Interrupt')),
+        findsNothing,
+      );
     });
 
-    testWidgets('a slash command offers no steer', (tester) async {
-      final text = TextEditingController(text: '/model');
-      await tester.pumpWidget(composer(text: text, running: true));
-      await tester.pumpAndSettle();
-      expect(find.bySemanticsLabel('Steer'), findsNothing);
+    for (final (mode, label, tag) in [
+      (BusyMode.queue, 'Queue', 'QUEUE'),
+      (BusyMode.steer, 'Steer', 'STEER'),
+      (BusyMode.interrupt, 'Interrupt', 'INTERRUPT'),
+    ]) {
+      testWidgets('typed text shows the $label glyph and tag', (tester) async {
+        var sent = 0;
+        await tester.pumpWidget(
+          composer(
+            text: TextEditingController(text: 'hello'),
+            running: true,
+            mode: mode,
+            onSend: () => sent++,
+          ),
+        );
+        expect(find.bySemanticsLabel(RegExp(label)), findsOneWidget);
+        expect(find.text(tag), findsOneWidget);
+        expect(find.bySemanticsLabel('Stop'), findsNothing);
+        await tester.tap(find.bySemanticsLabel(RegExp(label)));
+        expect(sent, 1);
+      });
+    }
+
+    testWidgets('/queue text shows the queue glyph whatever the mode', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        composer(
+          text: TextEditingController(text: '/queue later'),
+          running: true,
+          mode: BusyMode.steer,
+        ),
+      );
+      expect(find.text('QUEUE'), findsOneWidget);
     });
 
-    testWidgets('the context ring shows once known and opens its sheet', (tester) async {
+    testWidgets('another slash command keeps Stop', (tester) async {
+      await tester.pumpWidget(
+        composer(
+          text: TextEditingController(text: '/model'),
+          running: true,
+          mode: BusyMode.queue,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('Stop'), findsOneWidget);
+    });
+
+    testWidgets('idle shows Send, with no tag', (tester) async {
+      await tester.pumpWidget(
+        composer(
+          text: TextEditingController(text: 'hello'),
+          mode: BusyMode.queue,
+        ),
+      );
+      expect(find.bySemanticsLabel('Send'), findsOneWidget);
+      expect(find.text('QUEUE'), findsNothing);
+    });
+
+    testWidgets('the context ring shows once known and opens its sheet', (
+      tester,
+    ) async {
       final text = TextEditingController();
       var opened = 0;
       await tester.pumpWidget(composer(text: text));
@@ -244,7 +302,10 @@ void main() {
           onContext: () => opened++,
         ),
       );
-      expect(find.bySemanticsLabel('Context window, 18 percent'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Context window, 18 percent'),
+        findsOneWidget,
+      );
       await tester.tap(find.bySemanticsLabel('Context window, 18 percent'));
       expect(opened, 1);
     });
@@ -289,7 +350,9 @@ void main() {
       command: 'apt install jq',
     );
 
-    testWidgets('submits the masked value and clears the field', (tester) async {
+    testWidgets('submits the masked value and clears the field', (
+      tester,
+    ) async {
       String? sent;
       await tester.pumpWidget(
         themed(
@@ -308,16 +371,17 @@ void main() {
       await tester.tap(find.text('Submit'));
       await tester.pump();
       expect(sent, 'hunter2');
-      expect(
-        tester.widget<EditableText>(_field).controller.text,
-        isEmpty,
-      );
+      expect(tester.widget<EditableText>(_field).controller.text, isEmpty);
     });
 
     testWidgets('cancel sends an empty value', (tester) async {
       String? sent;
       await tester.pumpWidget(
-        themed(Center(child: InputCard(request: sudo, onAnswer: (v) async => sent = v))),
+        themed(
+          Center(
+            child: InputCard(request: sudo, onAnswer: (v) async => sent = v),
+          ),
+        ),
       );
       await tester.tap(find.text('Cancel'));
       await tester.pump();
@@ -326,7 +390,11 @@ void main() {
 
     testWidgets('the eye shows and hides what was typed', (tester) async {
       await tester.pumpWidget(
-        themed(Center(child: InputCard(request: sudo, onAnswer: (_) async {}))),
+        themed(
+          Center(
+            child: InputCard(request: sudo, onAnswer: (_) async {}),
+          ),
+        ),
       );
       EditableText field() => tester.widget<EditableText>(_field);
       expect(field().obscureText, isTrue);
@@ -339,9 +407,16 @@ void main() {
     });
   });
 
-  testWidgets('a retryable failure offers Retry; retrying shows it working', (tester) async {
+  testWidgets('a retryable failure offers Retry; retrying shows it working', (
+    tester,
+  ) async {
     var retried = 0;
-    const failed = Notice(id: 'n', text: 'Gateway timed out', isError: true, retryable: true);
+    const failed = Notice(
+      id: 'n',
+      text: 'Gateway timed out',
+      isError: true,
+      retryable: true,
+    );
     await tester.pumpWidget(
       themed(Center(child: TranscriptEntry(failed, onRetry: () => retried++))),
     );
@@ -349,7 +424,9 @@ void main() {
     expect(retried, 1);
 
     await tester.pumpWidget(
-      themed(Center(child: TranscriptEntry(failed, onRetry: () {}, retrying: true))),
+      themed(
+        Center(child: TranscriptEntry(failed, onRetry: () {}, retrying: true)),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Retry'), findsNothing);
@@ -359,9 +436,77 @@ void main() {
 
   testWidgets('a steered turn says so', (tester) async {
     await tester.pumpWidget(
-      themed(const Center(child: TranscriptEntry(UserTurn(id: 'u', text: 'go on', steered: true)))),
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            UserTurn(id: 'u', text: 'go on', steered: true),
+          ),
+        ),
+      ),
     );
-    expect(find.text('Steered'), findsOneWidget);
+    expect(find.text('STEERED'), findsOneWidget);
+  });
+
+  testWidgets('a steer waits for its step, then says which picked it up', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            UserTurn(id: 'u', text: 'go on', steered: true, steerPending: true),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('WAITING FOR NEXT STEP'), findsOneWidget);
+    await tester.pumpWidget(
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            UserTurn(id: 'u', text: 'go on', steered: true, steerStep: 2),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('STEER · PICKED UP AT STEP 2'), findsOneWidget);
+  });
+
+  testWidgets('a message from the queue carries a tag, which fades', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            UserTurn(id: 'u', text: 'later', fromQueue: true),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('FROM QUEUE'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    final opacity = tester.widget<AnimatedOpacity>(
+      find.byType(AnimatedOpacity),
+    );
+    expect(opacity.opacity, 0);
+  });
+
+  testWidgets('a redirected reply is marked as stopped', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const Center(
+          child: TranscriptEntry(
+            AssistantTurn(
+              id: 'a',
+              text: 'Three things broke',
+              redirected: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('stopped · redirected'), findsOneWidget);
   });
 
   testWidgets('a user turn shows its files as chips', (tester) async {
@@ -378,7 +523,9 @@ void main() {
     expect(find.byIcon(Icons.image_outlined), findsOneWidget);
   });
 
-  testWidgets('a user turn with only files draws no empty bubble', (tester) async {
+  testWidgets('a user turn with only files draws no empty bubble', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       themed(
         const Center(

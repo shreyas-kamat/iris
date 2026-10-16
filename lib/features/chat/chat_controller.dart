@@ -62,6 +62,11 @@ final class ChatController extends ValueNotifier<ChatState> {
 
   /// A retry ran; read the newest page once the new turn settles.
   bool _reloadWhenIdle = false;
+  int _queueSerial = 0;
+  bool _draining = false;
+
+  /// `/queue text` and `/steer text`.
+  static final _busyCommand = RegExp(r'^/(queue|steer)\s+(.+)$', dotAll: true);
 
   /// Called with text a slash command wants in the composer, for the person
   /// to finish and send.
@@ -147,6 +152,13 @@ final class ChatController extends ValueNotifier<ChatState> {
           next = next.apply(event);
         }
         _update(next);
+        unawaited(_loadBusyMode());
+    }
+  }
+
+  Future<void> _loadBusyMode() async {
+    if (await _backend.busyMode() case Ok(value: final mode)) {
+      if (!_disposed) _update(value.copyWith(busyMode: mode));
     }
   }
 
@@ -162,6 +174,7 @@ final class ChatController extends ValueNotifier<ChatState> {
     if (history case Ok(value: final page)) {
       _update(value.withNewestPage(page.items, page.earlier));
     }
+    final wasRunning = value.running;
     final resumed = await _backend.resume(storedId);
     if (_disposed) return;
     switch (resumed) {
@@ -185,6 +198,7 @@ final class ChatController extends ValueNotifier<ChatState> {
           next = next.apply(event);
         }
         _update(next);
+        if (wasRunning && !value.running) _turnEnded(failedOrStopped: false);
     }
   }
 
@@ -244,20 +258,23 @@ final class ChatController extends ValueNotifier<ChatState> {
       onBranchRequested?.call();
       return;
     }
+    final command = _busyCommand.firstMatch(trimmed);
     if (value.running) {
-      if (!trimmed.startsWith('/')) await _steer(trimmed);
+      await _sendWhileRunning(trimmed, command);
       return;
     }
+    // Idle, "/queue x" and "/steer x" are an ordinary send of x.
+    final body = command == null ? trimmed : command.group(2)!.trim();
     _update(
       value.withUserTurn(
-        trimmed,
+        body,
         attachments: [for (final file in attachments) file.name],
       ),
     );
     final runtimeId = _runtimeId ?? await _create();
     if (runtimeId == null) return;
-    if (attachments.isEmpty && trimmed.startsWith('/') && trimmed.length > 1) {
-      await _slash(runtimeId, trimmed, depth: 0);
+    if (attachments.isEmpty && body.startsWith('/') && body.length > 1) {
+      await _slash(runtimeId, body, depth: 0);
       return;
     }
     final references = <String>[];
@@ -272,7 +289,7 @@ final class ChatController extends ValueNotifier<ChatState> {
           return;
       }
     }
-    await _submit(runtimeId, promptWithReferences(trimmed, references));
+    await _submit(runtimeId, promptWithReferences(body, references));
   }
 
   /// The user and assistant text in [items], oldest first. Tool calls,
@@ -439,6 +456,101 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
+  Future<void> _sendWhileRunning(String text, RegExpMatch? command) async {
+    if (command != null) {
+      final argument = command.group(2)!.trim();
+      if (command.group(1) == 'queue') {
+        _enqueue(argument);
+      } else {
+        await _steer(argument);
+      }
+      return;
+    }
+    // Any other command waits for the turn to end.
+    if (text.startsWith('/')) return;
+    switch (value.busyMode) {
+      case BusyMode.queue:
+        _enqueue(text);
+      case BusyMode.steer:
+        await _steer(text);
+      case BusyMode.interrupt:
+        await _interruptWith(text);
+    }
+  }
+
+  void _enqueue(String text) {
+    _update(value.withQueued('queued-${_queueSerial++}', text));
+    onToast?.call('Queued for after this reply');
+  }
+
+  /// Interrupt mode: Hermes applies its own policy to the submit, and says
+  /// what it did.
+  Future<void> _interruptWith(String text) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return;
+    final result = await _backend.submit(runtimeId, text);
+    if (_disposed) return;
+    switch (result) {
+      case Ok(value: SubmitOutcome.redirected):
+        _update(value.withRedirect(text));
+        onToast?.call('Redirected');
+      case Ok(value: SubmitOutcome.steered):
+        _update(value.withSteer(text));
+        onToast?.call('Steered');
+      case Ok(value: SubmitOutcome.queued):
+        // Hermes held it for after the turn. Accepted, not an error.
+        onToast?.call('Queued for after this reply');
+      case Ok():
+        // The turn had already ended: this started a new one.
+        _update(value.withUserTurn(text));
+      case Err(:final failure):
+        if (failure.rpcError?.code == 4009) {
+          await _steer(text);
+        } else {
+          onSteerReturned?.call(text);
+          onToast?.call('Could not send: ${describe(failure)}');
+        }
+    }
+  }
+
+  /// The tray's controls.
+  void removeQueued(String id) => _update(value.withoutQueued(id));
+
+  void clearQueue() =>
+      _update(value.copyWith(queue: const [], queuePaused: false));
+
+  /// Sends the next queued message now, after a failed or stopped turn
+  /// paused the tray.
+  Future<void> sendNextQueued() async {
+    _update(value.copyWith(queuePaused: false));
+    await _drain();
+  }
+
+  /// Sends the oldest queued message as a new turn. The turn is marked
+  /// running at once, so a second "turn ended" can never send a second
+  /// message before this one has finished.
+  Future<void> _drain() async {
+    if (_draining || value.queue.isEmpty || value.queuePaused) return;
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return;
+    _draining = true;
+    final next = value.queue.first;
+    _update(
+      value.withoutQueued(next.id).withUserTurn(next.text, fromQueue: true),
+    );
+    await _submit(runtimeId, next.text);
+    _draining = false;
+  }
+
+  void _turnEnded({required bool failedOrStopped}) {
+    if (value.queue.isEmpty) return;
+    if (failedOrStopped) {
+      _update(value.copyWith(queuePaused: true));
+    } else {
+      unawaited(_drain());
+    }
+  }
+
   Future<void> _steer(String text) async {
     final runtimeId = _runtimeId;
     if (runtimeId == null) return;
@@ -447,6 +559,7 @@ final class ChatController extends ValueNotifier<ChatState> {
     switch (result) {
       case Ok(value: SteerOutcome.accepted):
         _update(value.withSteer(text));
+        onToast?.call('Steered');
       case Ok() when !value.running:
         // The turn ended while the steer was on its way: it becomes a prompt.
         _update(value.withUserTurn(text));
@@ -692,8 +805,14 @@ final class ChatController extends ValueNotifier<ChatState> {
   void _onEvent(ChatEvent event) {
     final id = event.sessionId;
     if (id.isEmpty || (id != _runtimeId && id != _storedId)) return;
+    final wasRunning = value.running;
     _update(value.apply(event));
     if (_reloadWhenIdle && !value.running) unawaited(_reloadNewest());
+    if (wasRunning && !value.running) {
+      _turnEnded(
+        failedOrStopped: event is TurnFailed || event is TurnInterrupted,
+      );
+    }
   }
 
   void _update(ChatState next) {

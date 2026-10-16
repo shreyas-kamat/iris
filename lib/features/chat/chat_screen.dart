@@ -32,6 +32,7 @@ import 'context_sheet.dart';
 import 'decision_cards.dart';
 import 'message_menu.dart';
 import 'model_sheet.dart';
+import 'queue_tray.dart';
 import 'transcript_view.dart';
 import 'voice_recorder.dart';
 
@@ -463,9 +464,30 @@ class _ChatScreenState extends State<ChatScreen> {
               child: _decision(state),
             ),
           ),
+          IrisAnimatedSize(
+            alignment: Alignment.bottomCenter,
+            child: state.queue.isEmpty
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      context.window.gutter,
+                      IrisSpace.sm,
+                      context.window.gutter,
+                      0,
+                    ),
+                    child: QueueTray(
+                      items: state.queue,
+                      paused: state.queuePaused,
+                      onRemove: _chat.removeQueued,
+                      onSendNext: () => unawaited(_chat.sendNextQueued()),
+                      onClear: _chat.clearQueue,
+                    ),
+                  ),
+          ),
           Composer(
             controller: _text,
             running: state.running,
+            busyMode: state.busyMode,
             enabled: state.phase == ChatPhase.ready,
             commands: state.commands,
             model: state.model,
