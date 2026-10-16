@@ -10,6 +10,7 @@ import '../../core/failure.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/chat/connection_models.dart';
 
 enum ChatPhase {
   /// Reading the stored transcript.
@@ -43,6 +44,15 @@ final class ChatState {
     this.commands = const [],
     this.context,
     this.retrying = false,
+    this.attempt = 1,
+    this.logins = const [],
+    this.connections = const [],
+    this.effort,
+    this.fast,
+    this.collapsing = const {},
+    this.queue = const [],
+    this.queuePaused = false,
+    this.busyMode = BusyMode.interrupt,
   });
 
   final ChatPhase phase;
@@ -76,6 +86,32 @@ final class ChatState {
   /// A retry is on its way; the failed card shows it working.
   final bool retrying;
 
+  /// Which try the turn is on: 1, then up by one for each retry. A new
+  /// message from the person starts again at 1.
+  final int attempt;
+
+  /// Login prompts waiting for the person.
+  final List<LoginRequest> logins;
+
+  /// Connection cards waiting for the person.
+  final List<ConnectionRequest> connections;
+
+  /// The reasoning effort and fast mode in force, once Hermes says.
+  final ReasoningEffort? effort;
+  final bool? fast;
+
+  /// The ids of an undone exchange, folding away before it leaves.
+  final Set<String> collapsing;
+
+  /// Messages waiting for the running reply to finish, oldest first.
+  final List<QueuedMessage> queue;
+
+  /// A failed or stopped turn paused the tray until the person says.
+  final bool queuePaused;
+
+  /// What sending does while a reply runs.
+  final BusyMode busyMode;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -94,6 +130,15 @@ final class ChatState {
     List<SlashCommand>? commands,
     ContextUsage? context,
     bool? retrying,
+    int? attempt,
+    List<LoginRequest>? logins,
+    List<ConnectionRequest>? connections,
+    ReasoningEffort? effort,
+    bool? fast,
+    Set<String>? collapsing,
+    List<QueuedMessage>? queue,
+    bool? queuePaused,
+    BusyMode? busyMode,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
@@ -110,6 +155,15 @@ final class ChatState {
     commands: commands ?? this.commands,
     context: context ?? this.context,
     retrying: retrying ?? this.retrying,
+    attempt: attempt ?? this.attempt,
+    logins: logins ?? this.logins,
+    connections: connections ?? this.connections,
+    effort: effort ?? this.effort,
+    fast: fast ?? this.fast,
+    collapsing: collapsing ?? this.collapsing,
+    queue: queue ?? this.queue,
+    queuePaused: queuePaused ?? this.queuePaused,
+    busyMode: busyMode ?? this.busyMode,
   );
 
   /// The state after [event].
@@ -131,7 +185,7 @@ final class ChatState {
       turn: _waitingOr(TurnPhase.idle),
     ),
     ToolStarted(:final toolId, :final name, :final input) => copyWith(
-      items: [
+      items: _pickedUp([
         ..._settled(items),
         ToolCall(
           id: toolId ?? 'tool-${items.length}',
@@ -139,7 +193,7 @@ final class ChatState {
           arguments: input,
           status: ToolStatus.running,
         ),
-      ],
+      ]),
       turn: TurnPhase.working,
     ),
     final ToolCompleted done => copyWith(
@@ -167,27 +221,40 @@ final class ChatState {
     ClarifyAsked(:final request) => withQuestion(request),
     InputAsked(:final request) => withInput(request),
     ContextChanged(:final usage) => copyWith(context: usage),
+    LoginAsked(:final request) => withLogin(request),
+    ConnectionAsked(:final request) => withConnection(request),
+    final ConnectionChanged changed => withConnectionChange(changed),
+    SessionInfoChanged(:final effort, :final fast) => copyWith(
+      effort: effort,
+      fast: fast,
+    ),
     RequestWithdrawn(:final requestId) => _withdrawn(requestId),
   };
 
   /// The newest page of stored history, replacing whatever was shown.
-  ChatState withNewestPage(
-    List<TranscriptItem> page,
-    HistoryCursor? earlier,
-  ) => ChatState(
-    phase: ChatPhase.ready,
-    items: page,
-    turn: turn,
-    approvals: approvals,
-    questions: questions,
-    inputs: inputs,
-    title: title,
-    earlier: earlier,
-    model: model,
-    provider: provider,
-    commands: commands,
-    context: context,
-  );
+  ChatState withNewestPage(List<TranscriptItem> page, HistoryCursor? earlier) =>
+      ChatState(
+        phase: ChatPhase.ready,
+        items: page,
+        turn: turn,
+        approvals: approvals,
+        questions: questions,
+        inputs: inputs,
+        title: title,
+        earlier: earlier,
+        model: model,
+        provider: provider,
+        commands: commands,
+        context: context,
+        attempt: attempt,
+        logins: logins,
+        connections: connections,
+        effort: effort,
+        fast: fast,
+        queue: queue,
+        queuePaused: queuePaused,
+        busyMode: busyMode,
+      );
 
   /// An earlier page, above what is shown.
   ChatState withEarlierPage(
@@ -207,29 +274,111 @@ final class ChatState {
     provider: provider,
     commands: commands,
     context: context,
+    attempt: attempt,
+    logins: logins,
+    connections: connections,
+    effort: effort,
+    fast: fast,
+    collapsing: collapsing,
+    queue: queue,
+    queuePaused: queuePaused,
+    busyMode: busyMode,
   );
 
+  /// The id of the last turn the person started: where "the last exchange"
+  /// begins. Steered turns are corrections inside a turn, not starts. Null
+  /// when none is loaded.
+  String? get lastExchangeStartId {
+    for (final item in items.reversed) {
+      if (item is UserTurn && !item.steered) return item.id;
+    }
+    return null;
+  }
+
+  /// The ids of the last exchange: its user turn and everything after.
+  Set<String> get lastExchangeIds {
+    final start = lastExchangeStartId;
+    if (start == null) return const {};
+    final at = items.indexWhere((i) => i.id == start);
+    return {for (final item in items.sublist(at)) item.id};
+  }
+
+  ChatState withCollapsing(Set<String> ids) => copyWith(collapsing: ids);
+
+  /// The transcript without its last exchange.
+  ChatState withoutLastExchange() {
+    final start = lastExchangeStartId;
+    if (start == null) return this;
+    final at = items.indexWhere((i) => i.id == start);
+    return copyWith(items: items.sublist(0, at), collapsing: const {});
+  }
+
   /// The person's message, shown at once.
-  ChatState withUserTurn(String text, {List<String> attachments = const []}) =>
-      copyWith(
-        items: [
-          ..._settled(items),
-          UserTurn(
-            id: 'local-${items.length}',
-            text: text,
-            attachments: attachments,
-          ),
-        ],
-        turn: TurnPhase.thinking,
-      );
+  ChatState withUserTurn(
+    String text, {
+    List<String> attachments = const [],
+    bool fromQueue = false,
+  }) => copyWith(
+    items: [
+      ..._settled(items),
+      UserTurn(
+        id: 'local-${items.length}',
+        text: text,
+        attachments: attachments,
+        fromQueue: fromQueue,
+      ),
+    ],
+    turn: TurnPhase.thinking,
+    attempt: 1,
+  );
 
   /// The person steered the running turn. The reply so far is finished, so
   /// what the agent says next starts below the steer, and the turn carries on.
   ChatState withSteer(String text) => copyWith(
     items: [
       ..._settled(items),
-      UserTurn(id: 'local-${items.length}', text: text, steered: true),
+      UserTurn(
+        id: 'local-${items.length}',
+        text: text,
+        steered: true,
+        steerPending: true,
+      ),
     ],
+  );
+
+  /// The person redirected the running turn: Hermes stopped it to answer
+  /// this. What was said so far stays, marked as cut off.
+  ChatState withRedirect(String text) {
+    final settled = _settled(items);
+    final last = settled.isEmpty ? null : settled.last;
+    final marked = last is AssistantTurn
+        ? [
+            ...settled.sublist(0, settled.length - 1),
+            last.copyWith(redirected: true),
+          ]
+        : settled;
+    return copyWith(
+      items: [
+        ...marked,
+        UserTurn(id: 'local-${items.length}', text: text),
+      ],
+      turn: TurnPhase.thinking,
+    );
+  }
+
+  ChatState withQueued(String id, String text) => copyWith(
+    queue: [
+      ...queue,
+      QueuedMessage(id: id, text: text),
+    ],
+  );
+
+  ChatState withoutQueued(String id) => copyWith(
+    queue: [
+      for (final q in queue)
+        if (q.id != id) q,
+    ],
+    queuePaused: queue.length <= 1 ? false : queuePaused,
   );
 
   /// The turn failed. Only the newest failure can be retried: retrying an
@@ -308,7 +457,6 @@ final class ChatState {
   );
 
   ChatState _withdrawn(String requestId) {
-    final hadInput = inputs.any((input) => input.requestId == requestId);
     final next = _decided(
       copyWith(
         approvals: [
@@ -323,11 +471,24 @@ final class ChatState {
           for (final input in inputs)
             if (input.requestId != requestId) input,
         ],
+        logins: [
+          for (final login in logins)
+            if (login.requestId != requestId) login,
+        ],
+        connections: [
+          for (final open in connections)
+            if (open.opId != requestId) open,
+        ],
       ),
     );
-    // The card vanishing on its own would be a mystery; say why.
-    return hadInput ? next.withNotice('Hermes stopped waiting for that.') : next;
+    // The card vanishing on its own would be a mystery; the controller, which
+    // has the clock and the request, leaves an expired line saying why.
+    return next;
   }
+
+  /// A settled prompt: one line where the card was.
+  ChatState withPromptRecord(PromptRecord record) =>
+      copyWith(items: [..._settled(items), record]);
 
   ChatState withInput(InputRequest request) => copyWith(
     inputs: [
@@ -363,8 +524,63 @@ final class ChatState {
     );
   }
 
+  ChatState withLogin(LoginRequest request) => copyWith(
+    logins: [
+      for (final login in logins)
+        if (login.requestId != request.requestId) login,
+      request,
+    ],
+    turn: TurnPhase.waiting,
+  );
+
+  ChatState withoutLogin(LoginRequest request) => _decided(
+    copyWith(
+      logins: [
+        for (final login in logins)
+          if (login.requestId != request.requestId) login,
+      ],
+    ),
+  );
+
+  ChatState withConnection(ConnectionRequest request) => copyWith(
+    connections: [
+      for (final open in connections)
+        if (open.opId != request.opId) open,
+      request,
+    ],
+    turn: TurnPhase.waiting,
+  );
+
+  ChatState withoutConnection(String opId) => _decided(
+    copyWith(
+      connections: [
+        for (final open in connections)
+          if (open.opId != opId) open,
+      ],
+    ),
+  );
+
+  /// An update for an open card merges in; a settled one closes it. An update
+  /// for a card that is not open is ignored.
+  ChatState withConnectionChange(ConnectionChanged change) {
+    final open = connections.where((c) => c.opId == change.opId);
+    if (open.isEmpty) return this;
+    if (change.settled) return withoutConnection(change.opId);
+    final updated = open.first.withTargets(change.targets, settled: false);
+    return copyWith(
+      connections: [
+        for (final c in connections)
+          if (c.opId == change.opId) updated else c,
+      ],
+    );
+  }
+
   TurnPhase _waitingOr(TurnPhase phase) =>
-      approvals.isNotEmpty || questions.isNotEmpty || inputs.isNotEmpty
+      approvals.isNotEmpty ||
+          questions.isNotEmpty ||
+          inputs.isNotEmpty ||
+          logins.isNotEmpty ||
+          connections.isNotEmpty
       ? TurnPhase.waiting
       : phase;
 
@@ -373,7 +589,9 @@ final class ChatState {
       next.turn == TurnPhase.waiting &&
           next.approvals.isEmpty &&
           next.questions.isEmpty &&
-          next.inputs.isEmpty
+          next.inputs.isEmpty &&
+          next.logins.isEmpty &&
+          next.connections.isEmpty
       ? next.copyWith(turn: TurnPhase.thinking)
       : next;
 
@@ -406,6 +624,23 @@ final class ChatState {
         text: live.text + text,
         reasoning: live.reasoning + reasoning,
       ),
+    ];
+  }
+
+  /// Steers waiting for a step are picked up by the tool that just started:
+  /// its position among this turn's tools is the step.
+  static List<TranscriptItem> _pickedUp(List<TranscriptItem> items) {
+    var tools = 0;
+    for (final item in items.reversed) {
+      if (item is UserTurn && !item.steered) break;
+      if (item is ToolCall) tools++;
+    }
+    return [
+      for (final item in items)
+        if (item is UserTurn && item.steerPending)
+          item.copyWith(steerPending: false, steerStep: tools)
+        else
+          item,
     ];
   }
 

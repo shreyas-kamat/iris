@@ -200,4 +200,28 @@ void main() {
     expect(await chat.archivedConversations(0), isA<Ok<ConversationPage>>());
     expect(await chat.search('backup'), isA<Ok<List<SearchHit>>>());
   });
+
+  test('the deploy script waits at each password-manager prompt', () async {
+    final chat = DemoChatBackend(world, profile: 'default');
+    final run = world.create('default').runtimeId;
+    world.submit(run, 'Deploy the docs site');
+    await drain();
+    final unlock = events.whereType<InputAsked>().single.request;
+    expect(unlock.kind, InputKind.vaultUnlock);
+    await chat.answerInput(unlock, 'typed');
+    await drain();
+    final code = events.whereType<InputAsked>().last.request;
+    expect(code.kind, InputKind.vaultCode);
+    await chat.answerInput(code, '123456');
+    await drain();
+    final login = events.whereType<LoginAsked>().single.request;
+    await chat.answerLogin(login, identifier: 'me', password: 'typed');
+    await drain();
+    final card = events.whereType<ConnectionAsked>().single.request;
+    expect(card.targets, hasLength(3));
+    await chat.answerConnection(card, const [], settle: true);
+    await drain();
+    expect(events.whereType<TurnFailed>(), isEmpty);
+    expect(events.whereType<BusyChanged>().last.busy, isFalse);
+  });
 }

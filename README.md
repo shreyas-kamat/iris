@@ -19,15 +19,20 @@ There is an offline demo if you want a look first.
   use `https`.
 - **Chat.** Streaming replies with Markdown, code highlighting, visible reasoning and tool calls.
   Approve or deny commands, answer `sudo` and secret prompts, steer a running turn, stop it, retry a
-  failed one.
+  failed one. Pick how a message sent mid-reply is handled (queue, steer or interrupt), and undo the last
+  turn or branch a chat from any reply.
 - **Conversations.** A paged list with a search field (local matches at once, the server's full-text hits
-  after), rename, archive with undo, and an Archived view.
+  after), grouped by chat, with recent searches. Pin, rename, archive with undo, delete, and an Archived
+  view; chats that are replying right now show under Live.
+- **Passwords and connections.** Unlock the password manager, enter a one-time code, or save a login when
+  Hermes asks; connect connectors and MCP servers from a card in the chat.
 - **Profiles and usage.** Switch between the server's agent profiles; see how much of a provider's quota
   is used on the home screen.
 - **Look and feel.** Ten skins, light and dark, honours reduced motion and large text, touch targets of at
   least 44 points. See [`docs/design-language.md`](docs/design-language.md).
-- **Try the demo.** From the first screen, with no server and no network: sample conversations and four
-  scripted turns that show tool calls, approvals, the sudo prompt, a failed turn and retry. Nothing from it
+- **Try the demo.** From the first screen, with no server and no network: sample conversations and five
+  scripted turns that show tool calls, approvals, the sudo prompt, a failed turn and retry, and the
+  password-manager and connection prompts. Nothing from it
   is saved.
 
 ## Privacy and security in brief

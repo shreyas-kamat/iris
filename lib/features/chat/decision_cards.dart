@@ -5,9 +5,11 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/needs_you_card.dart';
 import '../../design/components/primitives.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
@@ -178,9 +180,10 @@ class _ClarifyCardState extends State<ClarifyCard> {
   }
 }
 
-/// A sudo password or a secret the agent needs. The field is masked, with an
-/// eye to check what was typed; nothing typed outlives the card. The answer is
-/// handed over and the field cleared in the same moment.
+/// A prompt for a value that must never be shown or kept: a sudo password, a
+/// secret, a password-manager unlock or one-time code. It is a
+/// [NeedsYouCard]; nothing typed outlives it, and the answer is handed over
+/// and the field cleared in the same moment.
 class InputCard extends StatefulWidget {
   const InputCard({required this.request, required this.onAnswer, super.key});
 
@@ -188,6 +191,11 @@ class InputCard extends StatefulWidget {
 
   /// Called with the value, or `''` to skip.
   final Future<void> Function(String value) onAnswer;
+
+  /// Whether a code prompt wants six one-digit cells: only when Hermes's
+  /// hint says six. Other codes (backup codes, longer ones) get one field.
+  static bool wantsSixCells(String hint) =>
+      RegExp(r'\b(6|six)\b', caseSensitive: false).hasMatch(hint);
 
   @override
   State<InputCard> createState() => _InputCardState();
@@ -224,80 +232,262 @@ class _InputCardState extends State<InputCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.iris;
-    final palette = theme.palette;
-    final waiting = palette.colorFor(AgentState.waiting);
     final request = widget.request;
-    final isSudo = request.kind == InputKind.sudo;
-    final noun = isSudo ? 'password' : 'value';
-    return IrisCard(
-      accent: waiting,
+    final palette = context.palette;
+    final type = context.type;
+    final (eyebrow, title, subtitle, skip, primary) = switch (request.kind) {
+      InputKind.sudo => (
+        'Needs you · sudo',
+        'Run this as root?',
+        null,
+        'Deny',
+        'Run',
+      ),
+      InputKind.secret => (
+        'Needs you · secret',
+        request.prompt.isEmpty ? 'Add a secret' : request.prompt,
+        null,
+        'Skip',
+        'Save',
+      ),
+      InputKind.vaultUnlock => (
+        'Needs you · unlock',
+        request.title,
+        'Hermes needs your login to carry on.',
+        'Skip',
+        'Unlock',
+      ),
+      InputKind.vaultCode => (
+        'Needs you · one-time code',
+        request.title,
+        request.hint.isEmpty ? null : request.hint,
+        'Skip',
+        'Send',
+      ),
+    };
+    final cells =
+        request.kind == InputKind.vaultCode &&
+        InputCard.wantsSixCells(request.hint);
+    return NeedsYouCard(
+      eyebrow: eyebrow,
+      title: title,
+      subtitle: subtitle,
+      actions: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _text,
+        builder: (context, value, _) => NeedsYouActions(
+          skipLabel: skip,
+          primaryLabel: primary,
+          busy: _sending,
+          onSkip: () => unawaited(_send('')),
+          onPrimary: value.text.isEmpty
+              ? null
+              : () => unawaited(_send(_text.text)),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.lock_outline, size: IrisSize.iconSmall, color: waiting),
-              const SizedBox(width: IrisSpace.xs),
-              IrisLabel(isSudo ? 'Password needed' : 'Secret needed', color: waiting),
-            ],
-          ),
-          const SizedBox(height: IrisSpace.xs),
-          Text(request.title, style: theme.typography.body.copyWith(color: palette.ink)),
-          if (request.command.isNotEmpty) ...[
-            const SizedBox(height: IrisSpace.sm),
+          if (request.kind == InputKind.sudo && request.command.isNotEmpty) ...[
             DecoratedBox(
               decoration: BoxDecoration(
                 color: palette.surfaceSunken,
-                borderRadius: const BorderRadius.all(IrisRadius.xs),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: palette.line,
+                  width: IrisStroke.hairline,
+                ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(IrisSpace.sm),
-                child: SelectableText(
-                  request.command,
-                  style: theme.typography.codeSmall.copyWith(color: palette.ink),
+                padding: const EdgeInsets.all(IrisSpace.md),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        r'$ ',
+                        style: type.codeSmall.copyWith(
+                          fontSize: 13,
+                          color: palette.inkMuted,
+                        ),
+                      ),
+                      Text(
+                        request.command,
+                        style: type.codeSmall.copyWith(
+                          fontSize: 13,
+                          color: palette.ink,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
+            const SizedBox(height: IrisSpace.md),
           ],
-          const SizedBox(height: IrisSpace.md),
-          IrisField(
-            controller: _text,
-            hint: isSudo ? 'sudo password' : (request.envVar.isEmpty ? 'Value' : request.envVar),
-            obscure: !_revealed,
-            autofocus: true,
-            onSubmitted: (value) => unawaited(_send(value)),
-            trailing: IrisPressable(
-              onTap: () => setState(() => _revealed = !_revealed),
-              semanticLabel: _revealed ? 'Hide $noun' : 'Show $noun',
-              child: Icon(
-                _revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                size: IrisSize.icon,
+          if (request.kind == InputKind.secret &&
+              request.envVar.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: palette.surfaceSunken,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                request.envVar,
+                style: type.codeSmall.copyWith(
+                  fontSize: 13,
+                  color: palette.ink,
+                ),
+              ),
+            ),
+            const SizedBox(height: IrisSpace.md),
+          ],
+          if (cells)
+            _CodeCells(
+              controller: _text,
+              onFull: (code) => unawaited(_send(code)),
+            )
+          else
+            IrisField(
+              controller: _text,
+              hint: switch (request.kind) {
+                InputKind.sudo => 'Password',
+                InputKind.secret => 'Value',
+                InputKind.vaultUnlock => 'Master password',
+                InputKind.vaultCode => 'Code',
+              },
+              mono: true,
+              obscure: request.kind != InputKind.vaultCode && !_revealed,
+              keyboardType: request.kind == InputKind.vaultCode
+                  ? TextInputType.visiblePassword
+                  : null,
+              autocorrect: false,
+              enableSuggestions: false,
+              autofocus: true,
+              onSubmitted: (value) => unawaited(_send(value)),
+              trailing: request.kind == InputKind.vaultCode
+                  ? null
+                  : IrisPressable(
+                      onTap: () => setState(() => _revealed = !_revealed),
+                      semanticLabel: _revealed
+                          ? 'Hide password'
+                          : 'Show password',
+                      child: Icon(
+                        _revealed
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: IrisSize.icon,
+                        color: palette.inkMuted,
+                      ),
+                    ),
+            ),
+          if (request.kind == InputKind.secret) ...[
+            const SizedBox(height: IrisSpace.sm),
+            Text(
+              'Stored on your server. Iris never shows it again.',
+              style: type.codeSmall.copyWith(
+                fontSize: 12,
                 color: palette.inkMuted,
               ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Six one-digit cells over one hidden numeric field. The sixth digit sends.
+class _CodeCells extends StatefulWidget {
+  const _CodeCells({required this.controller, required this.onFull});
+
+  final TextEditingController controller;
+  final ValueChanged<String> onFull;
+
+  @override
+  State<_CodeCells> createState() => _CodeCellsState();
+}
+
+class _CodeCellsState extends State<_CodeCells> {
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    final needs = palette.colorFor(AgentState.waiting);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _focus.requestFocus,
+      child: Stack(
+        children: [
+          // The real field: numeric, six long, invisible.
+          Opacity(
+            opacity: 0,
+            child: SizedBox(
+              height: 58,
+              child: TextField(
+                controller: widget.controller,
+                focusNode: _focus,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                autocorrect: false,
+                enableSuggestions: false,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                onChanged: (text) {
+                  setState(() {});
+                  if (text.length == 6) widget.onFull(text);
+                },
+              ),
+            ),
           ),
-          const SizedBox(height: IrisSpace.md),
-          Row(
-            children: [
-              IrisButton(
-                label: 'Cancel',
-                tone: IrisButtonTone.ghost,
-                onPressed: _sending ? null : () => unawaited(_send('')),
+          IgnorePointer(
+            child: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: widget.controller,
+              builder: (context, value, _) => Row(
+                children: [
+                  for (var i = 0; i < 6; i++) ...[
+                    if (i > 0) const SizedBox(width: IrisSpace.xs),
+                    Expanded(
+                      child: Container(
+                        key: const ValueKey('code-cell'),
+                        height: 58,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: palette.surfaceSunken,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: i == value.text.length
+                                ? needs
+                                : palette.lineStrong,
+                            width: i == value.text.length
+                                ? 1.5
+                                : IrisStroke.hairline,
+                          ),
+                        ),
+                        child: Text(
+                          i < value.text.length ? value.text[i] : '',
+                          style: type.codeSmall.copyWith(
+                            fontSize: 26,
+                            color: palette.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const Spacer(),
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _text,
-                builder: (context, value, _) => IrisButton(
-                  label: 'Submit',
-                  tone: IrisButtonTone.primary,
-                  busy: _sending,
-                  onPressed: value.text.isEmpty || _sending
-                      ? null
-                      : () => unawaited(_send(_text.text)),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),

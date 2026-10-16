@@ -218,6 +218,17 @@ final class DemoWorld {
   void answerInput(InputRequest request) =>
       _players[_storedIdFor(request.sessionId)]?.answerSecret();
 
+  /// Continues a script waiting on a login or connection card. Only the
+  /// final answer calls this: the values sent are not kept.
+  void answerPrompt(String sessionId) =>
+      _players[_storedIdFor(sessionId)]?.answerSecret();
+
+  /// What the demo's "While Hermes is replying" setting says.
+  BusyMode busyMode = BusyMode.interrupt;
+
+  void delete(String storedId) =>
+      _conversations.removeWhere((c) => c.id == storedId);
+
   void rename(String storedId, String title) => _find(storedId)?.title = title;
 
   void setArchived(String storedId, {required bool archived}) =>

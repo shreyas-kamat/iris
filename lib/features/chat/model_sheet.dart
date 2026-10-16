@@ -1,6 +1,9 @@
 /// Picking the model a conversation runs on.
 library;
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/result.dart';
@@ -13,14 +16,20 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
 import 'chat_controller.dart';
+import 'chat_state.dart';
 
 /// Lets the person pick a model for [chat], asking first when Hermes wants
 /// the switch confirmed — a guarded pick changes nothing until it is.
 Future<void> showModelPicker(BuildContext context, ChatController chat) async {
   final pick = await showIrisSheet<(String, String)>(
     context: context,
-    builder: (_) =>
-        ModelSheet(load: chat.modelOptions, current: chat.value.model),
+    builder: (_) => ModelSheet(
+      load: chat.modelOptions,
+      current: chat.value.model,
+      state: chat,
+      onEffort: (effort) => unawaited(chat.setEffort(effort)),
+      onFast: (fast) => unawaited(chat.setFast(fast: fast)),
+    ),
   );
   if (pick == null) return;
   final (model, provider) = pick;
@@ -59,12 +68,25 @@ Future<void> showModelPicker(BuildContext context, ChatController chat) async {
 /// The models a conversation can switch to, grouped by provider, with a
 /// filter: a provider can offer eighty of them.
 class ModelSheet extends StatefulWidget {
-  const ModelSheet({required this.load, this.current, super.key});
+  const ModelSheet({
+    required this.load,
+    this.current,
+    this.state,
+    this.onEffort,
+    this.onFast,
+    super.key,
+  });
 
   final Future<Result<ModelOptions>> Function() load;
 
   /// The model in use, marked in the list.
   final String? current;
+
+  /// The conversation's live state, for the effort and fast controls. Null
+  /// shows the model list alone.
+  final ValueListenable<ChatState>? state;
+  final ValueChanged<ReasoningEffort>? onEffort;
+  final ValueChanged<bool>? onFast;
 
   @override
   State<ModelSheet> createState() => _ModelSheetState();
@@ -73,6 +95,10 @@ class ModelSheet extends StatefulWidget {
 class _ModelSheetState extends State<ModelSheet> {
   late final Future<Result<ModelOptions>> _options = widget.load();
   final _filter = TextEditingController();
+
+  /// The effort when it was first changed mid-reply, so the note can say
+  /// "from → to". Cleared once the reply ends.
+  ReasoningEffort? _before;
 
   @override
   void dispose() {
@@ -128,6 +154,9 @@ class _ModelSheetState extends State<ModelSheet> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // The settings for this chat come first: a gateway can list
+            // hundreds of models, and anything below them goes unseen.
+            _controls(context, options),
             IrisField(controller: _filter, hint: 'Filter models'),
             const SizedBox(height: IrisSpace.md),
             if (groups.isEmpty)
@@ -149,12 +178,204 @@ class _ModelSheetState extends State<ModelSheet> {
                 IrisListRow(
                   title: model,
                   selected: model == widget.current,
-                  onTap: () => Navigator.of(context).pop((model, provider.slug)),
+                  onTap: () =>
+                      Navigator.of(context).pop((model, provider.slug)),
                 ),
             ],
           ],
         );
       },
+    );
+  }
+
+  Widget _controls(BuildContext context, ModelOptions options) {
+    final notifier = widget.state;
+    if (notifier == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<ChatState>(
+      valueListenable: notifier,
+      builder: (context, state, _) {
+        if (!state.running) _before = null;
+        final model = widget.current ?? options.model;
+        final caps = model == null
+            ? null
+            : options.capsFor(
+                model,
+                provider: state.provider ?? options.provider,
+              );
+        // When the gateway does not describe the model, what the session
+        // itself reported decides: nothing is shown on a guess.
+        final showEffort = caps?.reasoning ?? (state.effort != null);
+        final showFast = caps?.fast ?? (state.fast != null);
+        if (!showEffort && !showFast) return const SizedBox.shrink();
+        final palette = context.palette;
+        final type = context.type;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showEffort) ...[
+              const IrisLabel('Reasoning effort', small: true),
+              const SizedBox(height: IrisSpace.xs),
+              _EffortControl(
+                selected: state.effort,
+                onChanged: (e) {
+                  _before ??= state.effort;
+                  widget.onEffort?.call(e);
+                },
+              ),
+            ],
+            if (showFast) ...[
+              const SizedBox(height: IrisSpace.sm),
+              Container(
+                constraints: const BoxConstraints(minHeight: 60),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Fast mode',
+                            style: type.body.copyWith(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: palette.ink,
+                            ),
+                          ),
+                          Text(
+                            'Quicker replies, costs more',
+                            style: type.body.copyWith(
+                              fontSize: 13,
+                              color: palette.inkMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IrisSwitch(
+                      value: state.fast ?? false,
+                      semanticLabel: 'Fast mode',
+                      onChanged: (on) => widget.onFast?.call(on),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (state.running && _before != null && _before != state.effort)
+              _MidTurnNote(from: _before!, to: state.effort),
+            const SizedBox(height: IrisSpace.md),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A change made mid-reply waits for the next turn, and says so.
+class _MidTurnNote extends StatelessWidget {
+  const _MidTurnNote({required this.from, required this.to});
+
+  final ReasoningEffort from;
+  final ReasoningEffort? to;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    return Container(
+      margin: const EdgeInsets.only(top: IrisSpace.sm),
+      padding: const EdgeInsets.all(IrisSpace.md),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.line, width: IrisStroke.hairline),
+      ),
+      child: Row(
+        children: [
+          const IrisOrb(state: AgentState.streaming, size: 22),
+          const SizedBox(width: IrisSpace.md),
+          Expanded(
+            child: Text(
+              'Applies after this reply.',
+              style: type.body.copyWith(fontSize: 13.5, color: palette.ink),
+            ),
+          ),
+          Text(
+            '${from.wire} → ${to?.wire ?? from.wire}',
+            style: type.codeSmall.copyWith(
+              fontSize: 11.5,
+              color: palette.inkMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// None, Low, Medium, High, Max in one track. At large text the segments
+/// wrap to two rows rather than clip.
+class _EffortControl extends StatelessWidget {
+  const _EffortControl({required this.selected, required this.onChanged});
+
+  final ReasoningEffort? selected;
+  final ValueChanged<ReasoningEffort> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    final wide = MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    Widget segment(ReasoningEffort effort) {
+      final on = effort == selected;
+      return Semantics(
+        button: true,
+        selected: on,
+        label: '${effort.label}${on ? ', selected' : ''}',
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(effort),
+          child: AnimatedContainer(
+            duration: context.reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
+            constraints: const BoxConstraints(minHeight: 42, minWidth: 44),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: on ? palette.surfaceRaised : null,
+              borderRadius: BorderRadius.circular(11),
+              border: on
+                  ? Border.all(
+                      color: palette.lineStrong,
+                      width: IrisStroke.hairline,
+                    )
+                  : null,
+            ),
+            child: Text(
+              effort.label,
+              style: type.body.copyWith(
+                fontSize: 13.5,
+                color: on ? palette.ink : palette.inkMuted,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final segments = [for (final e in ReasoningEffort.values) segment(e)];
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: palette.surfaceSunken,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.line, width: IrisStroke.hairline),
+      ),
+      child: wide
+          ? Wrap(spacing: 2, runSpacing: 2, children: segments)
+          : Row(children: [for (final s in segments) Expanded(child: s)]),
     );
   }
 }

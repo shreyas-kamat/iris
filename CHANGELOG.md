@@ -13,9 +13,23 @@ All notable changes to Iris are recorded here. The format follows
 - Code blocks with no language label are detected and highlighted once the reply finishes.
 - Attach photos and files to a message (up to 5, 20 MB each).
 - Dictate a message with the mic; Hermes turns the recording into text, which lands in the composer unsent.
+- Delete conversations (home and Archived), with a confirm; Hermes refuses while one is replying.
+- Pin conversations to the top of home; chats that are replying right now show under Live.
+- Undo the last turn from the menu on your latest message or with `/undo`; your prompt comes back to edit.
+- Branch a conversation, whole (`/branch`, home menu) or from any reply; the new chat says where it came from.
+- While a reply runs, sending follows Hermes's setting (Queue, Steer or Interrupt), which Settings changes.
+  Queued messages wait in a tray above the composer; `/queue` and `/steer` always do their one thing.
+- Reasoning effort and fast mode in the model sheet, when the model supports them.
+- Password-manager prompts (unlock, one-time code, save login) and a connection card for connectors and
+  MCP servers.
+- Recent searches, and search results grouped by chat with a match count.
+- "Always load images from this host" in the image card's long-press menu.
 
 ### Changed
 - The Android release now also declares `RECORD_AUDIO`, used only for dictation.
+- Transcript text is no longer selectable in place: long-press a message for Copy or Select text.
+- sudo, secret, failed-turn, rename, archive, context, usage, attachment and dictation surfaces follow the
+  new design.
 
 ## [1.0.0] - not yet released
 

@@ -2,6 +2,7 @@
 /// speech-to-text expects.
 library;
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -18,11 +19,20 @@ abstract interface class VoiceRecorder {
 
   /// Stops and throws the clip away.
   Future<void> cancel();
+
+  /// How loud it is right now, 0 to 1, about ten a second while recording.
+  Stream<double> get level;
 }
 
 final class RecordVoiceRecorder implements VoiceRecorder {
   final _recorder = AudioRecorder();
   String? _path;
+
+  // dBFS from -45 (quiet room) to 0 (clipping), spread over 0 to 1.
+  @override
+  Stream<double> get level => _recorder
+      .onAmplitudeChanged(const Duration(milliseconds: 100))
+      .map((a) => ((a.current + 45) / 45).clamp(0.0, 1.0));
 
   @override
   Future<bool> start() async {

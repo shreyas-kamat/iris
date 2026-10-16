@@ -102,6 +102,9 @@ final class DashboardSession {
     'clarify',
     'sudo',
     'secret',
+    'vault.unlock_prompt',
+    'vault.code',
+    'vault.save_login',
   };
 
   static WireConnector _ioConnector(ServerConnection http) =>

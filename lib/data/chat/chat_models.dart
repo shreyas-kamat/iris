@@ -48,6 +48,9 @@ final class UserTurn extends TranscriptItem {
     required this.text,
     this.steered = false,
     this.attachments = const [],
+    this.steerPending = false,
+    this.steerStep,
+    this.fromQueue = false,
   }) : super(id);
 
   final String text;
@@ -57,6 +60,35 @@ final class UserTurn extends TranscriptItem {
 
   /// The names of the files sent with it.
   final List<String> attachments;
+
+  /// A steer Hermes has not yet picked up: it waits for the next step.
+  final bool steerPending;
+
+  /// For a steer, the step (the nth tool of the turn) that picked it up.
+  final int? steerStep;
+
+  /// Sent from the queue tray when the previous turn finished.
+  final bool fromQueue;
+
+  UserTurn copyWith({bool? steerPending, int? steerStep}) => UserTurn(
+    id: id,
+    text: text,
+    steered: steered,
+    attachments: attachments,
+    steerPending: steerPending ?? this.steerPending,
+    steerStep: steerStep ?? this.steerStep,
+    fromQueue: fromQueue,
+  );
+}
+
+/// A message waiting in the tray for the running reply to finish. Held in
+/// memory on this phone only.
+@immutable
+final class QueuedMessage {
+  const QueuedMessage({required this.id, required this.text});
+
+  final String id;
+  final String text;
 }
 
 /// Something the agent said, possibly still arriving.
@@ -66,6 +98,7 @@ final class AssistantTurn extends TranscriptItem {
     required this.text,
     this.reasoning = '',
     this.streaming = false,
+    this.redirected = false,
   }) : super(id);
 
   final String text;
@@ -76,16 +109,24 @@ final class AssistantTurn extends TranscriptItem {
   /// Still arriving.
   final bool streaming;
 
+  /// Cut off because the person redirected the turn.
+  final bool redirected;
+
   /// Says nothing at all — neither text nor thinking.
   bool get isEmpty => text.trim().isEmpty && reasoning.trim().isEmpty;
 
-  AssistantTurn copyWith({String? text, String? reasoning, bool? streaming}) =>
-      AssistantTurn(
-        id: id,
-        text: text ?? this.text,
-        reasoning: reasoning ?? this.reasoning,
-        streaming: streaming ?? this.streaming,
-      );
+  AssistantTurn copyWith({
+    String? text,
+    String? reasoning,
+    bool? streaming,
+    bool? redirected,
+  }) => AssistantTurn(
+    id: id,
+    text: text ?? this.text,
+    reasoning: reasoning ?? this.reasoning,
+    streaming: streaming ?? this.streaming,
+    redirected: redirected ?? this.redirected,
+  );
 }
 
 enum ToolStatus { running, done, failed }
@@ -280,6 +321,7 @@ final class ModelProvider {
     this.isCurrent = false,
     this.authenticated = true,
     this.usage,
+    this.capabilities = const {},
   });
 
   /// What `config.set` names it by.
@@ -293,6 +335,9 @@ final class ModelProvider {
 
   /// How much of its subscription is spent, when the gateway knows.
   final ProviderUsage? usage;
+
+  /// What each model can do, by model id. Empty when the gateway does not say.
+  final Map<String, ModelCaps> capabilities;
 }
 
 /// What the model picker offers.
@@ -303,6 +348,16 @@ final class ModelOptions {
   final String? model;
   final String? provider;
   final List<ModelProvider> providers;
+
+  /// What [model] can do on [provider], or null when the gateway did not say.
+  ModelCaps? capsFor(String model, {String? provider}) {
+    for (final candidate in providers) {
+      if (provider != null && candidate.slug != provider) continue;
+      final caps = candidate.capabilities[model];
+      if (caps != null) return caps;
+    }
+    return null;
+  }
 
   /// Providers worth offering: signed in, or the one in use, with at least
   /// one model. Hermes 0.18.2 reports the configured provider in use as
@@ -382,7 +437,24 @@ final class SlashOutcome {
 }
 
 /// What kind of value an input prompt wants.
-enum InputKind { sudo, secret }
+enum InputKind { sudo, secret, vaultUnlock, vaultCode }
+
+enum PromptOutcome { answered, skipped, expired }
+
+/// What is left of a prompt once it is over: a line in the transcript. It
+/// names what was asked and what happened, and never what was typed.
+final class PromptRecord extends TranscriptItem {
+  const PromptRecord({
+    required String id,
+    required this.title,
+    required this.outcome,
+    this.detail = '',
+  }) : super(id);
+
+  final String title;
+  final PromptOutcome outcome;
+  final String detail;
+}
 
 /// The agent needs a value typed in that must never be shown or kept: a sudo
 /// password, an API key. Answered once, then forgotten.
@@ -395,6 +467,9 @@ final class InputRequest {
     this.command = '',
     this.envVar = '',
     this.prompt = '',
+    this.displayName = '',
+    this.site = '',
+    this.hint = '',
   });
 
   /// The `srq-…` server request the answer is addressed to.
@@ -411,6 +486,13 @@ final class InputRequest {
   /// secret: what Hermes says it needs.
   final String prompt;
 
+  /// vaultUnlock: the password manager's name.
+  final String displayName;
+
+  /// vaultCode: the site the code is for, and Hermes's hint about it.
+  final String site;
+  final String hint;
+
   /// The card's headline.
   String get title => switch (kind) {
     InputKind.sudo => 'Hermes needs your sudo password',
@@ -418,6 +500,10 @@ final class InputRequest {
     InputKind.secret when envVar.isNotEmpty =>
       'Hermes needs a value for $envVar',
     InputKind.secret => 'Hermes needs a secret value',
+    InputKind.vaultUnlock =>
+      '${displayName.isEmpty ? 'Your password manager' : displayName} is locked',
+    InputKind.vaultCode =>
+      site.isEmpty ? 'Hermes needs a one-time code' : 'Code for $site',
   };
 }
 
@@ -525,10 +611,14 @@ final class SearchHit {
     this.lastActive,
     this.archived = false,
     this.messageCount = 0,
+    this.matches = 1,
   });
 
   final String storedId;
   final String title;
+
+  /// How many of the conversation's messages matched.
+  final int matches;
 
   /// The best matching message, with the matched words marked.
   final List<SnippetRun> snippet;
@@ -539,3 +629,144 @@ final class SearchHit {
 
 /// What became of a steer.
 enum SteerOutcome { accepted, rejected }
+
+/// The agent wants to save a login: a username and password for a site.
+/// Answered once and forgotten, like [InputRequest].
+@immutable
+final class LoginRequest {
+  const LoginRequest({
+    required this.requestId,
+    required this.sessionId,
+    required this.origin,
+    this.site = '',
+  });
+
+  final String requestId;
+  final String sessionId;
+
+  /// `https://github.com`.
+  final String origin;
+
+  /// Hermes's name for the site, when it has one.
+  final String site;
+
+  /// What to call the site: Hermes's name, else the origin's host.
+  String get siteName =>
+      site.isNotEmpty ? site : (Uri.tryParse(origin)?.host ?? origin);
+}
+
+/// What Hermes does with a message sent while a reply is running
+/// (`display.busy_input_mode`, profile-wide).
+enum BusyMode {
+  queue('queue', 'Queue', 'Your message runs after the current reply.'),
+  steer('steer', 'Steer', 'It joins the running reply at the next step.'),
+  interrupt(
+    'interrupt',
+    'Interrupt',
+    'The reply stops and Hermes answers this instead.',
+  );
+
+  const BusyMode(this.wire, this.label, this.blurb);
+
+  final String wire;
+  final String label;
+  final String blurb;
+
+  /// Hermes's own default is interrupt, so that is what an unknown or
+  /// missing value means.
+  static BusyMode fromWire(String? value) =>
+      switch (value?.trim().toLowerCase()) {
+        'queue' => queue,
+        'steer' => steer,
+        _ => interrupt,
+      };
+}
+
+/// How hard the model thinks. Hermes also knows `minimal`, `xhigh` and
+/// `ultra`; they fold onto the nearest of these five for display.
+enum ReasoningEffort {
+  none,
+  low,
+  medium,
+  high,
+  max;
+
+  String get wire => name;
+
+  String get label => '${name[0].toUpperCase()}${name.substring(1)}';
+
+  static ReasoningEffort? fromWire(String? value) =>
+      switch (value?.trim().toLowerCase()) {
+        'none' || 'false' || 'disabled' => none,
+        'minimal' || 'low' => low,
+        'medium' => medium,
+        'high' => high,
+        'xhigh' || 'max' || 'ultra' => max,
+        _ => null,
+      };
+}
+
+/// What `prompt.submit` did with a message.
+enum SubmitOutcome {
+  /// A new turn began.
+  started,
+
+  /// The session was busy and Hermes held the message for after the turn.
+  queued,
+
+  /// The session was busy and Hermes slipped it into the running turn.
+  steered,
+
+  /// The session was busy and Hermes stopped the turn to answer this.
+  redirected;
+
+  static SubmitOutcome fromStatus(String? status) =>
+      switch (status?.trim().toLowerCase()) {
+        'queued' => queued,
+        'steered' => steered,
+        'redirected' => redirected,
+        _ => started,
+      };
+}
+
+/// One message of the prefix a branch is seeded with.
+@immutable
+final class SeedMessage {
+  const SeedMessage(this.role, this.content);
+
+  /// `user` or `assistant`.
+  final String role;
+  final String content;
+
+  Map<String, Object?> toWire() => {'role': role, 'content': content};
+}
+
+/// A row of `session.active_list`: a live runtime session on the gateway.
+@immutable
+final class LiveStatus {
+  const LiveStatus({
+    required this.runtimeId,
+    required this.storedId,
+    required this.status,
+  });
+
+  final String runtimeId;
+  final String storedId;
+
+  /// `working`, `waiting`, `starting` or `idle`.
+  final String status;
+
+  /// A turn is running or a decision is pending. `starting` only means an
+  /// agent is being built, which can happen without any prompt.
+  bool get replying => status == 'working' || status == 'waiting';
+  bool get waiting => status == 'waiting';
+}
+
+/// What a model can do beyond answering.
+@immutable
+final class ModelCaps {
+  const ModelCaps({this.reasoning = false, this.fast = false});
+
+  final bool reasoning;
+  final bool fast;
+}

@@ -15,7 +15,35 @@ import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/chat/connection_models.dart';
+import '../../data/rpc/rpc_frame.dart';
 import 'chat_state.dart';
+import 'links.dart';
+import 'prompt_records.dart' as records;
+
+typedef ToastCallback =
+    void Function(
+      String message, {
+      String? actionLabel,
+      VoidCallback? onAction,
+    });
+
+/// What branching made.
+final class BranchOutcome {
+  const BranchOutcome({
+    required this.conversation,
+    required this.count,
+    required this.summarised,
+  });
+
+  final NewConversation conversation;
+
+  /// Messages copied from the parent.
+  final int count;
+
+  /// The new chat was compressed too (the context strip's Branch).
+  final bool summarised;
+}
 
 final class ChatController extends ValueNotifier<ChatState> {
   ChatController(this._backend, {String? conversationId, String? title})
@@ -37,6 +65,14 @@ final class ChatController extends ValueNotifier<ChatState> {
 
   /// A retry ran; read the newest page once the new turn settles.
   bool _reloadWhenIdle = false;
+  int _queueSerial = 0;
+  bool _draining = false;
+
+  /// The time shown on settled prompt lines. A field so tests can fix it.
+  DateTime Function() clock = DateTime.now;
+
+  /// `/queue text` and `/steer text`.
+  static final _busyCommand = RegExp(r'^/(queue|steer)\s+(.+)$', dotAll: true);
 
   /// Called with text a slash command wants in the composer, for the person
   /// to finish and send.
@@ -45,6 +81,36 @@ final class ChatController extends ValueNotifier<ChatState> {
   /// Called with steer text Hermes could not take, so the screen can put it
   /// back in the composer.
   ValueChanged<String>? onSteerReturned;
+
+  /// Shows a short message to the person; the screen turns it into a toast.
+  ToastCallback? onToast;
+
+  /// Called when `/branch` is typed: the screen branches with its own
+  /// overlay and navigation.
+  VoidCallback? onBranchRequested;
+
+  /// Called with the text of an undone prompt, so the screen can put it back
+  /// in the composer for editing.
+  ValueChanged<String>? onPromptReturned;
+
+  /// How long the undone exchange takes to collapse before it leaves the
+  /// transcript. The screen sets zero under reduced motion.
+  Duration collapseDelay = const Duration(milliseconds: 320);
+
+  /// Commands Iris itself answers, offered even when the server's catalogue
+  /// lacks them.
+  static const localCommands = [
+    SlashCommand(name: '/queue', description: 'Send after the current reply'),
+    SlashCommand(
+      name: '/steer',
+      description: 'Slip into the running turn at its next step',
+    ),
+    SlashCommand(
+      name: '/undo',
+      description: 'Remove the last turn and edit your prompt',
+    ),
+    SlashCommand(name: '/branch', description: 'Copy this chat into a new one'),
+  ];
 
   /// The stored id: given when opened, or set by a new chat's first send.
   String? get conversationId => _storedId;
@@ -92,6 +158,13 @@ final class ChatController extends ValueNotifier<ChatState> {
           next = next.apply(event);
         }
         _update(next);
+        unawaited(_loadBusyMode());
+    }
+  }
+
+  Future<void> _loadBusyMode() async {
+    if (await _backend.busyMode() case Ok(value: final mode)) {
+      if (!_disposed) _update(value.copyWith(busyMode: mode));
     }
   }
 
@@ -107,6 +180,7 @@ final class ChatController extends ValueNotifier<ChatState> {
     if (history case Ok(value: final page)) {
       _update(value.withNewestPage(page.items, page.earlier));
     }
+    final wasRunning = value.running;
     final resumed = await _backend.resume(storedId);
     if (_disposed) return;
     switch (resumed) {
@@ -122,6 +196,8 @@ final class ChatController extends ValueNotifier<ChatState> {
           approvals: const [],
           questions: const [],
           inputs: const [],
+          logins: const [],
+          connections: const [],
           model: again.model,
           provider: again.provider,
           context: again.context,
@@ -130,6 +206,7 @@ final class ChatController extends ValueNotifier<ChatState> {
           next = next.apply(event);
         }
         _update(next);
+        if (wasRunning && !value.running) _turnEnded(failedOrStopped: false);
     }
   }
 
@@ -162,9 +239,15 @@ final class ChatController extends ValueNotifier<ChatState> {
     final result = await _backend.commands();
     _loadingCommands = false;
     if (result case Ok(value: final commands)) {
-      _update(value.copyWith(commands: commands));
+      _update(value.copyWith(commands: _withLocalCommands(commands)));
     }
   }
+
+  static List<SlashCommand> _withLocalCommands(List<SlashCommand> served) => [
+    ...served,
+    for (final local in localCommands)
+      if (!served.any((c) => c.name == local.name)) local,
+  ];
 
   /// Sends [text], creating the conversation first if this is a new chat.
   /// Text that starts with a slash runs as a command. During a run, text
@@ -175,20 +258,31 @@ final class ChatController extends ValueNotifier<ChatState> {
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return;
-    if (value.running) {
-      if (!trimmed.startsWith('/')) await _steer(trimmed);
+    if (trimmed == '/undo') {
+      await undo();
       return;
     }
+    if (trimmed == '/branch') {
+      onBranchRequested?.call();
+      return;
+    }
+    final command = _busyCommand.firstMatch(trimmed);
+    if (value.running) {
+      await _sendWhileRunning(trimmed, command);
+      return;
+    }
+    // Idle, "/queue x" and "/steer x" are an ordinary send of x.
+    final body = command == null ? trimmed : command.group(2)!.trim();
     _update(
       value.withUserTurn(
-        trimmed,
+        body,
         attachments: [for (final file in attachments) file.name],
       ),
     );
     final runtimeId = _runtimeId ?? await _create();
     if (runtimeId == null) return;
-    if (attachments.isEmpty && trimmed.startsWith('/') && trimmed.length > 1) {
-      await _slash(runtimeId, trimmed, depth: 0);
+    if (attachments.isEmpty && body.startsWith('/') && body.length > 1) {
+      await _slash(runtimeId, body, depth: 0);
       return;
     }
     final references = <String>[];
@@ -203,13 +297,278 @@ final class ChatController extends ValueNotifier<ChatState> {
           return;
       }
     }
-    await _submit(runtimeId, promptWithReferences(trimmed, references));
+    await _submit(runtimeId, promptWithReferences(body, references));
   }
 
-  Future<void> _submit(String runtimeId, String text) async {
+  /// The user and assistant text in [items], oldest first. Tool calls,
+  /// notices and empty turns are left out: they are not conversation.
+  static List<SeedMessage> seedFrom(List<TranscriptItem> items) => [
+    for (final item in items)
+      if (item is UserTurn && item.text.trim().isNotEmpty)
+        SeedMessage('user', item.text)
+      else if (item is AssistantTurn && item.text.trim().isNotEmpty)
+        SeedMessage('assistant', item.text),
+  ];
+
+  /// Whether a branch can start at [itemId]: the chat is stored, and that
+  /// reply is finished.
+  bool canBranchFrom(String itemId) {
+    if (_storedId == null) return false;
+    final item = value.items.where((i) => i.id == itemId);
+    if (item.isEmpty) return false;
+    final it = item.first;
+    return it is AssistantTurn && !it.streaming;
+  }
+
+  /// The prefix up to and including [itemId], reading earlier pages first
+  /// so it is whole. Null when [itemId] is not in this conversation.
+  Future<List<SeedMessage>?> prefixThrough(String itemId) async {
+    var pages = 0;
+    while (value.earlier != null && pages++ < 60) {
+      await loadEarlier();
+      if (_disposed) return null;
+    }
+    final at = value.items.indexWhere((i) => i.id == itemId);
+    if (at < 0) return null;
+    return seedFrom(value.items.sublist(0, at + 1));
+  }
+
+  /// Copies this conversation into a new one: all of it, or up to the reply
+  /// [fromItemId]. With [summarise], the copy is compressed too.
+  Future<Result<BranchOutcome>> branch({
+    String? fromItemId,
+    bool summarise = false,
+  }) async {
+    final storedId = _storedId;
+    if (storedId == null) {
+      return const Err(
+        IrisFailure(
+          FailureKind.rejected,
+          message: 'Send a message first: there is nothing to branch yet.',
+        ),
+      );
+    }
+    final lastReply = value.items.whereType<AssistantTurn>().isEmpty
+        ? null
+        : value.items.whereType<AssistantTurn>().last.id;
+    final whole = fromItemId == null || fromItemId == lastReply;
+    final List<SeedMessage>? prefix;
+    if (whole) {
+      prefix = null;
+    } else {
+      prefix = await prefixThrough(fromItemId);
+      if (prefix == null) {
+        return const Err(
+          IrisFailure(
+            FailureKind.rejected,
+            message: "That message isn't in this chat any more.",
+          ),
+        );
+      }
+    }
+    final result = whole
+        ? await _backend.branchWhole(storedId)
+        : await _backend.branchFrom(
+            storedId,
+            prefix!,
+            title: 'Branch of ${value.title ?? 'conversation'}',
+          );
+    switch (result) {
+      case Err(:final failure):
+        return Err(
+          (failure.rpcError?.isMethodNotFound ?? false)
+              ? const IrisFailure(
+                  FailureKind.rejected,
+                  message: "This server can't branch conversations.",
+                )
+              : failure,
+        );
+      case Ok(value: final created):
+        var summarised = false;
+        if (summarise) {
+          summarised = (await _backend.compress(created.runtimeId)).isOk;
+        }
+        return Ok(
+          BranchOutcome(
+            conversation: created,
+            count: (prefix ?? seedFrom(value.items)).length,
+            summarised: summarised,
+          ),
+        );
+    }
+  }
+
+  /// Takes back the last exchange and hands its prompt back for editing.
+  Future<void> undo() async {
+    final runtimeId = _runtimeId;
+    void say(String message, {String? actionLabel, VoidCallback? onAction}) =>
+        onToast?.call(message, actionLabel: actionLabel, onAction: onAction);
+    if (runtimeId == null) {
+      say('Nothing to undo');
+      return;
+    }
+    if (value.running) {
+      say(
+        'Stop the reply first to undo.',
+        actionLabel: 'Stop',
+        onAction: () => unawaited(stop()),
+      );
+      return;
+    }
+    final result = await _backend.undo(runtimeId);
+    if (_disposed) return;
+    switch (result) {
+      case Err(:final failure):
+        final rpc = failure.rpcError;
+        if (rpc?.isMethodNotFound ?? false) {
+          say("Undo isn't supported on this server.");
+        } else if (rpc?.code == 4009) {
+          say(
+            'Stop the reply first to undo.',
+            actionLabel: 'Stop',
+            onAction: () => unawaited(stop()),
+          );
+        } else {
+          say('Could not undo: ${describe(failure)}');
+        }
+      case Ok(value: 0):
+        say('Nothing to undo');
+      case Ok():
+        final start = value.lastExchangeStartId;
+        if (start == null) {
+          // The turn began before the page that is loaded: read it again.
+          await _reloadNewest();
+          say('Undid the last turn');
+          return;
+        }
+        final turn = value.items.firstWhere((i) => i.id == start) as UserTurn;
+        _update(value.withCollapsing(value.lastExchangeIds));
+        if (collapseDelay > Duration.zero) {
+          await Future<void>.delayed(collapseDelay);
+        }
+        if (_disposed) return;
+        _update(value.withoutLastExchange());
+        onPromptReturned?.call(turn.text);
+        say(
+          turn.attachments.isEmpty
+              ? 'Undid the last turn'
+              : 'Undid the last turn. Re-attach any files.',
+        );
+    }
+  }
+
+  /// False when the prompt did not go, after saying why in the transcript.
+  Future<bool> _submit(String runtimeId, String text) async {
     final sent = await _backend.submit(runtimeId, text);
     if (sent case Err(:final failure)) {
       _update(value.withError(describe(failure)));
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _sendWhileRunning(String text, RegExpMatch? command) async {
+    if (command != null) {
+      final argument = command.group(2)!.trim();
+      if (command.group(1) == 'queue') {
+        _enqueue(argument);
+      } else {
+        await _steer(argument);
+      }
+      return;
+    }
+    // Any other command waits for the turn to end.
+    if (text.startsWith('/')) return;
+    switch (value.busyMode) {
+      case BusyMode.queue:
+        _enqueue(text);
+      case BusyMode.steer:
+        await _steer(text);
+      case BusyMode.interrupt:
+        await _interruptWith(text);
+    }
+  }
+
+  void _enqueue(String text) {
+    _update(value.withQueued('queued-${_queueSerial++}', text));
+    onToast?.call('Queued for after this reply');
+  }
+
+  /// Interrupt mode: Hermes applies its own policy to the submit, and says
+  /// what it did.
+  Future<void> _interruptWith(String text) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return;
+    final result = await _backend.submit(runtimeId, text);
+    if (_disposed) return;
+    switch (result) {
+      case Ok(value: SubmitOutcome.redirected):
+        _update(value.withRedirect(text));
+        onToast?.call('Redirected');
+      case Ok(value: SubmitOutcome.steered):
+        _update(value.withSteer(text));
+        onToast?.call('Steered');
+      case Ok(value: SubmitOutcome.queued):
+        // Hermes held it for after the turn. Accepted, not an error.
+        onToast?.call('Queued for after this reply');
+      case Ok():
+        // The turn had already ended: this started a new one.
+        _update(value.withUserTurn(text));
+      case Err(:final failure):
+        if (failure.rpcError?.code == 4009) {
+          await _steer(text);
+        } else {
+          onSteerReturned?.call(text);
+          onToast?.call('Could not send: ${describe(failure)}');
+        }
+    }
+  }
+
+  /// The tray's controls.
+  void removeQueued(String id) => _update(value.withoutQueued(id));
+
+  void clearQueue() =>
+      _update(value.copyWith(queue: const [], queuePaused: false));
+
+  /// Resumes a tray a failed or stopped turn paused: the next message goes
+  /// now, or, if the person has started another turn since, when it ends.
+  Future<void> sendNextQueued() async {
+    _update(value.copyWith(queuePaused: false));
+    await _drain();
+  }
+
+  /// Sends the oldest queued message as a new turn. Never while a turn
+  /// runs: Hermes would apply its busy policy and could cut that turn off.
+  /// The turn is marked running at once, so a second "turn ended" can never
+  /// send a second message before this one has finished. A message that
+  /// fails to go pauses the tray, as a failed turn does.
+  Future<void> _drain() async {
+    if (_draining ||
+        value.running ||
+        value.queue.isEmpty ||
+        value.queuePaused) {
+      return;
+    }
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return;
+    _draining = true;
+    final next = value.queue.first;
+    _update(
+      value.withoutQueued(next.id).withUserTurn(next.text, fromQueue: true),
+    );
+    final sent = await _submit(runtimeId, next.text);
+    _draining = false;
+    if (!sent && !_disposed && value.queue.isNotEmpty) {
+      _update(value.copyWith(queuePaused: true));
+    }
+  }
+
+  void _turnEnded({required bool failedOrStopped}) {
+    if (value.queue.isEmpty) return;
+    if (failedOrStopped) {
+      _update(value.copyWith(queuePaused: true));
+    } else {
+      unawaited(_drain());
     }
   }
 
@@ -221,6 +580,7 @@ final class ChatController extends ValueNotifier<ChatState> {
     switch (result) {
       case Ok(value: SteerOutcome.accepted):
         _update(value.withSteer(text));
+        onToast?.call('Steered');
       case Ok() when !value.running:
         // The turn ended while the steer was on its way: it becomes a prompt.
         _update(value.withUserTurn(text));
@@ -245,7 +605,13 @@ final class ChatController extends ValueNotifier<ChatState> {
   Future<void> retry() async {
     final runtimeId = _runtimeId;
     if (runtimeId == null || value.running || value.retrying) return;
-    _update(value.copyWith(retrying: true, turn: TurnPhase.thinking));
+    _update(
+      value.copyWith(
+        retrying: true,
+        attempt: value.attempt + 1,
+        turn: TurnPhase.thinking,
+      ),
+    );
     await _slash(runtimeId, '/retry', depth: 0);
     if (_disposed) return;
     if (value.running) {
@@ -270,9 +636,10 @@ final class ChatController extends ValueNotifier<ChatState> {
     });
   }
 
-  /// Answers a sudo or secret prompt; an empty [answer] skips it. The card
-  /// goes at once. The answer is passed straight to the backend and kept
-  /// nowhere, not even in the notice that records it was sent.
+  /// Answers a sudo, secret, unlock or code prompt; an empty [answer] skips
+  /// it. The card goes at once and a settled line takes its place, naming
+  /// what was asked and never what was typed. The answer goes straight to
+  /// the backend and is kept nowhere.
   Future<void> answerInput(InputRequest request, String answer) async {
     _update(value.withoutInput(request));
     final result = await _backend.answerInput(request, answer);
@@ -280,12 +647,13 @@ final class ChatController extends ValueNotifier<ChatState> {
     switch (result) {
       case Ok():
         _update(
-          value.withNotice(
-            answer.isEmpty
-                ? 'Skipped.'
-                : request.kind == InputKind.sudo
-                ? 'Sent your sudo password.'
-                : 'Sent.',
+          value.withPromptRecord(
+            records.recordForInput(
+              request,
+              answer.isEmpty ? PromptOutcome.skipped : PromptOutcome.answered,
+              clock(),
+              id: 'prompt-${value.items.length}',
+            ),
           ),
         );
       case Err(:final failure):
@@ -295,6 +663,109 @@ final class ChatController extends ValueNotifier<ChatState> {
               .withError('Could not send that: ${describe(failure)}'),
         );
     }
+  }
+
+  /// Saves a login the agent asked to save. Both values go straight into
+  /// the reply and are kept nowhere.
+  Future<void> answerLogin(
+    LoginRequest request, {
+    required String identifier,
+    required String password,
+  }) async {
+    _update(value.withoutLogin(request));
+    final result = await _backend.answerLogin(
+      request,
+      identifier: identifier,
+      password: password,
+    );
+    if (_disposed) return;
+    switch (result) {
+      case Ok():
+        _update(
+          value.withPromptRecord(
+            records.recordForLogin(
+              request,
+              identifier.isEmpty && password.isEmpty
+                  ? PromptOutcome.skipped
+                  : PromptOutcome.answered,
+              clock(),
+              id: 'prompt-${value.items.length}',
+            ),
+          ),
+        );
+      case Err(:final failure):
+        _update(
+          value
+              .withLogin(request)
+              .withError('Could not send that: ${describe(failure)}'),
+        );
+    }
+  }
+
+  Future<void> skipLogin(LoginRequest request) =>
+      answerLogin(request, identifier: '', password: '');
+
+  /// Approves or skips one target of an open card. The card stays: Hermes
+  /// reports the new state in a `connection.update`. Credentials in
+  /// [answer] go straight to the wire and are kept nowhere.
+  Future<void> answerConnectionTarget(
+    ConnectionRequest request,
+    TargetAnswer answer,
+  ) async {
+    final result = await _backend.answerConnection(request, [answer]);
+    if (_disposed) return;
+    if (result case Err(:final failure)) {
+      onToast?.call('Could not send that: ${describe(failure)}');
+    }
+  }
+
+  /// Continue: settles the card, counting every target still open as
+  /// skipped. The card closes when Hermes says so; if it does not, it
+  /// closes here once the answer was accepted.
+  Future<void> settleConnection(ConnectionRequest request) async {
+    // The card shown may be older than the state: settle what is open now.
+    final current =
+        value.connections.where((c) => c.opId == request.opId).firstOrNull ??
+        request;
+    final open = [
+      for (final target in current.targets)
+        if (!target.state.resolved) TargetAnswer.skipped(target.name),
+    ];
+    final result = await _backend.answerConnection(current, open, settle: true);
+    if (_disposed) return;
+    switch (result) {
+      case Ok():
+        _update(value.withoutConnection(request.opId));
+      case Err(:final failure):
+        onToast?.call('Could not send that: ${describe(failure)}');
+    }
+  }
+
+  /// Opens a target's sign-in page in the browser. Hermes then reports
+  /// progress on its own.
+  Future<void> openSignIn(ConnectionTarget target) async {
+    final url = target.connectUrl;
+    if (url == null) return;
+    await openLink(url);
+  }
+
+  /// The card's deadline passed. It leaves an expired line, as a withdrawn
+  /// prompt does.
+  void expireConnection(String opId) {
+    if (!value.connections.any((c) => c.opId == opId)) return;
+    final at = clock();
+    _update(
+      value
+          .withoutConnection(opId)
+          .withPromptRecord(
+            PromptRecord(
+              id: 'prompt-${value.items.length}',
+              title: 'Connection setup',
+              detail: 'expired ${records.clock(at)} · Hermes stopped waiting',
+              outcome: PromptOutcome.expired,
+            ),
+          ),
+    );
   }
 
   /// Runs a slash command and does what it asks: show output, send a prompt,
@@ -314,7 +785,9 @@ final class ChatController extends ValueNotifier<ChatState> {
         switch (outcome.kind) {
           case SlashKind.exec:
             final output = outcome.text.trim();
-            _update(value.withNotice(output.isEmpty ? 'Done.' : output).settled());
+            _update(
+              value.withNotice(output.isEmpty ? 'Done.' : output).settled(),
+            );
           case SlashKind.send:
             final prompt = outcome.text.trim();
             if (prompt.isEmpty) {
@@ -346,6 +819,45 @@ final class ChatController extends ValueNotifier<ChatState> {
         }
     }
   }
+
+  /// Sets how hard the model thinks, for this conversation. Shown at once;
+  /// a refusal brings the previous value back and says why. False when
+  /// Hermes did not take it.
+  Future<bool> setEffort(ReasoningEffort effort) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return false;
+    final before = value.effort;
+    _update(value.copyWith(effort: effort));
+    final result = await _backend.setReasoning(runtimeId, effort);
+    if (_disposed) return false;
+    if (result case Err(:final failure)) {
+      if (before != null) _update(value.copyWith(effort: before));
+      onToast?.call(_changeFailed(failure));
+      return false;
+    }
+    return true;
+  }
+
+  /// Turns fast mode on or off for this conversation, as [setEffort] does.
+  Future<bool> setFast({required bool fast}) async {
+    final runtimeId = _runtimeId;
+    if (runtimeId == null) return false;
+    final before = value.fast;
+    _update(value.copyWith(fast: fast));
+    final result = await _backend.setFast(runtimeId, fast: fast);
+    if (_disposed) return false;
+    if (result case Err(:final failure)) {
+      if (before != null) _update(value.copyWith(fast: before));
+      onToast?.call(_changeFailed(failure));
+      return false;
+    }
+    return true;
+  }
+
+  static String _changeFailed(IrisFailure failure) =>
+      (failure.rpcError?.isMethodNotFound ?? false)
+      ? "This server can't change that."
+      : 'Could not change that: ${describe(failure)}';
 
   /// Stops the running turn.
   Future<void> stop() async {
@@ -464,8 +976,48 @@ final class ChatController extends ValueNotifier<ChatState> {
   void _onEvent(ChatEvent event) {
     final id = event.sessionId;
     if (id.isEmpty || (id != _runtimeId && id != _storedId)) return;
+    final withdrawn = event is RequestWithdrawn ? event : null;
+    final inputBefore = withdrawn == null
+        ? null
+        : value.inputs
+              .where((i) => i.requestId == withdrawn.requestId)
+              .firstOrNull;
+    final loginBefore = withdrawn == null
+        ? null
+        : value.logins
+              .where((l) => l.requestId == withdrawn.requestId)
+              .firstOrNull;
+    final wasRunning = value.running;
     _update(value.apply(event));
+    if (inputBefore != null) {
+      _update(
+        value.withPromptRecord(
+          records.recordForInput(
+            inputBefore,
+            PromptOutcome.expired,
+            clock(),
+            id: 'prompt-${value.items.length}',
+          ),
+        ),
+      );
+    } else if (loginBefore != null) {
+      _update(
+        value.withPromptRecord(
+          records.recordForLogin(
+            loginBefore,
+            PromptOutcome.expired,
+            clock(),
+            id: 'prompt-${value.items.length}',
+          ),
+        ),
+      );
+    }
     if (_reloadWhenIdle && !value.running) unawaited(_reloadNewest());
+    if (wasRunning && !value.running) {
+      _turnEnded(
+        failedOrStopped: event is TurnFailed || event is TurnInterrupted,
+      );
+    }
   }
 
   void _update(ChatState next) {

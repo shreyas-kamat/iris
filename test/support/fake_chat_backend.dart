@@ -5,11 +5,13 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 
 final class FakeChatBackend implements ChatBackend {
   final _events = StreamController<ChatEvent>.broadcast();
@@ -81,6 +83,46 @@ final class FakeChatBackend implements ChatBackend {
   /// answer changes between two asks, such as a usage cache warming up.
   final List<Result<ModelOptions>> modelOptionsQueue = [];
 
+  Result<SubmitOutcome> submitOutcome = const Ok(SubmitOutcome.started);
+  Result<void> deleteResult = const Ok(null);
+  Result<int> undoResult = const Ok(1);
+  Result<NewConversation> branchResult = const Ok(
+    NewConversation(runtimeId: 'run-branch', storedId: 'stored-branch'),
+  );
+  Result<void> compressResult = const Ok(null);
+  Result<BusyMode> busyModeResult = const Ok(BusyMode.interrupt);
+  Result<void> setBusyResult = const Ok(null);
+  Result<void> effortResult = const Ok(null);
+  Result<void> fastResult = const Ok(null);
+  Result<void> loginResult = const Ok(null);
+  Result<void> connectionResult = const Ok(null);
+  Result<List<LiveStatus>> activeResult = const Ok([]);
+  int activeCalls = 0;
+
+  /// `(runtimeId, text, queued)` for every submit.
+  final List<(String, String, bool)> submits = [];
+  final List<String> deletes = [];
+  final List<String> undos = [];
+  final List<String> branches = [];
+  final List<List<SeedMessage>> branchPrefixes = [];
+  final List<String> compressions = [];
+  final List<BusyMode> busyWrites = [];
+  final List<ReasoningEffort> efforts = [];
+  final List<bool> fasts = [];
+  final List<(String, String, String)> logins = [];
+  final List<(String, List<TargetAnswer>, bool)> connectionAnswers = [];
+
+  Result<ConversationSummary> conversationResult = const Err(
+    IrisFailure(FailureKind.notFound),
+  );
+  final List<String> conversationReads = [];
+
+  @override
+  Future<Result<ConversationSummary>> conversation(String storedId) async {
+    conversationReads.add(storedId);
+    return conversationResult;
+  }
+
   /// Delivers [event] as if the gateway had sent it.
   void emit(ChatEvent event) => _events.add(event);
 
@@ -143,14 +185,22 @@ final class FakeChatBackend implements ChatBackend {
   }
 
   @override
-  Future<Result<void>> submit(String runtimeId, String text) async {
+  Future<Result<SubmitOutcome>> submit(
+    String runtimeId,
+    String text, {
+    bool queued = false,
+  }) async {
     submitted.add((runtimeId, text));
-    return submitResult;
+    submits.add((runtimeId, text, queued));
+    return switch (submitResult) {
+      Err(:final failure) => Err(failure),
+      Ok() => submitOutcome,
+    };
   }
 
   final List<(String, String)> attached = [];
-  Result<String?> Function(Attachment file) attachResult =
-      (file) => Ok(file.isImage ? null : '@file:/s/${file.name}');
+  Result<String?> Function(Attachment file) attachResult = (file) =>
+      Ok(file.isImage ? null : '@file:/s/${file.name}');
 
   @override
   Future<Result<String?>> attach(String runtimeId, Attachment file) async {
@@ -263,5 +313,91 @@ final class FakeChatBackend implements ChatBackend {
   Future<Result<List<SearchHit>>> search(String query) async {
     searches.add(query);
     return searchResult;
+  }
+
+  @override
+  Future<Result<void>> delete(String storedId) async {
+    deletes.add(storedId);
+    return deleteResult;
+  }
+
+  @override
+  Future<Result<int>> undo(String runtimeId) async {
+    undos.add(runtimeId);
+    return undoResult;
+  }
+
+  @override
+  Future<Result<NewConversation>> branchWhole(String storedId) async {
+    branches.add(storedId);
+    branchPrefixes.add(const []);
+    return branchResult;
+  }
+
+  @override
+  Future<Result<NewConversation>> branchFrom(
+    String storedId,
+    List<SeedMessage> prefix, {
+    required String title,
+  }) async {
+    branches.add(storedId);
+    branchPrefixes.add(prefix);
+    return branchResult;
+  }
+
+  @override
+  Future<Result<void>> compress(String runtimeId) async {
+    compressions.add(runtimeId);
+    return compressResult;
+  }
+
+  @override
+  Future<Result<BusyMode>> busyMode() async => busyModeResult;
+
+  @override
+  Future<Result<void>> setBusyMode(BusyMode mode) async {
+    busyWrites.add(mode);
+    return setBusyResult;
+  }
+
+  @override
+  Future<Result<void>> setReasoning(
+    String runtimeId,
+    ReasoningEffort effort,
+  ) async {
+    efforts.add(effort);
+    return effortResult;
+  }
+
+  @override
+  Future<Result<void>> setFast(String runtimeId, {required bool fast}) async {
+    fasts.add(fast);
+    return fastResult;
+  }
+
+  @override
+  Future<Result<void>> answerLogin(
+    LoginRequest request, {
+    required String identifier,
+    required String password,
+  }) async {
+    logins.add((request.requestId, identifier, password));
+    return loginResult;
+  }
+
+  @override
+  Future<Result<void>> answerConnection(
+    ConnectionRequest request,
+    List<TargetAnswer> targets, {
+    bool settle = false,
+  }) async {
+    connectionAnswers.add((request.opId, targets, settle));
+    return connectionResult;
+  }
+
+  @override
+  Future<Result<List<LiveStatus>>> activeSessions() async {
+    activeCalls++;
+    return activeResult;
   }
 }

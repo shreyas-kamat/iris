@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/device_state.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
 import '../../core/failure.dart';
@@ -22,6 +23,7 @@ import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/rpc/dashboard_session.dart';
+import '../../data/rpc/rpc_frame.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
@@ -40,11 +42,13 @@ import '../home/link_status_screen.dart';
 import '../home/usage_strip.dart';
 import '../settings/settings_screen.dart';
 import 'archived_screen.dart';
+import 'branched_header.dart';
 import 'chat_controller.dart';
 import 'chat_screen.dart';
 import 'conversation_actions.dart';
 import 'conversation_row.dart';
 import 'conversation_search.dart';
+import 'delete_sheet.dart';
 import 'profile_picker.dart';
 import 'relative_time.dart';
 
@@ -79,7 +83,7 @@ class _ConversationListScreenState
   /// hero once it is scrolled far enough away.
   double _heroHeight = 140;
 
-  /// The query the server is asked, settled 250 ms after the last keystroke.
+  /// The query the server is asked, settled 200 ms after the last keystroke.
   String _serverQuery = '';
   Timer? _debounce;
 
@@ -89,6 +93,8 @@ class _ConversationListScreenState
     _search.addListener(_onQuery);
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
+      // Recent searches show while the empty field has focus.
+      if (mounted) setState(() {});
     });
     _scroll.addListener(_onScroll);
   }
@@ -139,7 +145,7 @@ class _ConversationListScreenState
       if (query.isEmpty) _serverQuery = '';
     });
     if (query.isEmpty) return;
-    _debounce = Timer(const Duration(milliseconds: 250), () {
+    _debounce = Timer(const Duration(milliseconds: 200), () {
       if (mounted) setState(() => _serverQuery = query);
     });
   }
@@ -156,9 +162,41 @@ class _ConversationListScreenState
 
   bool _loadingMore = false;
 
+  /// The conversation whose menu is open, drawn lifted.
+  String? _lifted;
+
+  final Map<String, ConversationSummary> _fetchedPins = {};
+  final Set<String> _fetching = {};
+
+  /// Pins whose chat is not in the loaded pages are read one by one, so a
+  /// pin on an older chat still shows. A chat that no longer exists drops
+  /// its pin.
+  Future<void> _fetchMissingPins(
+    ChatBackend chat,
+    List<String> pins,
+    Set<String> loaded,
+  ) async {
+    for (final id in pins) {
+      if (loaded.contains(id) ||
+          _fetchedPins.containsKey(id) ||
+          !_fetching.add(id)) {
+        continue;
+      }
+      switch (await chat.conversation(id)) {
+        case Ok(:final value):
+          if (mounted) setState(() => _fetchedPins[id] = value);
+        case Err(:final failure) when failure.kind == FailureKind.notFound:
+          if (mounted) ref.read(pinsProvider.notifier).unpin(id);
+        case Err():
+          break;
+      }
+    }
+  }
+
   Future<void> _open(
     ChatBackend chat, {
     ConversationSummary? conversation,
+    BranchRecord? branch,
   }) async {
     await Navigator.of(context).push(
       IrisPageRoute<void>(
@@ -169,6 +207,13 @@ class _ConversationListScreenState
           backend: chat,
           conversationId: conversation?.id,
           title: conversation?.title,
+          branch:
+              branch ??
+              (conversation == null
+                  ? null
+                  : ref.read(branchRecordProvider(conversation.id))),
+          onBranched: (childId, record) =>
+              ref.read(branchRecordsProvider).save(childId, record),
         ),
       ),
     );
@@ -190,9 +235,18 @@ class _ConversationListScreenState
     ConversationSummary conversation,
   ) async {
     final title = _titles[conversation.id] ?? conversation.title;
-    final action = await showConversationActions(context, title);
+    setState(() => _lifted = conversation.id);
+    final action = await showConversationActions(
+      context,
+      title,
+      pinned: ref.read(pinsProvider).contains(conversation.id),
+    );
+    if (mounted) setState(() => _lifted = null);
     if (!mounted) return;
     switch (action) {
+      case ConversationAction.pin:
+        unawaited(IrisHaptics.commit());
+        ref.read(pinsProvider.notifier).toggle(conversation.id);
       case ConversationAction.rename:
         final next = await showRenameSheet(context, title);
         if (next == null || !mounted) return;
@@ -207,15 +261,99 @@ class _ConversationListScreenState
             message: 'Could not rename: ${ChatController.describe(failure)}',
           );
         }
+      case ConversationAction.branch:
+        await _branchChat(chat, conversation, title);
       case ConversationAction.archive:
         await _archive(chat, conversation.id);
+      case ConversationAction.delete:
+        await _delete(chat, conversation, title);
       case null:
         break;
     }
   }
 
+  Future<void> _branchChat(
+    ChatBackend chat,
+    ConversationSummary conversation,
+    String title,
+  ) async {
+    final result = await withBranchingOverlay(
+      context,
+      title,
+      chat.branchWhole(conversation.id),
+    );
+    if (!mounted) return;
+    switch (result) {
+      case Err(:final failure):
+        showIrisToast(
+          context,
+          message: (failure.rpcError?.isMethodNotFound ?? false)
+              ? "This server can't branch conversations."
+              : 'Could not branch: ${ChatController.describe(failure)}',
+        );
+      case Ok(value: final created):
+        final record = BranchRecord(
+          parentId: conversation.id,
+          parentTitle: title,
+          count: conversation.messageCount,
+          at: DateTime.now().millisecondsSinceEpoch,
+        );
+        ref.read(branchRecordsProvider).save(created.storedId, record);
+        await _open(
+          chat,
+          conversation: ConversationSummary(
+            id: created.storedId,
+            title: 'Branch of $title',
+          ),
+          branch: record,
+        );
+    }
+  }
+
+  Future<void> _delete(
+    ChatBackend chat,
+    ConversationSummary conversation,
+    String title,
+  ) async {
+    if (!await showDeleteSheet(context, title) || !mounted) return;
+    void stopFirst() => showIrisToast(
+      context,
+      message: 'Stop the reply before deleting this chat.',
+      actionLabel: 'Open',
+      onAction: () => unawaited(_open(chat, conversation: conversation)),
+    );
+    // Not every server refuses: the dashboard's REST delete can remove a
+    // chat mid-reply. What home knows is replying is refused here.
+    final replying = ref.read(liveChatsProvider).value ?? const {};
+    if (replying.containsKey(conversation.id)) {
+      stopFirst();
+      return;
+    }
+    unawaited(IrisHaptics.commit());
+    setState(() => _gone.add(conversation.id));
+    final result = await chat.delete(conversation.id);
+    if (!mounted) return;
+    switch (result) {
+      case Ok():
+        ref.read(pinsProvider.notifier).unpin(conversation.id);
+        ref.read(branchRecordsProvider).forget(conversation.id);
+        showIrisToast(context, message: 'Deleted ‘$title’');
+      case Err(:final failure) when refusedAsLive(failure):
+        setState(() => _gone.remove(conversation.id));
+        stopFirst();
+      case Err(:final failure):
+        setState(() => _gone.remove(conversation.id));
+        showIrisToast(
+          context,
+          message: 'Could not delete: ${ChatController.describe(failure)}',
+        );
+    }
+  }
+
   Future<void> _archive(ChatBackend chat, String id) async {
     unawaited(IrisHaptics.commit());
+    // An archived chat is not pinned: it is out of home.
+    ref.read(pinsProvider.notifier).unpin(id);
     setState(() => _gone.add(id));
     final result = await chat.setArchived(id, archived: true);
     if (!mounted) return;
@@ -224,6 +362,8 @@ class _ConversationListScreenState
         showIrisToast(
           context,
           message: 'Archived',
+          // Longer than other toasts: Undo is worth reaching for.
+          visibleFor: const Duration(seconds: 5),
           actionLabel: 'Undo',
           onAction: () => unawaited(_undoArchive(chat, id)),
         );
@@ -258,9 +398,16 @@ class _ConversationListScreenState
   }
 
   Future<void> _openArchived(ChatBackend chat) async {
-    await Navigator.of(
-      context,
-    ).push(IrisPageRoute<void>(builder: (_) => ArchivedScreen(backend: chat)));
+    await Navigator.of(context).push(
+      IrisPageRoute<void>(
+        builder: (_) => ArchivedScreen(
+          backend: chat,
+          onDeleted: ref.read(branchRecordsProvider).forget,
+          onBranched: (childId, record) =>
+              ref.read(branchRecordsProvider).save(childId, record),
+        ),
+      ),
+    );
     if (mounted) ref.invalidate(conversationsProvider);
   }
 
@@ -281,6 +428,16 @@ class _ConversationListScreenState
 
   @override
   Widget build(BuildContext context) {
+    // A search that found something is worth finding again; one that found
+    // nothing is not.
+    final settled = _serverQuery;
+    if (settled.isNotEmpty) {
+      ref.listen(conversationSearchProvider(settled), (_, next) {
+        if (next case AsyncData(:final value) when value.isNotEmpty) {
+          ref.read(recentSearchesProvider.notifier).add(settled);
+        }
+      });
+    }
     // A refreshed first page starts the list over.
     ref.listen(conversationsProvider, (_, next) {
       // While it loads, the old rows are still on screen: keep what was
@@ -296,10 +453,16 @@ class _ConversationListScreenState
         const LinkState(LinkPhase.connecting);
     final chat = ref.watch(activeChatProvider).value;
     final conversations = ref.watch(conversationsProvider);
+    final pinnedIds = ref.watch(pinsProvider);
+    final replying =
+        ref.watch(liveChatsProvider).value ?? const <String, LiveStatus>{};
     final profiles =
         ref.watch(profilesProvider).value ?? const <AgentProfile>[];
     final profile = ref.watch(activeProfileProvider);
     final (linkState, headline, _) = describeLink(link);
+    final headlineText = replying.isEmpty
+        ? headline
+        : '$headline · ${replying.length} replying';
     final live = link.phase == LinkPhase.live;
     final now = ref.read(clockProvider)();
     // The orb shows the agent as idle while the link is up. Only a broken
@@ -310,6 +473,15 @@ class _ConversationListScreenState
         context,
       ).push(IrisPageRoute<void>(builder: (_) => const LinkStatusScreen())),
     );
+
+    if (chat != null && conversations.value != null && pinnedIds.isNotEmpty) {
+      final loaded = {
+        for (final c in [...conversations.value!.items, ..._more]) c.id,
+      };
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_fetchMissingPins(chat, pinnedIds, loaded));
+      });
+    }
 
     return IrisScaffold(
       header: _HomeBar(
@@ -334,6 +506,10 @@ class _ConversationListScreenState
           NotificationListener<ScrollEndNotification>(
             onNotification: _snap,
             child: _ConversationList(
+              pins: pinnedIds,
+              live: replying,
+              lifted: _lifted,
+              fetchedPins: _fetchedPins,
               top: [
                 // Fades as it scrolls under the bar, where the compact link
                 // takes over.
@@ -348,7 +524,7 @@ class _ConversationListScreenState
                     child: _Hero(
                       orbState: orbState,
                       linkState: linkState,
-                      headline: headline,
+                      headline: headlineText,
                       host: server == null ? '' : _hostOf(server.baseUrl),
                       total: conversations.value == null
                           ? null
@@ -369,6 +545,9 @@ class _ConversationListScreenState
               serverHits: _serverQuery.isEmpty
                   ? null
                   : ref.watch(conversationSearchProvider(_serverQuery)),
+              recent: ref.watch(recentSearchesProvider),
+              onRecent: (query) => _search.text = query,
+              onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
               titles: _titles,
               gone: _gone,
               onActions: chat == null
@@ -860,6 +1039,10 @@ class _NewChatBar extends StatelessWidget {
 
 class _ConversationList extends StatelessWidget {
   const _ConversationList({
+    required this.pins,
+    required this.live,
+    required this.lifted,
+    required this.fetchedPins,
     required this.top,
     required this.now,
     required this.conversations,
@@ -870,6 +1053,9 @@ class _ConversationList extends StatelessWidget {
     required this.search,
     required this.searchFocus,
     required this.serverHits,
+    required this.recent,
+    required this.onRecent,
+    required this.onClearRecent,
     required this.titles,
     required this.gone,
     required this.onActions,
@@ -878,6 +1064,18 @@ class _ConversationList extends StatelessWidget {
     required this.onRetry,
     required this.onRefresh,
   });
+
+  /// Pinned conversation ids, newest pin first.
+  final List<String> pins;
+
+  /// Conversations replying right now, by stored id.
+  final Map<String, LiveStatus> live;
+
+  /// The conversation whose menu is open.
+  final String? lifted;
+
+  /// Pinned conversations that were not in the loaded pages.
+  final Map<String, ConversationSummary> fetchedPins;
 
   /// What scrolls in above the rows: the hero and the usage strip.
   final List<Widget> top;
@@ -892,6 +1090,11 @@ class _ConversationList extends StatelessWidget {
 
   /// The server's answer to the settled query; null when none is active.
   final AsyncValue<List<SearchHit>>? serverHits;
+
+  /// The last searches on this server, newest first.
+  final List<String> recent;
+  final ValueChanged<String> onRecent;
+  final VoidCallback onClearRecent;
   final Map<String, String> titles;
   final Set<String> gone;
   final ValueChanged<ConversationSummary>? onActions;
@@ -994,6 +1197,19 @@ class _ConversationList extends StatelessWidget {
     final open = onOpen;
     final next = onMore;
     final searching = search.text.trim().isNotEmpty;
+    final byId = {...fetchedPins, for (final c in list) c.id: c};
+    final pinnedRows = [
+      for (final id in pins)
+        if (byId[id] != null) byId[id]!,
+    ];
+    final liveRows = [
+      for (final c in list)
+        if (live.containsKey(c.id) && !pins.contains(c.id)) c,
+    ];
+    final recentRows = [
+      for (final c in list)
+        if (!pins.contains(c.id) && !live.containsKey(c.id)) c,
+    ];
 
     return [
       Padding(
@@ -1006,32 +1222,27 @@ class _ConversationList extends StatelessWidget {
       ),
       if (searching)
         ..._searchItems(context, gutter, list, open)
-      else ...[
+      else if (recent.isNotEmpty || searchFocus.hasFocus)
         Padding(
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            IrisSpace.sm,
-            gutter,
-            IrisSpace.sm,
+          padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, 0),
+          child: RecentSearchChips(
+            queries: recent,
+            onPick: onRecent,
+            onClear: onClearRecent,
           ),
-          child: IrisLabel('Recent', color: context.palette.inkFaint),
+        )
+      else ...[
+        ..._section(
+          context,
+          gutter,
+          'Pinned',
+          pinnedRows,
+          now,
+          open,
+          pinned: true,
         ),
-        for (final conversation in list)
-          Leaving(
-            key: ValueKey(conversation.id),
-            gone: gone.contains(conversation.id),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
-              child: ConversationRow(
-                title: titles[conversation.id] ?? conversation.title,
-                subtitle: _subtitle(conversation, now),
-                onTap: open == null ? null : () => open(conversation),
-                onLongPress: onActions == null
-                    ? null
-                    : () => onActions!(conversation),
-              ),
-            ),
-          ),
+        ..._section(context, gutter, 'Live', liveRows, now, open),
+        ..._section(context, gutter, 'Recent', recentRows, now, open),
         if (hasMore)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: IrisSpace.md),
@@ -1071,6 +1282,50 @@ class _ConversationList extends StatelessWidget {
     ];
   }
 
+  /// A labelled run of rows; nothing at all when [rows] is empty, so Pinned
+  /// and Live only show when there is something to show.
+  List<Widget> _section(
+    BuildContext context,
+    double gutter,
+    String label,
+    List<ConversationSummary> rows,
+    DateTime now,
+    ValueChanged<ConversationSummary>? open, {
+    bool pinned = false,
+  }) {
+    if (rows.isEmpty) return const [];
+    return [
+      Padding(
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          IrisSpace.sm,
+          gutter,
+          IrisSpace.sm,
+        ),
+        child: IrisLabel(label, color: context.palette.inkFaint),
+      ),
+      for (final conversation in rows)
+        Leaving(
+          key: ValueKey(conversation.id),
+          gone: gone.contains(conversation.id),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+            child: ConversationRow(
+              title: titles[conversation.id] ?? conversation.title,
+              subtitle: _subtitle(conversation, now),
+              pinned: pinned,
+              lifted: lifted == conversation.id,
+              live: live[conversation.id],
+              onTap: open == null ? null : () => open(conversation),
+              onLongPress: onActions == null
+                  ? null
+                  : () => onActions!(conversation),
+            ),
+          ),
+        ),
+    ];
+  }
+
   /// What shows under the field while a query is typed: the server's hits
   /// once they arrive, the loaded rows that match until then, and what went
   /// wrong if the server could not be asked.
@@ -1100,6 +1355,12 @@ class _ConversationList extends StatelessWidget {
           else
             row,
     ], search.text);
+    final shown = hits == null
+        ? const <SearchHit>[]
+        : [
+            for (final hit in hits)
+              if (!hit.archived && !gone.contains(hit.storedId)) hit,
+          ];
     final rows = hits == null
         ? <Widget>[
             for (final conversation in local)
@@ -1114,9 +1375,7 @@ class _ConversationList extends StatelessWidget {
               ),
           ]
         : <Widget>[
-            for (final found in hits.where(
-              (hit) => !hit.archived && !gone.contains(hit.storedId),
-            ))
+            for (final (index, found) in shown.indexed)
               Builder(
                 key: ValueKey('hit-${found.storedId}'),
                 builder: (context) {
@@ -1129,12 +1388,17 @@ class _ConversationList extends StatelessWidget {
                       IrisSpace.xs,
                     ),
                     child: SearchHitRow(
+                      query: search.text,
+                      now: now,
+                      best: index == 0,
+                      pinned: pins.contains(found.storedId),
                       hit: SearchHit(
                         storedId: found.storedId,
                         title: title,
                         snippet: found.snippet,
                         lastActive: found.lastActive,
                         messageCount: found.messageCount,
+                        matches: found.matches,
                       ),
                       onTap: open == null
                           ? null
@@ -1150,7 +1414,22 @@ class _ConversationList extends StatelessWidget {
               ),
           ];
     final settled = hits != null || failed;
+    final matches = shown.fold<int>(0, (sum, hit) => sum + hit.matches);
     return [
+      if (hits != null && shown.isNotEmpty)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            IrisSpace.sm,
+            gutter,
+            IrisSpace.sm,
+          ),
+          child: IrisLabel(
+            '${shown.length} ${shown.length == 1 ? 'chat' : 'chats'} · '
+            '$matches ${matches == 1 ? 'match' : 'matches'}',
+            color: palette.inkFaint,
+          ),
+        ),
       if (failed)
         Padding(
           padding: EdgeInsets.fromLTRB(
@@ -1178,11 +1457,26 @@ class _ConversationList extends StatelessWidget {
       if (rows.isEmpty && (settled || local.isEmpty))
         Padding(
           padding: const EdgeInsets.symmetric(vertical: IrisSpace.xl),
-          child: Center(
-            child: Text(
-              'No matches',
-              style: type.caption.copyWith(color: palette.inkMuted),
-            ),
+          child: Column(
+            children: [
+              const IrisOrb(state: AgentState.rest, size: 72, glow: false),
+              const SizedBox(height: IrisSpace.md),
+              Text(
+                'No chats mention \u2018${search.text.trim()}\u2019.',
+                textAlign: TextAlign.center,
+                style: type.body.copyWith(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w500,
+                  color: palette.ink,
+                ),
+              ),
+              const SizedBox(height: IrisSpace.xs),
+              Text(
+                'Try fewer words or a different spelling.',
+                textAlign: TextAlign.center,
+                style: type.caption.copyWith(color: palette.inkMuted),
+              ),
+            ],
           ),
         ),
     ];

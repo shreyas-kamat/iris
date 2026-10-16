@@ -72,6 +72,11 @@ abstract final class UsageParser {
   /// conversation's first snippet. A row's `id` may be a message id, so only
   /// `session_id` names the conversation.
   static List<SearchHit> searchHits(Json body) {
+    final counts = <String, int>{};
+    for (final row in body['results'].list) {
+      final id = HistoryParser.firstText(row, const ['session_id']);
+      if (id != null) counts[id] = (counts[id] ?? 0) + 1;
+    }
     final seen = <String>{};
     final hits = <SearchHit>[];
     for (final row in body['results'].list) {
@@ -91,6 +96,7 @@ abstract final class UsageParser {
           ]).dateTimeOrNull,
           archived: row['archived'].boolean(),
           messageCount: row['message_count'].integer(),
+          matches: counts[id]!,
         ),
       );
     }

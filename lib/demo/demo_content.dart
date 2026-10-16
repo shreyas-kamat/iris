@@ -471,6 +471,52 @@ const demoScripts = [
       ),
     ],
   ),
+  DemoScript(
+    prompt: 'Deploy the docs site',
+    title: 'Deploy the docs site',
+    steps: [
+      ContextStep(31),
+      ThinkStep(
+        'Pushing needs the GitHub login, which lives in the password manager.',
+      ),
+      ToolStep(
+        'browser.open',
+        input: 'https://github.com/login',
+        output: 'Login page open',
+      ),
+      VaultStep(VaultKind.unlock, name: '1Password'),
+      VaultStep(
+        VaultKind.code,
+        site: 'GitHub',
+        hint: '6 digits from your authenticator app',
+      ),
+      VaultStep(VaultKind.login, site: 'GitHub'),
+      ConnectStep([
+        {
+          'name': 'Linear',
+          'kind': 'connector',
+          'action': 'authorize',
+          'state': 'pending',
+          'connect_url': 'https://linear.app/oauth',
+        },
+        {
+          'name': 'release-notes',
+          'kind': 'skill',
+          'action': 'enable',
+          'state': 'pending',
+        },
+        {
+          'name': 'security-scan',
+          'kind': 'plugin',
+          'action': 'install',
+          'state': 'pending',
+        },
+      ]),
+      SayStep(
+        'Signed in and pushed the build to the docs branch. The site is live.',
+      ),
+    ],
+  ),
 ];
 
 /// The script for [text], if it is one of the suggested prompts.

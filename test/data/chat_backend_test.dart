@@ -11,6 +11,7 @@ import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/net/server_connection.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
@@ -26,7 +27,11 @@ void main() {
 
   setUp(() async {
     http = FakeHttp()
-      ..on('POST', '/api/auth/ws-ticket', (_) => FakeReply.json({'ticket': 't'}));
+      ..on(
+        'POST',
+        '/api/auth/ws-ticket',
+        (_) => FakeReply.json({'ticket': 't'}),
+      );
     final connection = ServerConnection.create(
       const ServerConfig(id: 's', baseUrl: 'https://h.example', label: 'H'),
       adapter: http,
@@ -54,32 +59,41 @@ void main() {
   }
 
   List<Map<String, Object?>> rows(int from, int to) => [
-    for (var i = from; i <= to; i++) {'id': i, 'role': 'user', 'content': 'm$i'},
+    for (var i = from; i <= to; i++)
+      {'id': i, 'role': 'user', 'content': 'm$i'},
   ];
 
   group('conversations and profiles', () {
-    test('lists conversations over REST for the profile, a page at a time', () async {
-      Map<String, String>? query;
-      http.on('GET', '/api/profiles/sessions', (request) {
-        query = request.uri.queryParameters;
-        return FakeReply.json({
-          'sessions': [
-            {'id': 'a', 'title': null, 'preview': 'Hello', 'profile': 'default'},
-          ],
-          'total': 256,
-          'limit': 50,
-          'offset': 50,
+    test(
+      'lists conversations over REST for the profile, a page at a time',
+      () async {
+        Map<String, String>? query;
+        http.on('GET', '/api/profiles/sessions', (request) {
+          query = request.uri.queryParameters;
+          return FakeReply.json({
+            'sessions': [
+              {
+                'id': 'a',
+                'title': null,
+                'preview': 'Hello',
+                'profile': 'default',
+              },
+            ],
+            'total': 256,
+            'limit': 50,
+            'offset': 50,
+          });
         });
-      });
-      final page = (await chat.conversations(50)).valueOrNull!;
-      expect(page.items.single.title, 'Hello');
-      expect(page.items.single.profile, 'default');
-      expect(page.total, 256);
-      expect(query, containsPair('profile', 'default'));
-      expect(query, containsPair('offset', '50'));
-      expect(query, containsPair('limit', '50'));
-      expect(query, containsPair('order', 'recent'));
-    });
+        final page = (await chat.conversations(50)).valueOrNull!;
+        expect(page.items.single.title, 'Hello');
+        expect(page.items.single.profile, 'default');
+        expect(page.total, 256);
+        expect(query, containsPair('profile', 'default'));
+        expect(query, containsPair('offset', '50'));
+        expect(query, containsPair('limit', '50'));
+        expect(query, containsPair('order', 'recent'));
+      },
+    );
 
     test('lists profiles', () async {
       http.on(
@@ -98,40 +112,45 @@ void main() {
   });
 
   group('history', () {
-    test('a dashboard that pages from the oldest opens on the newest page', () async {
-      http
-        ..on('GET', '/api/sessions/abc/messages', (request) {
-          final q = request.uri.queryParameters;
-          final offset = int.parse(q['offset']!);
-          final limit = int.parse(q['limit']!);
-          final last = math.min(offset + limit, 184);
-          return FakeReply.json({
-            'session_id': 'abc',
-            'messages': rows(offset + 1, last),
-            'pagination': {
-              'limit': limit,
-              'offset': offset,
-              'returned': math.max(0, last - offset),
-            },
-          });
-        })
-        ..on(
-          'GET',
-          '/api/sessions/abc',
-          (_) => FakeReply.json({'id': 'abc', 'message_count': 184}),
-        );
-      final page = (await chat.history('abc')).valueOrNull!;
-      expect(page.items.first.id, '65');
-      expect(page.items.last.id, '184');
-      expect(page.earlier?.offset, 64);
-      expect(page.earlier?.fromNewest, isFalse);
+    test(
+      'a dashboard that pages from the oldest opens on the newest page',
+      () async {
+        http
+          ..on('GET', '/api/sessions/abc/messages', (request) {
+            final q = request.uri.queryParameters;
+            final offset = int.parse(q['offset']!);
+            final limit = int.parse(q['limit']!);
+            final last = math.min(offset + limit, 184);
+            return FakeReply.json({
+              'session_id': 'abc',
+              'messages': rows(offset + 1, last),
+              'pagination': {
+                'limit': limit,
+                'offset': offset,
+                'returned': math.max(0, last - offset),
+              },
+            });
+          })
+          ..on(
+            'GET',
+            '/api/sessions/abc',
+            (_) => FakeReply.json({'id': 'abc', 'message_count': 184}),
+          );
+        final page = (await chat.history('abc')).valueOrNull!;
+        expect(page.items.first.id, '65');
+        expect(page.items.last.id, '184');
+        expect(page.earlier?.offset, 64);
+        expect(page.earlier?.fromNewest, isFalse);
 
-      final earlier = (await chat.history('abc', before: page.earlier))
-          .valueOrNull!;
-      expect(earlier.items.first.id, '1');
-      expect(earlier.items.last.id, '64');
-      expect(earlier.earlier, isNull);
-    });
+        final earlier = (await chat.history(
+          'abc',
+          before: page.earlier,
+        )).valueOrNull!;
+        expect(earlier.items.first.id, '1');
+        expect(earlier.items.last.id, '64');
+        expect(earlier.earlier, isNull);
+      },
+    );
 
     test('a dashboard that honours order=latest is used as it is', () async {
       http.on(
@@ -181,7 +200,11 @@ void main() {
       );
       await scoped.history('abc');
       expect(
-        http.to('/api/sessions/abc/messages').single.uri.queryParameters['profile'],
+        http
+            .to('/api/sessions/abc/messages')
+            .single
+            .uri
+            .queryParameters['profile'],
         'ananta',
       );
       final resume = scoped.resume('abc');
@@ -195,37 +218,40 @@ void main() {
     });
   });
 
-  test('resume returns the runtime id, model and decisions still waiting', () async {
-    final future = chat.resume('abc');
-    final sent = await answer({
-      'session_id': 'run-1',
-      'running': true,
-      'info': {'model': 'gpt-6.1-sol', 'provider': 'openai-codex'},
-      'open_requests': [
-        {
-          'id': 'srq-1',
-          'method': 'clarify',
-          'params': {'session_id': 'run-1', 'question': 'Which?'},
-        },
-        {
-          'id': 'srq-2',
-          'method': 'secret',
-          'params': {'session_id': 'run-1'},
-        },
-      ],
-    });
-    expect(sent['method'].stringOrNull, 'session.resume');
-    expect(sent['params']['session_id'].stringOrNull, 'abc');
-    expect(sent['params']['omit_messages'].boolOrNull, isTrue);
-    expect(sent['params']['profile'].exists, isFalse);
-    final resumed = (await future).valueOrNull!;
-    expect(resumed.runtimeId, 'run-1');
-    expect(resumed.running, isTrue);
-    expect(resumed.model, 'gpt-6.1-sol');
-    expect(resumed.provider, 'openai-codex');
-    // Both the question and the secret prompt are shown; nothing is declined.
-    expect(resumed.pending, [isA<ClarifyAsked>(), isA<InputAsked>()]);
-  });
+  test(
+    'resume returns the runtime id, model and decisions still waiting',
+    () async {
+      final future = chat.resume('abc');
+      final sent = await answer({
+        'session_id': 'run-1',
+        'running': true,
+        'info': {'model': 'gpt-6.1-sol', 'provider': 'openai-codex'},
+        'open_requests': [
+          {
+            'id': 'srq-1',
+            'method': 'clarify',
+            'params': {'session_id': 'run-1', 'question': 'Which?'},
+          },
+          {
+            'id': 'srq-2',
+            'method': 'secret',
+            'params': {'session_id': 'run-1'},
+          },
+        ],
+      });
+      expect(sent['method'].stringOrNull, 'session.resume');
+      expect(sent['params']['session_id'].stringOrNull, 'abc');
+      expect(sent['params']['omit_messages'].boolOrNull, isTrue);
+      expect(sent['params']['profile'].exists, isFalse);
+      final resumed = (await future).valueOrNull!;
+      expect(resumed.runtimeId, 'run-1');
+      expect(resumed.running, isTrue);
+      expect(resumed.model, 'gpt-6.1-sol');
+      expect(resumed.provider, 'openai-codex');
+      // Both the question and the secret prompt are shown; nothing is declined.
+      expect(resumed.pending, [isA<ClarifyAsked>(), isA<InputAsked>()]);
+    },
+  );
 
   test('create returns both ids', () async {
     final future = chat.create();
@@ -273,7 +299,10 @@ void main() {
       final future = chat.attach('run-1', txt);
       final sent = await answer({'ref_text': '@file:/s/n.txt'});
       expect(sent['method'].stringOrNull, 'file.attach');
-      expect(sent['params']['data_url'].stringOrNull, 'data:text/plain;base64,aA==');
+      expect(
+        sent['params']['data_url'].stringOrNull,
+        'data:text/plain;base64,aA==',
+      );
       expect((await future).valueOrNull, '@file:/s/n.txt');
     });
 
@@ -326,22 +355,25 @@ void main() {
     expect((await future).isOk, isTrue);
   });
 
-  test('a single server-request question is answered with a result frame', () async {
-    const request = ClarifyRequest(
-      requestId: 'srq-4',
-      sessionId: 'run-1',
-      questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
-    );
-    final result = await chat.answerClarify(
-      request,
-      request.questions.single,
-      'main',
-    );
-    expect(result.isOk, isTrue);
-    expect(socket.lastSent['id'].stringOrNull, 'srq-4');
-    expect(socket.lastSent['result']['answer'].stringOrNull, 'main');
-    expect(socket.lastSent['method'].exists, isFalse);
-  });
+  test(
+    'a single server-request question is answered with a result frame',
+    () async {
+      const request = ClarifyRequest(
+        requestId: 'srq-4',
+        sessionId: 'run-1',
+        questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+      );
+      final result = await chat.answerClarify(
+        request,
+        request.questions.single,
+        'main',
+      );
+      expect(result.isOk, isTrue);
+      expect(socket.lastSent['id'].stringOrNull, 'srq-4');
+      expect(socket.lastSent['result']['answer'].stringOrNull, 'main');
+      expect(socket.lastSent['method'].exists, isFalse);
+    },
+  );
 
   test('a batch question is locked by its qid', () async {
     const request = ClarifyRequest(
@@ -364,24 +396,27 @@ void main() {
     expect((await future).isOk, isTrue);
   });
 
-  test('a legacy clarify uses clarify.respond without a made-up question id', () async {
-    const request = ClarifyRequest(
-      requestId: 'c-1',
-      sessionId: 'run-1',
-      questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
-    );
-    final future = chat.answerClarify(
-      request,
-      request.questions.single,
-      'main',
-    );
-    final sent = await answer({'status': 'ok'});
-    expect(sent['method'].stringOrNull, 'clarify.respond');
-    expect(sent['params']['request_id'].stringOrNull, 'c-1');
-    expect(sent['params']['answer'].stringOrNull, 'main');
-    expect(sent['params']['question_id'].exists, isFalse);
-    expect((await future).isOk, isTrue);
-  });
+  test(
+    'a legacy clarify uses clarify.respond without a made-up question id',
+    () async {
+      const request = ClarifyRequest(
+        requestId: 'c-1',
+        sessionId: 'run-1',
+        questions: [ClarifyQuestion(id: 'q0', text: 'Which?', synthetic: true)],
+      );
+      final future = chat.answerClarify(
+        request,
+        request.questions.single,
+        'main',
+      );
+      final sent = await answer({'status': 'ok'});
+      expect(sent['method'].stringOrNull, 'clarify.respond');
+      expect(sent['params']['request_id'].stringOrNull, 'c-1');
+      expect(sent['params']['answer'].stringOrNull, 'main');
+      expect(sent['params']['question_id'].exists, isFalse);
+      expect((await future).isOk, isTrue);
+    },
+  );
 
   group('models', () {
     test('options for the live session', () async {
@@ -453,7 +488,10 @@ void main() {
         ],
       });
       expect(asked['method'].stringOrNull, 'commands.catalog');
-      expect((await catalog).valueOrNull?.map((c) => c.name), ['/new', '/model']);
+      expect((await catalog).valueOrNull?.map((c) => c.name), [
+        '/new',
+        '/model',
+      ]);
 
       final run = chat.runSlash('run-1', '/usage');
       final sent = await answer({'type': 'exec', 'output': 'Tokens: 12k'});
@@ -465,42 +503,51 @@ void main() {
       expect(outcome.text, 'Tokens: 12k');
     });
 
-    test('a command slash.exec declines falls back to command.dispatch', () async {
-      final run = chat.runSlash('run-1', '/plan write the tests');
-      await Future<void>.delayed(Duration.zero);
-      socket.replyToLast(
-        error: {
-          'code': 4004,
-          'message': 'skill command: use command.dispatch for /plan',
-        },
-      );
-      final dispatched = await answer({
-        'type': 'send',
-        'message': 'Plan: write the tests',
-      });
-      expect(dispatched['method'].stringOrNull, 'command.dispatch');
-      expect(dispatched['params']['name'].stringOrNull, 'plan');
-      expect(dispatched['params']['arg'].stringOrNull, 'write the tests');
-      final outcome = (await run).valueOrNull!;
-      expect(outcome.kind, SlashKind.send);
-      expect(outcome.text, 'Plan: write the tests');
-    });
+    test(
+      'a command slash.exec declines falls back to command.dispatch',
+      () async {
+        final run = chat.runSlash('run-1', '/plan write the tests');
+        await Future<void>.delayed(Duration.zero);
+        socket.replyToLast(
+          error: {
+            'code': 4004,
+            'message': 'skill command: use command.dispatch for /plan',
+          },
+        );
+        final dispatched = await answer({
+          'type': 'send',
+          'message': 'Plan: write the tests',
+        });
+        expect(dispatched['method'].stringOrNull, 'command.dispatch');
+        expect(dispatched['params']['name'].stringOrNull, 'plan');
+        expect(dispatched['params']['arg'].stringOrNull, 'write the tests');
+        final outcome = (await run).valueOrNull!;
+        expect(outcome.kind, SlashKind.send);
+        expect(outcome.text, 'Plan: write the tests');
+      },
+    );
 
-    test('a slash command that fails without a gateway answer is not dispatched again', () async {
-      // Only a gateway rejection proves the command did not run. A timeout or
-      // a dropped socket may mean it is running, and dispatching it again
-      // could run it twice. A dropped socket takes the same path as a
-      // timeout, without a 30-second wait.
-      final first = socket;
-      final run = chat.runSlash('run-1', '/compress');
-      await Future<void>.delayed(Duration.zero);
-      await first.serverCloses();
-      final result = await run;
-      expect(result.failureOrNull?.kind, FailureKind.offline);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      final everything = [...first.sent, ...socket.sent];
-      expect(everything.where((frame) => frame.contains('command.dispatch')), isEmpty);
-    });
+    test(
+      'a slash command that fails without a gateway answer is not dispatched again',
+      () async {
+        // Only a gateway rejection proves the command did not run. A timeout or
+        // a dropped socket may mean it is running, and dispatching it again
+        // could run it twice. A dropped socket takes the same path as a
+        // timeout, without a 30-second wait.
+        final first = socket;
+        final run = chat.runSlash('run-1', '/compress');
+        await Future<void>.delayed(Duration.zero);
+        await first.serverCloses();
+        final result = await run;
+        expect(result.failureOrNull?.kind, FailureKind.offline);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final everything = [...first.sent, ...socket.sent];
+        expect(
+          everything.where((frame) => frame.contains('command.dispatch')),
+          isEmpty,
+        );
+      },
+    );
   });
 
   test('stream events and server requests arrive as chat events', () async {
@@ -554,28 +601,35 @@ void main() {
       expect((await rejected).valueOrNull, SteerOutcome.rejected);
     });
 
-    test('a sudo request is presented, not declined, and answered with a value', () async {
-      final asked = chat.events.firstWhere((e) => e is InputAsked);
-      socket.serverSends({
-        'jsonrpc': '2.0',
-        'id': 'srq-5',
-        'method': 'sudo',
-        'params': {'session_id': 'run-1', 'command': 'apt install jq'},
-      });
-      final event = await asked as InputAsked;
-      // Nothing was sent back: a decline would be an error frame.
-      expect(socket.sent.where((f) => f.contains('srq-5')), isEmpty);
+    test(
+      'a sudo request is presented, not declined, and answered with a value',
+      () async {
+        final asked = chat.events.firstWhere((e) => e is InputAsked);
+        socket.serverSends({
+          'jsonrpc': '2.0',
+          'id': 'srq-5',
+          'method': 'sudo',
+          'params': {'session_id': 'run-1', 'command': 'apt install jq'},
+        });
+        final event = await asked as InputAsked;
+        // Nothing was sent back: a decline would be an error frame.
+        expect(socket.sent.where((f) => f.contains('srq-5')), isEmpty);
 
-      expect((await chat.answerInput(event.request, 'hunter2')).isOk, isTrue);
-      final reply = socket.lastSent;
-      expect(reply['id'].string(), 'srq-5');
-      expect(reply['result']['value'].string(), 'hunter2');
-    });
+        expect((await chat.answerInput(event.request, 'hunter2')).isOk, isTrue);
+        final reply = socket.lastSent;
+        expect(reply['id'].string(), 'srq-5');
+        expect(reply['result']['value'].string(), 'hunter2');
+      },
+    );
 
     test('answering an input without a live socket fails offline', () async {
       // A session that was never started has no socket to answer on.
       final idleConnection = ServerConnection.create(
-        const ServerConfig(id: 'idle', baseUrl: 'https://h.example', label: 'H'),
+        const ServerConfig(
+          id: 'idle',
+          baseUrl: 'https://h.example',
+          label: 'H',
+        ),
         adapter: FakeHttp(),
       );
       final idleSession = DashboardSession(
@@ -589,7 +643,11 @@ void main() {
         idleConnection.close();
       });
       final result = await idle.answerInput(
-        const InputRequest(requestId: 'srq-1', sessionId: 'run-1', kind: InputKind.secret),
+        const InputRequest(
+          requestId: 'srq-1',
+          sessionId: 'run-1',
+          kind: InputKind.secret,
+        ),
         'value',
       );
       expect(result.failureOrNull?.kind, FailureKind.offline);
@@ -625,7 +683,12 @@ void main() {
       Map<String, String>? query;
       http.on('GET', '/api/profiles/sessions', (request) {
         query = request.uri.queryParameters;
-        return FakeReply.json({'sessions': [{'id': 'z', 'title': 'Old'}], 'total': 1});
+        return FakeReply.json({
+          'sessions': [
+            {'id': 'z', 'title': 'Old'},
+          ],
+          'total': 1,
+        });
       });
       final page = (await chat.archivedConversations(0)).valueOrNull!;
       expect(page.items.single.id, 'z');
@@ -639,7 +702,11 @@ void main() {
         query = request.uri.queryParameters;
         return FakeReply.json({
           'results': [
-            {'session_id': 'a', 'title': 'Deploy', 'snippet': '>>>deploy<<< it'},
+            {
+              'session_id': 'a',
+              'title': 'Deploy',
+              'snippet': '>>>deploy<<< it',
+            },
             {'session_id': 'a', 'title': 'Deploy', 'snippet': 'again'},
           ],
         });
@@ -659,7 +726,11 @@ void main() {
         'params': {
           'type': 'session.info',
           'session_id': 'run-1',
-          'payload': {'model': 'm', 'context_percent': 0.25, 'context_max': 400},
+          'payload': {
+            'model': 'm',
+            'context_percent': 0.25,
+            'context_max': 400,
+          },
         },
       });
       expect(((await context) as ContextChanged).usage.percent, 25);
@@ -672,6 +743,39 @@ void main() {
         'info': {'model': 'm', 'context_used': 30, 'context_max': 120},
       });
       expect((await resumed).valueOrNull?.context?.percent, 25);
+    });
+
+    test(
+      'a resume that carries a pending connection re-announces it',
+      () async {
+        final pending = chat.resume('stored-1');
+        await answer({
+          'session_id': 'run-1',
+          'info': <String, Object?>{},
+          'pending_connection': {
+            'op_id': 'op9',
+            'timeout_seconds': 60,
+            'targets': [
+              {
+                'name': 'Linear',
+                'kind': 'connector',
+                'action': 'authorize',
+                'state': 'pending',
+              },
+            ],
+          },
+        });
+        final resumed = (await pending).valueOrNull!;
+        final asked = resumed.pending.whereType<ConnectionAsked>().single;
+        expect(asked.request.opId, 'op9');
+        expect(asked.request.sessionId, 'run-1');
+      },
+    );
+
+    test('a resume without a pending connection adds nothing', () async {
+      final pending = chat.resume('stored-1');
+      await answer({'session_id': 'run-1', 'info': <String, Object?>{}});
+      expect((await pending).valueOrNull!.pending, isEmpty);
     });
   });
 
@@ -689,8 +793,13 @@ void main() {
     });
 
     test('an error field is a failure in Hermes words', () async {
-      http.on('POST', '/api/audio/transcribe',
-          (_) => FakeReply.json({'error': 'No speech-to-text provider is configured'}));
+      http.on(
+        'POST',
+        '/api/audio/transcribe',
+        (_) => FakeReply.json({
+          'error': 'No speech-to-text provider is configured',
+        }),
+      );
       final result = await chat.transcribe(Uint8List(1));
       expect(result.failureOrNull?.message, contains('speech-to-text'));
     });
@@ -706,5 +815,256 @@ void main() {
       await named.transcribe(Uint8List(1));
       expect(query?['profile'], 'work');
     });
+  });
+
+  group('Phase 6 calls', () {
+    test('delete is a REST DELETE, scoped to the profile', () async {
+      Uri? seen;
+      String? method;
+      http.on('DELETE', '/api/sessions/abc', (request) {
+        seen = request.uri;
+        method = request.method;
+        return FakeReply.json({'deleted': 'abc'});
+      });
+      expect((await chat.delete('abc')).isOk, isTrue);
+      expect(method, 'DELETE');
+      expect(
+        seen?.queryParameters,
+        isEmpty,
+        reason: 'the default profile is implicit',
+      );
+    });
+
+    test('a named profile is sent with the delete', () async {
+      Uri? seen;
+      http.on('DELETE', '/api/sessions/abc', (request) {
+        seen = request.uri;
+        return FakeReply.json({'deleted': 'abc'});
+      });
+      final named = DashboardChat(session, profile: 'ananta');
+      addTearDown(named.dispose);
+      await named.delete('abc');
+      expect(seen?.queryParameters['profile'], 'ananta');
+    });
+
+    test('undo returns how many messages were removed', () async {
+      final pending = chat.undo('run-1');
+      final sent = await answer({'removed': 2});
+      expect(sent['method'].string(), 'session.undo');
+      expect(sent['params']['session_id'].string(), 'run-1');
+      expect((await pending).valueOrNull, 2);
+    });
+
+    test(
+      'branchWhole copies a stored parent and returns the child ids',
+      () async {
+        final pending = chat.branchWhole('parent-1');
+        final sent = await answer({
+          'session_id': 'run-9',
+          'stored_session_id': 'stored-9',
+        });
+        expect(sent['method'].string(), 'session.branch_stored');
+        expect(sent['params']['parent_session_id'].string(), 'parent-1');
+        final child = (await pending).valueOrNull!;
+        expect(child.runtimeId, 'run-9');
+        expect(child.storedId, 'stored-9');
+      },
+    );
+
+    test('branchFrom seeds a new session with the prefix', () async {
+      final pending = chat.branchFrom('parent-1', const [
+        SeedMessage('user', 'hi'),
+        SeedMessage('assistant', 'hello'),
+      ], title: 'Branch of x');
+      final sent = await answer({
+        'session_id': 'run-9',
+        'stored_session_id': 'stored-9',
+      });
+      expect(sent['method'].string(), 'session.create');
+      expect(sent['params']['parent_session_id'].string(), 'parent-1');
+      expect(sent['params']['title'].string(), 'Branch of x');
+      expect(sent['params']['messages'].list.map((m) => m['role'].string()), [
+        'user',
+        'assistant',
+      ]);
+      expect((await pending).valueOrNull?.storedId, 'stored-9');
+    });
+
+    test('compress asks the session to summarise itself', () async {
+      final pending = chat.compress('run-1');
+      final sent = await answer({'status': 'ok'});
+      expect(sent['method'].string(), 'session.compress');
+      expect((await pending).isOk, isTrue);
+    });
+
+    test('submit reports what Hermes did with a busy message', () async {
+      final pending = chat.submit('run-1', 'later', queued: true);
+      final sent = await answer({'status': 'queued'});
+      expect(sent['params']['queued'].boolean(), isTrue);
+      expect((await pending).valueOrNull, SubmitOutcome.queued);
+    });
+
+    test('an ordinary submit does not send the queued flag', () async {
+      final pending = chat.submit('run-1', 'now');
+      final sent = await answer({'status': 'streaming'});
+      expect(sent['params']['queued'].exists, isFalse);
+      expect((await pending).valueOrNull, SubmitOutcome.started);
+    });
+
+    test('the busy mode is read with status and written by name', () async {
+      final read = chat.busyMode();
+      var sent = await answer({'value': 'queue'});
+      expect(sent['params']['key'].string(), 'busy');
+      expect(sent['params']['value'].string(), 'status');
+      expect((await read).valueOrNull, BusyMode.queue);
+
+      final write = chat.setBusyMode(BusyMode.steer);
+      sent = await answer({'value': 'steer'});
+      expect(sent['params']['value'].string(), 'steer');
+      expect((await write).isOk, isTrue);
+    });
+
+    test('reasoning and fast are session-scoped config', () async {
+      final effort = chat.setReasoning('run-1', ReasoningEffort.high);
+      var sent = await answer({'value': 'high'});
+      expect(sent['params']['key'].string(), 'reasoning');
+      expect(sent['params']['session_id'].string(), 'run-1');
+      expect(sent['params']['value'].string(), 'high');
+      await effort;
+
+      final fast = chat.setFast('run-1', fast: true);
+      sent = await answer({'value': 'fast'});
+      expect(sent['params']['key'].string(), 'fast');
+      expect(sent['params']['value'].string(), 'fast');
+      await fast;
+    });
+
+    test(
+      'a login is answered with a JSON value on the request frame',
+      () async {
+        const login = LoginRequest(
+          requestId: 'srq-3',
+          sessionId: 'run-1',
+          origin: 'https://github.com',
+        );
+        final result = await chat.answerLogin(
+          login,
+          identifier: 'jamie@hermes.dev',
+          password: 'hunter2',
+        );
+        expect(result.isOk, isTrue);
+        final reply = socket.lastSent;
+        expect(reply['id'].string(), 'srq-3');
+        final value = Json.decode(reply['result']['value'].string());
+        expect(value['identifier'].string(), 'jamie@hermes.dev');
+        expect(value['password'].string(), 'hunter2');
+      },
+    );
+
+    test('skipping a login sends an empty value, not an empty login', () async {
+      const login = LoginRequest(
+        requestId: 'srq-3',
+        sessionId: 'run-1',
+        origin: 'https://github.com',
+      );
+      await chat.answerLogin(login, identifier: '', password: '');
+      expect(socket.lastSent['result']['value'].string(), '');
+    });
+
+    test(
+      'a connection answer names the owner session and each target',
+      () async {
+        final request = ConnectionRequest.parse(
+          Json.of({'op_id': 'op1', 'timeout_seconds': 60}),
+          sessionId: 'run-1',
+        )!;
+        final pending = chat.answerConnection(request, const [
+          TargetAnswer.approved('GitHub', env: {'GITHUB_TOKEN': 'ghp_x'}),
+          TargetAnswer.skipped('Linear'),
+        ], settle: true);
+        final sent = await answer({'status': 'ok', 'settled': true});
+        final params = sent['params'];
+        expect(sent['method'].string(), 'connection.respond');
+        expect(params['owner']['type'].string(), 'session');
+        expect(params['owner']['session_id'].string(), 'run-1');
+        expect(params['op_id'].string(), 'op1');
+        expect(params['result']['settled_by'].string(), 'continue');
+        expect(
+          params['result']['targets'].list.map((t) => t['status'].string()),
+          ['approved', 'skipped'],
+        );
+        expect(
+          params['result']['targets'].list.first['env']['GITHUB_TOKEN']
+              .string(),
+          'ghp_x',
+        );
+        expect((await pending).isOk, isTrue);
+      },
+    );
+
+    test('active sessions list the replying ones', () async {
+      final pending = chat.activeSessions();
+      await answer({
+        'sessions': [
+          {'id': 'r1', 'session_key': 's1', 'status': 'working'},
+          {'id': 'r2', 'session_key': 's2', 'status': 'idle'},
+          {'status': 'working'},
+        ],
+      });
+      final rows = (await pending).valueOrNull!;
+      expect(rows.map((r) => r.storedId), [
+        's1',
+        's2',
+      ], reason: 'a row without an id is dropped');
+      expect(rows.where((r) => r.replying).map((r) => r.storedId), ['s1']);
+    });
+
+    test('the dashboard events stream carries the new events', () async {
+      final events = <ChatEvent>[];
+      final sub = chat.events.listen(events.add);
+      addTearDown(sub.cancel);
+      socket.pushRequest('srq-5', 'vault.unlock_prompt', {
+        'session_id': 'run-1',
+        'display_name': '1Password',
+      });
+      socket.pushEvent('session.info', 'run-1', {'reasoning_effort': 'low'});
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        events.whereType<InputAsked>().single.request.kind,
+        InputKind.vaultUnlock,
+      );
+      expect(
+        events.whereType<SessionInfoChanged>().single.effort,
+        ReasoningEffort.low,
+      );
+    });
+  });
+
+  test('one conversation is read by id, scoped to the profile', () async {
+    http.on(
+      'GET',
+      '/api/sessions/abc',
+      (_) => FakeReply.json({
+        'id': 'abc',
+        'title': 'Old notes',
+        'message_count': 3,
+      }),
+    );
+    final row = (await chat.conversation('abc')).valueOrNull!;
+    expect(row.id, 'abc');
+    expect(row.title, 'Old notes');
+    expect(row.messageCount, 3);
+  });
+
+  test('a conversation that is gone is a notFound failure', () async {
+    http.on(
+      'GET',
+      '/api/sessions/gone',
+      (_) => FakeReply.json({'detail': 'not found'}, status: 404),
+    );
+    expect(
+      (await chat.conversation('gone')).failureOrNull?.kind,
+      FailureKind.notFound,
+    );
   });
 }

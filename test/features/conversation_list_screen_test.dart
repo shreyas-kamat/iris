@@ -6,13 +6,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/device_state.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
+import 'package:iris/design/theme/iris_theme.dart';
+import 'package:iris/design/tokens/palette.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
 import 'package:iris/features/home/link_status_screen.dart';
@@ -30,6 +34,7 @@ void main() {
     List<ConversationSummary> conversations, {
     int? total,
     List<AgentProfile> profiles = const [],
+    List<Override> overrides = const [],
   }) => ProviderScope(
     overrides: [
       activeServerProvider.overrideWithValue(
@@ -50,12 +55,33 @@ void main() {
         ),
       ),
       profilesProvider.overrideWith((ref) async => profiles),
+      ...overrides,
     ],
     child: themed(const ConversationListScreen()),
   );
 
   Future<void> settle(WidgetTester tester) =>
       tester.pump(const Duration(milliseconds: 50));
+
+  testWidgets('the archive toast stays five seconds', (tester) async {
+    await tester.pumpWidget(
+      home(const [
+        ConversationSummary(id: 'stored-1', title: 'Weekly planning'),
+      ]),
+    );
+    await settle(tester);
+    await tester.longPress(find.text('Weekly planning'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    // "Undo" is the toast's own action; the word "Archived" is also a list row.
+    await tester.pump(const Duration(milliseconds: 4200));
+    expect(find.text('Undo'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1000));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Undo'), findsNothing);
+  });
 
   testWidgets('the header names the server and the link', (tester) async {
     await tester.pumpWidget(home(const []));
@@ -373,6 +399,9 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Archive'));
         await tester.pumpAndSettle();
+        // The archive toast is over the lower rows of the next menu (it is
+        // taller now, with a Delete row); let the toast go first.
+        await tester.pump(const Duration(seconds: 6));
         await tester.longPress(find.text('Plan the week'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Rename'));
@@ -522,7 +551,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
       expect(find.text('Old one'), findsNothing);
-      expect(find.text('No matches'), findsOneWidget);
+      expect(find.text('No chats mention \u2018old\u2019.'), findsOneWidget);
     });
 
     testWidgets('a failed server search keeps the local matches', (
@@ -600,4 +629,408 @@ void main() {
     expect(localMatches(rows, 'the b').map((r) => r.id), ['a']);
     expect(localMatches(rows, '  '), rows);
   });
+
+  Future<void> openDelete(WidgetTester tester) async {
+    await tester.pumpWidget(
+      home(const [
+        ConversationSummary(id: 'stored-1', title: 'Weekly planning'),
+      ]),
+    );
+    await settle(tester);
+    await tester.longPress(find.text('Weekly planning'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'long-press, Delete, confirm removes the row and tells the server',
+    (tester) async {
+      await openDelete(tester);
+      // The confirm sheet's button is now the only "Delete" on screen.
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(backend.deletes, ['stored-1']);
+      expect(find.text('Weekly planning'), findsNothing);
+    },
+  );
+
+  testWidgets('a live chat refuses to delete and the row stays', (
+    tester,
+  ) async {
+    backend.deleteResult = const Err(
+      IrisFailure(
+        FailureKind.rejected,
+        message: 'cannot delete an active session',
+      ),
+    );
+    await openDelete(tester);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Weekly planning'), findsOneWidget);
+    expect(
+      find.text('Stop the reply before deleting this chat.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'a chat home knows is replying is not deleted, even if the server would',
+    (tester) async {
+      // The user's server accepts a REST delete of a live chat.
+      backend.activeResult = const Ok([
+        LiveStatus(runtimeId: 'run-1', storedId: 'stored-1', status: 'working'),
+      ]);
+      await openDelete(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(backend.deletes, isEmpty);
+      expect(find.text('Weekly planning'), findsWidgets);
+      expect(
+        find.text('Stop the reply before deleting this chat.'),
+        findsOneWidget,
+      );
+      expect(find.text('Open'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    },
+  );
+
+  testWidgets('cancelling the confirm deletes nothing', (tester) async {
+    await openDelete(tester);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(backend.deletes, isEmpty);
+    expect(find.text('Weekly planning'), findsOneWidget);
+  });
+
+  const twoChats = [
+    ConversationSummary(id: 'stored-1', title: 'Weekly planning'),
+    ConversationSummary(id: 'stored-2', title: 'Runbook'),
+  ];
+
+  testWidgets('Pinned sits above Recent and is hidden when nothing is pinned', (
+    tester,
+  ) async {
+    await tester.pumpWidget(home(twoChats));
+    await settle(tester);
+    expect(find.text('PINNED'), findsNothing);
+    await tester.longPress(find.text('Runbook'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pin'));
+    await tester.pumpAndSettle();
+    expect(find.text('PINNED'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('PINNED')).dy,
+      lessThan(tester.getTopLeft(find.text('RECENT')).dy),
+    );
+    expect(
+      find.text('Runbook'),
+      findsOneWidget,
+      reason: 'listed once, not twice',
+    );
+  });
+
+  testWidgets(
+    'the menu offers Unpin for a pinned chat, and unpinning hides the section',
+    (tester) async {
+      await tester.pumpWidget(
+        home(
+          twoChats,
+          overrides: [
+            pinsProvider.overrideWith(() => _PinnedAlready(['stored-2'])),
+          ],
+        ),
+      );
+      await settle(tester);
+      expect(find.text('PINNED'), findsOneWidget);
+      await tester.longPress(find.text('Runbook'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pin'), findsNothing);
+      await tester.tap(find.text('Unpin'));
+      await tester.pumpAndSettle();
+      expect(find.text('PINNED'), findsNothing);
+    },
+  );
+
+  testWidgets('replying chats show in Live with a state chip', (tester) async {
+    await tester.pumpWidget(
+      home(
+        twoChats,
+        overrides: [
+          liveChatsProvider.overrideWith(
+            (ref) => Stream.value({
+              'stored-1': const LiveStatus(
+                runtimeId: 'r1',
+                storedId: 'stored-1',
+                status: 'working',
+              ),
+            }),
+          ),
+        ],
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    expect(find.text('LIVE'), findsOneWidget);
+    expect(find.text('REPLYING'), findsOneWidget);
+  });
+
+  testWidgets(
+    'a pin on a chat outside the loaded page is read once and shown',
+    (tester) async {
+      backend.conversationResult = const Ok(
+        ConversationSummary(id: 'old-1', title: 'Old notes'),
+      );
+      await tester.pumpWidget(
+        home(
+          twoChats,
+          overrides: [
+            pinsProvider.overrideWith(() => _PinnedAlready(['old-1'])),
+          ],
+        ),
+      );
+      await settle(tester);
+      await settle(tester);
+      expect(backend.conversationReads, ['old-1']);
+      expect(find.text('Old notes'), findsOneWidget);
+      expect(find.text('PINNED'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a pin on a chat that no longer exists is dropped quietly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      home(
+        twoChats,
+        overrides: [
+          pinsProvider.overrideWith(() => _PinnedAlready(['gone-1'])),
+        ],
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    expect(backend.conversationReads, ['gone-1']);
+    expect(find.text('PINNED'), findsNothing);
+  });
+
+  testWidgets(
+    'Branch from the menu copies the chat, remembers the parent and opens the child',
+    (tester) async {
+      await tester.pumpWidget(
+        home(const [
+          ConversationSummary(id: 'stored-1', title: 'Weekly planning'),
+        ]),
+      );
+      await settle(tester);
+      await tester.longPress(find.text('Weekly planning'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Branch'));
+      await tester.pumpAndSettle();
+      expect(backend.branches, ['stored-1']);
+      expect(find.textContaining('Branched from'), findsOneWidget);
+    },
+  );
+
+  group('search results', () {
+    const threeChats = [
+      ConversationSummary(id: 'a', title: 'Nightly backup to cold storage'),
+      ConversationSummary(id: 'b', title: 'Investigate worker heartbeat gaps'),
+      ConversationSummary(id: 'c', title: 'Hermes server runbook'),
+    ];
+
+    List<SearchHit> threeHits() => [
+      SearchHit(
+        storedId: 'a',
+        title: 'Nightly backup to cold storage',
+        matches: 4,
+        lastActive: DateTime.now(),
+        snippet: const [
+          SnippetRun('…the '),
+          SnippetRun('backup', matched: true),
+          SnippetRun(' at 02:00 saturates the disk…'),
+        ],
+      ),
+      SearchHit(
+        storedId: 'b',
+        title: 'Investigate worker heartbeat gaps',
+        matches: 2,
+        lastActive: DateTime.now(),
+        snippet: const [
+          SnippetRun('move the '),
+          SnippetRun('backup', matched: true),
+          SnippetRun(' to 04:30'),
+        ],
+      ),
+      SearchHit(
+        storedId: 'c',
+        title: 'Hermes server runbook',
+        lastActive: DateTime.now(),
+        snippet: const [
+          SnippetRun('Restore from the cold '),
+          SnippetRun('backup', matched: true),
+        ],
+      ),
+    ];
+
+    /// Types [query] and lets the 200 ms debounce and the server answer land.
+    Future<void> type(WidgetTester tester, String query) async {
+      await tester.enterText(find.byType(EditableText), query);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    bool marked(InlineSpan span, Color color) {
+      var found = false;
+      span.visitChildren((s) {
+        if (s is TextSpan && s.style?.backgroundColor == color) found = true;
+        return true;
+      });
+      return found;
+    }
+
+    testWidgets(
+      'results are headed by chats and matches, with each hit’s own count',
+      (tester) async {
+        backend.searchResult = Ok(threeHits());
+        await tester.pumpWidget(home(threeChats));
+        await settle(tester);
+        await type(tester, 'backup');
+        expect(find.text('3 CHATS · 7 MATCHES'), findsOneWidget);
+        expect(find.textContaining('4 matches'), findsOneWidget);
+        expect(find.textContaining('1 match'), findsOneWidget);
+      },
+    );
+
+    testWidgets('matched words are highlighted in the snippet', (tester) async {
+      backend.searchResult = Ok(threeHits());
+      await tester.pumpWidget(home(threeChats));
+      await settle(tester);
+      await type(tester, 'backup');
+      final quiet = IrisThemeData(
+        skin: IrisSkin.aperture,
+        isDark: true,
+      ).palette.accentQuiet;
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Text && w.textSpan != null && marked(w.textSpan!, quiet),
+        ),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('an empty focused field shows recent searches, newest first', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        home(
+          threeChats,
+          overrides: [
+            recentSearchesProvider.overrideWith(
+              () => _RecentAlready(['heartbeat', 'passkey']),
+            ),
+          ],
+        ),
+      );
+      await settle(tester);
+      await tester.tap(find.byType(EditableText));
+      await tester.pumpAndSettle();
+      expect(find.text('RECENT SEARCHES'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('heartbeat')).dx,
+        lessThan(tester.getTopLeft(find.text('passkey')).dx),
+      );
+      await tester.tap(find.text('passkey'));
+      await tester.pump();
+      expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+        'passkey',
+      );
+    });
+
+    testWidgets('Clear forgets the recent searches', (tester) async {
+      await tester.pumpWidget(
+        home(
+          threeChats,
+          overrides: [
+            recentSearchesProvider.overrideWith(
+              () => _RecentAlready(['heartbeat']),
+            ),
+          ],
+        ),
+      );
+      await settle(tester);
+      await tester.tap(find.byType(EditableText));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+      expect(find.text('heartbeat'), findsNothing);
+    });
+
+    testWidgets(
+      'a search that finds nothing says what was searched and how to retry',
+      (tester) async {
+        backend.searchResult = const Ok([]);
+        await tester.pumpWidget(home(threeChats));
+        await settle(tester);
+        await type(tester, 'kubernetes');
+        expect(
+          find.text('No chats mention \u2018kubernetes\u2019.'),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Try fewer words or a different spelling.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('a search that found something is remembered once', (
+      tester,
+    ) async {
+      backend.searchResult = Ok(threeHits());
+      await tester.pumpWidget(home(threeChats));
+      await settle(tester);
+      await type(tester, 'backup');
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ConversationListScreen)),
+      );
+      expect(container.read(recentSearchesProvider), ['backup']);
+      await type(tester, '');
+      await type(tester, 'backup');
+      expect(container.read(recentSearchesProvider), ['backup']);
+    });
+
+    testWidgets('a search that found nothing is not remembered', (
+      tester,
+    ) async {
+      backend.searchResult = const Ok([]);
+      await tester.pumpWidget(home(threeChats));
+      await settle(tester);
+      await type(tester, 'kubernetes');
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ConversationListScreen)),
+      );
+      expect(container.read(recentSearchesProvider), isEmpty);
+    });
+  });
+}
+
+class _PinnedAlready extends Pins {
+  _PinnedAlready(this.ids);
+
+  final List<String> ids;
+
+  @override
+  List<String> build() => ids;
+}
+
+class _RecentAlready extends RecentSearches {
+  _RecentAlready(this.queries);
+
+  final List<String> queries;
+
+  @override
+  List<String> build() => queries;
 }

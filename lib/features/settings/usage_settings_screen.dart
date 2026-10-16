@@ -155,18 +155,16 @@ class UsageSettingsScreen extends ConsumerWidget {
                 IrisSettingsRow(
                   label: 'Main',
                   value: _nameOf(selection.first, options),
-                  onTap: () => unawaited(
-                    pick(0, allowProfile: true, allowNone: false),
-                  ),
+                  onTap: () =>
+                      unawaited(pick(0, allowProfile: true, allowNone: false)),
                 ),
                 IrisSettingsRow(
                   label: 'Secondary',
                   value: selection.length > 1
                       ? _nameOf(selection[1], options)
                       : 'None',
-                  onTap: () => unawaited(
-                    pick(1, allowProfile: true, allowNone: true),
-                  ),
+                  onTap: () =>
+                      unawaited(pick(1, allowProfile: true, allowNone: true)),
                 ),
               ],
             ),
@@ -185,8 +183,7 @@ class UsageSettingsScreen extends ConsumerWidget {
                                 unawaited(IrisHaptics.selection());
                                 replaceAt(i + 2, null);
                               },
-                              semanticLabel:
-                                  'Remove ${_nameOf(slug, options)}',
+                              semanticLabel: 'Remove ${_nameOf(slug, options)}',
                               child: Icon(
                                 Icons.remove_circle_outline,
                                 size: IrisSize.icon,
@@ -207,6 +204,15 @@ class UsageSettingsScreen extends ConsumerWidget {
                       ],
                     ),
             ),
+            if (reporting.isNotEmpty) ...[
+              const SizedBox(height: IrisSpace.md),
+              Text(
+                'Limits come from each provider.',
+                style: theme.typography.caption.copyWith(
+                  color: theme.palette.inkMuted,
+                ),
+              ),
+            ],
             if (reporting.isEmpty) ...[
               const SizedBox(height: IrisSpace.md),
               Text(

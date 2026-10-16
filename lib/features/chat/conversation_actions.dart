@@ -6,17 +6,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../design/components/controls.dart';
+import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 
-enum ConversationAction { rename, archive }
+enum ConversationAction { pin, rename, branch, archive, delete }
 
 Future<ConversationAction?> showConversationActions(
   BuildContext context,
-  String title,
-) {
+  String title, {
+  required bool pinned,
+}) {
   unawaited(IrisHaptics.selection());
   return showIrisSheet<ConversationAction>(
     context: context,
@@ -26,6 +28,16 @@ Future<ConversationAction?> showConversationActions(
         title: title,
         child: Column(
           children: [
+            IrisListRow(
+              title: pinned ? 'Unpin' : 'Pin',
+              leading: Icon(
+                pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                size: IrisSize.icon,
+                color: palette.inkMuted,
+              ),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ConversationAction.pin),
+            ),
             IrisListRow(
               title: 'Rename',
               leading: Icon(
@@ -37,6 +49,17 @@ Future<ConversationAction?> showConversationActions(
                   Navigator.of(sheetContext).pop(ConversationAction.rename),
             ),
             IrisListRow(
+              title: 'Branch',
+              subtitle: 'Copy it into a new chat.',
+              leading: Icon(
+                Icons.call_split,
+                size: IrisSize.icon,
+                color: palette.inkMuted,
+              ),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ConversationAction.branch),
+            ),
+            IrisListRow(
               title: 'Archive',
               subtitle: 'Hide it from home. You can bring it back.',
               leading: Icon(
@@ -46,6 +69,17 @@ Future<ConversationAction?> showConversationActions(
               ),
               onTap: () =>
                   Navigator.of(sheetContext).pop(ConversationAction.archive),
+            ),
+            const IrisDivider(),
+            IrisListRow(
+              title: 'Delete',
+              leading: Icon(
+                Icons.delete_outline,
+                size: IrisSize.icon,
+                color: palette.danger,
+              ),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ConversationAction.delete),
             ),
           ],
         ),
@@ -84,16 +118,28 @@ class _RenameSheetState extends State<_RenameSheet> {
     super.dispose();
   }
 
-  void _save() {
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _canSave {
     final title = _text.text.trim();
-    Navigator.of(
-      context,
-    ).pop(title.isEmpty || title == widget.current ? null : title);
+    return title.isNotEmpty && title != widget.current;
+  }
+
+  void _save() {
+    if (_canSave) Navigator.of(context).pop(_text.text.trim());
   }
 
   @override
   Widget build(BuildContext context) => IrisSheet(
-    title: 'Rename',
+    title: 'Rename chat',
     actions: IrisSheetActions(
       secondary: IrisButton(
         label: 'Cancel',
@@ -102,7 +148,7 @@ class _RenameSheetState extends State<_RenameSheet> {
       primary: IrisButton(
         label: 'Save',
         tone: IrisButtonTone.primary,
-        onPressed: _save,
+        onPressed: _canSave ? _save : null,
       ),
     ),
     child: IrisField(
@@ -110,6 +156,17 @@ class _RenameSheetState extends State<_RenameSheet> {
       hint: 'Title',
       autofocus: true,
       onSubmitted: (_) => _save(),
+      trailing: _text.text.isEmpty
+          ? null
+          : IrisPressable(
+              onTap: _text.clear,
+              semanticLabel: 'Clear',
+              child: Icon(
+                Icons.close,
+                size: 18,
+                color: context.palette.inkMuted,
+              ),
+            ),
     ),
   );
 }

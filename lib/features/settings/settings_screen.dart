@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../app/theme_controller.dart';
 import '../../app/usage.dart';
+import '../../core/result.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/net/capabilities.dart';
 import '../../data/rpc/dashboard_session.dart';
@@ -22,12 +23,15 @@ import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/settings_list.dart';
 import '../../design/components/sheet.dart';
+import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
+import '../chat/busy_setting.dart';
+import '../chat/chat_controller.dart';
 import '../chat/links.dart';
 import '../chat/profile_picker.dart';
 import '../home/link_status_screen.dart';
@@ -126,6 +130,13 @@ class SettingsScreen extends ConsumerWidget {
                   label: 'Default model',
                   value: activeProfile?.model ?? '—',
                 ),
+                if (ref.watch(busyModeProvider).value case final mode?)
+                  IrisSettingsRow(
+                    label: 'While Hermes is replying',
+                    sub: 'What sending does mid-reply',
+                    value: mode.label,
+                    onTap: () => unawaited(_pickBusy(context, ref, mode)),
+                  ),
               ],
             ),
             const SizedBox(height: 22),
@@ -239,6 +250,39 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Picks what sending does mid-reply and saves it to the server. A failed
+  /// save leaves the old value showing.
+  static Future<void> _pickBusy(
+    BuildContext context,
+    WidgetRef ref,
+    BusyMode current,
+  ) async {
+    final host =
+        Uri.tryParse(ref.read(activeServerProvider)?.baseUrl ?? '')?.host ?? '';
+    final profile = ref.read(activeProfileProvider);
+    final picked = await showBusyPicker(
+      context,
+      current: current,
+      profile: profile.isEmpty
+          ? profile
+          : '${profile[0].toUpperCase()}${profile.substring(1)}',
+      host: host,
+    );
+    if (picked == null || picked == current || !context.mounted) return;
+    final chat = await ref.read(activeChatProvider.future);
+    if (chat == null) return;
+    final result = await chat.setBusyMode(picked);
+    if (!context.mounted) return;
+    if (result case Err(:final failure)) {
+      showIrisToast(
+        context,
+        message: 'Could not change that: ${ChatController.describe(failure)}',
+      );
+      return;
+    }
+    ref.invalidate(busyModeProvider);
   }
 
   /// Lets the person pick a skin. Choosing one applies it straight away and

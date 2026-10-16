@@ -60,6 +60,11 @@ class UsageStrip extends ConsumerWidget {
   }
 }
 
+/// Meters are the accent; they turn needs-you only when the person has to
+/// act, from 85% used.
+Color _meterTint(IrisPalette palette, double usedPercent) =>
+    usedPercent >= 85 ? palette.colorFor(AgentState.waiting) : palette.accent;
+
 /// "73% used · resets in 2h 36m": what is used, and when it comes back.
 String _caption(UsageWindow window, DateTime now) {
   final used = '${window.usedPercent.round()}% used';
@@ -148,6 +153,14 @@ class _ProviderRowState extends State<_ProviderRow>
           _WindowLine(window: window, now: widget.now),
       ],
     ];
+    // Placed in whichever header layout the text size calls for.
+    final chevron = SpringBuilder(
+      value: _open ? .5 : 0,
+      spring: IrisSprings.snappy,
+      builder: (context, turns, child) =>
+          Transform.rotate(angle: turns * 2 * math.pi, child: child),
+      child: Icon(Icons.keyboard_arrow_down, size: 16, color: palette.inkMuted),
+    );
     return IrisPressable(
       onTap: _toggle,
       semanticLabel:
@@ -157,35 +170,59 @@ class _ProviderRowState extends State<_ProviderRow>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
+            // At a large text size the name and the figure each take a line
+            // rather than squeezing the name to one letter.
+            if (MediaQuery.textScalerOf(context).scale(14) > 21)
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: IrisSpace.xs,
+                children: [
+                  Text(
                     widget.row.name,
                     style: type.body.copyWith(fontSize: 14, color: palette.ink),
                   ),
-                ),
-                if (tightest != null)
-                  _UsedCaption(window: tightest, now: widget.now),
-                const SizedBox(width: IrisSpace.xs),
-                SpringBuilder(
-                  value: _open ? .5 : 0,
-                  spring: IrisSprings.snappy,
-                  builder: (context, turns, child) => Transform.rotate(
-                    angle: turns * 2 * math.pi,
-                    child: child,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (tightest != null)
+                        Flexible(
+                          child: _UsedCaption(
+                            window: tightest,
+                            now: widget.now,
+                          ),
+                        ),
+                      const SizedBox(width: IrisSpace.xs),
+                      chevron,
+                    ],
                   ),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 16,
-                    color: palette.inkMuted,
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.row.name,
+                      style: type.body.copyWith(
+                        fontSize: 14,
+                        color: palette.ink,
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  if (tightest != null)
+                    _UsedCaption(window: tightest, now: widget.now),
+                  const SizedBox(width: IrisSpace.xs),
+                  chevron,
+                ],
+              ),
             if (tightest != null) ...[
               const SizedBox(height: IrisSpace.sm),
-              IrisGauge(value: tightest.usedPercent / 100, width: null),
+              IrisGauge(
+                value: tightest.usedPercent / 100,
+                width: null,
+                tint: _meterTint(palette, tightest.usedPercent),
+              ),
             ],
             IrisAnimatedSize(
               child: _open && details.isNotEmpty
@@ -228,7 +265,12 @@ class _UsedCaption extends StatelessWidget {
             style: TextStyle(color: palette.ink, fontWeight: FontWeight.w500),
           ),
           if (reset != null)
-            TextSpan(text: ' · resets ${timeUntil(reset, now)}'),
+            TextSpan(
+              text: ' · resets ${timeUntil(reset, now)}',
+              style: window.usedPercent >= 85
+                  ? TextStyle(color: palette.colorFor(AgentState.waiting))
+                  : null,
+            ),
         ],
       ),
       style: type.caption.copyWith(color: palette.inkMuted),
@@ -261,12 +303,20 @@ class _WindowLine extends StatelessWidget {
               ),
               Text(
                 _caption(window, now),
-                style: type.caption.copyWith(color: palette.inkMuted),
+                style: type.caption.copyWith(
+                  color: window.usedPercent >= 85
+                      ? palette.colorFor(AgentState.waiting)
+                      : palette.inkMuted,
+                ),
               ),
             ],
           ),
           const SizedBox(height: IrisSpace.xs),
-          IrisGauge(value: window.usedPercent / 100, width: null),
+          IrisGauge(
+            value: window.usedPercent / 100,
+            width: null,
+            tint: _meterTint(palette, window.usedPercent),
+          ),
         ],
       ),
     );

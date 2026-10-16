@@ -9,6 +9,7 @@ library;
 import '../../core/json.dart';
 import '../rpc/rpc_frame.dart';
 import 'chat_models.dart';
+import 'connection_models.dart';
 import 'history_parser.dart';
 import 'usage_parser.dart';
 
@@ -123,6 +124,21 @@ sealed class ChatEvent {
                 model: model,
                 provider: HistoryParser.firstText(payload, const ['provider']),
               );
+      case 'connection.request':
+        final asked = ConnectionRequest.parse(payload, sessionId: session);
+        return asked == null ? null : ConnectionAsked(asked);
+      case 'connection.update':
+        final opId = payload['op_id'].stringOrNull?.trim();
+        if (opId == null || opId.isEmpty) return null;
+        return ConnectionChanged(
+          session,
+          opId: opId,
+          targets: [
+            for (final row in payload['targets'].list)
+              ?ConnectionTarget.parse(row),
+          ],
+          settled: payload['settled'].boolean(),
+        );
       default:
         return null;
     }
@@ -146,9 +162,12 @@ sealed class ChatEvent {
           requestId: request.id,
         );
         return clarify == null ? null : ClarifyAsked(clarify);
-      case 'sudo' || 'secret':
+      case 'sudo' || 'secret' || 'vault.unlock_prompt' || 'vault.code':
         final input = parseInput(request);
         return input == null ? null : InputAsked(input);
+      case 'vault.save_login':
+        final login = parseLogin(request);
+        return login == null ? null : LoginAsked(login);
       default:
         return null;
     }
@@ -165,8 +184,8 @@ sealed class ChatEvent {
     return usage == null ? null : ContextChanged(event.sessionId ?? '', usage);
   }
 
-  /// A sudo or secret request. Null without a session, which nothing could
-  /// answer.
+  /// A sudo, secret or password-manager request. Null without a session,
+  /// which nothing could answer.
   static InputRequest? parseInput(RpcServerRequest request) {
     final session = request.params['session_id'].string().trim();
     if (session.isEmpty || request.id.isEmpty) return null;
@@ -174,10 +193,57 @@ sealed class ChatEvent {
     return InputRequest(
       requestId: request.id,
       sessionId: session,
-      kind: request.method == 'sudo' ? InputKind.sudo : InputKind.secret,
+      kind: switch (request.method) {
+        'sudo' => InputKind.sudo,
+        'vault.unlock_prompt' => InputKind.vaultUnlock,
+        'vault.code' => InputKind.vaultCode,
+        _ => InputKind.secret,
+      },
       command: text('command'),
       envVar: text('env_var'),
       prompt: text('prompt'),
+      displayName: text('display_name'),
+      site: text('site'),
+      hint: text('hint'),
+    );
+  }
+
+  /// A `vault.save_login` request. Null without a session or an origin.
+  static LoginRequest? parseLogin(RpcServerRequest request) {
+    final session = request.params['session_id'].string().trim();
+    final origin = request.params['origin'].string().trim();
+    if (session.isEmpty || origin.isEmpty || request.id.isEmpty) return null;
+    return LoginRequest(
+      requestId: request.id,
+      sessionId: session,
+      origin: origin,
+      site: request.params['site'].string().trim(),
+    );
+  }
+
+  /// The effort and fast mode a `session.info` reports, or null when it says
+  /// neither. Separate from [fromEvent] because the same event reports the
+  /// model.
+  static SessionInfoChanged? infoFromEvent(RpcEvent event) {
+    if (event.type != 'session.info') return null;
+    final payload = event.payload;
+    ReasoningEffort? effort;
+    final raw = payload.any(const ['reasoning_effort', 'reasoning']);
+    if (raw.isMap) {
+      effort = raw['enabled'].boolOrNull == false
+          ? ReasoningEffort.none
+          : ReasoningEffort.fromWire(raw['effort'].stringOrNull);
+    } else if (raw.hasValue) {
+      effort = ReasoningEffort.fromWire(raw.stringOrNull);
+    }
+    final fastFlag = payload.any(const ['fast', 'fast_mode']).boolOrNull;
+    final tier = payload['service_tier'].stringOrNull?.trim().toLowerCase();
+    final fast = fastFlag ?? (tier == null ? null : tier == 'priority');
+    if (effort == null && fast == null) return null;
+    return SessionInfoChanged(
+      event.sessionId ?? '',
+      effort: effort,
+      fast: fast,
     );
   }
 
@@ -430,4 +496,40 @@ final class ContextChanged extends ChatEvent {
   const ContextChanged(super.sessionId, this.usage);
 
   final ContextUsage usage;
+}
+
+/// The agent wants a username and password saved.
+final class LoginAsked extends ChatEvent {
+  LoginAsked(this.request) : super(request.sessionId);
+
+  final LoginRequest request;
+}
+
+/// The agent opened a connection card.
+final class ConnectionAsked extends ChatEvent {
+  ConnectionAsked(this.request) : super(request.sessionId);
+
+  final ConnectionRequest request;
+}
+
+/// A target of an open connection card changed, or the card settled.
+final class ConnectionChanged extends ChatEvent {
+  const ConnectionChanged(
+    super.sessionId, {
+    required this.opId,
+    required this.targets,
+    required this.settled,
+  });
+
+  final String opId;
+  final List<ConnectionTarget> targets;
+  final bool settled;
+}
+
+/// The reasoning effort and fast mode in force for the session.
+final class SessionInfoChanged extends ChatEvent {
+  const SessionInfoChanged(super.sessionId, {this.effort, this.fast});
+
+  final ReasoningEffort? effort;
+  final bool? fast;
 }

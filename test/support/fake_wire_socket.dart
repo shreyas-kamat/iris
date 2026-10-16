@@ -39,6 +39,18 @@ final class FakeWireSocket implements WireSocket {
   /// Simulates the server or the network dropping the connection.
   Future<void> serverCloses() => close(1006);
 
+  /// Delivers a server→client request, such as an approval or a prompt.
+  void pushRequest(String id, String method, Map<String, Object?> params) =>
+      serverSends({'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params});
+
+  /// Delivers a stream event for [session].
+  void pushEvent(String type, String session, Map<String, Object?> payload) =>
+      serverSends({
+        'jsonrpc': '2.0',
+        'method': 'event',
+        'params': {'type': type, 'session_id': session, 'payload': payload},
+      });
+
   Json get lastSent => Json.decode(sent.last);
 
   /// Answers the most recent request.

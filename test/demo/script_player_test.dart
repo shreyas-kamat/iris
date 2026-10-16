@@ -1,6 +1,8 @@
 /// The demo's scripts play as the events a real gateway sends.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
@@ -175,5 +177,47 @@ void main() {
 
   test('a steer when nothing runs is refused', () {
     expect(player.steer('hello'), isFalse);
+  });
+
+  test('a vault step asks, waits for an answer, then carries on', () async {
+    final done = player.play(const [
+      VaultStep(VaultKind.unlock, name: '1Password'),
+      VaultStep(VaultKind.code, site: 'GitHub', hint: '6 digits from your authenticator app'),
+      VaultStep(VaultKind.login, site: 'GitHub'),
+      SayStep('Signed in.'),
+    ]);
+    await drain();
+    expect(events.whereType<InputAsked>().single.request.kind, InputKind.vaultUnlock);
+    player.answerSecret();
+    await drain();
+    expect(events.whereType<InputAsked>().last.request.kind, InputKind.vaultCode);
+    player.answerSecret();
+    await drain();
+    expect(events.whereType<LoginAsked>(), hasLength(1));
+    player.answerSecret();
+    await done;
+    expect(events.whereType<TextDelta>(), isNotEmpty);
+  });
+
+  test('a connect step opens a card and continues once it is answered', () async {
+    final done = player.play(const [
+      ConnectStep([
+        {'name': 'Linear', 'kind': 'connector', 'action': 'authorize', 'state': 'pending', 'connect_url': 'https://linear.app/oauth'},
+        {'name': 'security-scan', 'kind': 'plugin', 'action': 'install', 'state': 'pending'},
+      ]),
+      SayStep('Connected.'),
+    ]);
+    await drain();
+    expect(events.whereType<ConnectionAsked>().single.request.targets, hasLength(2));
+    player.answerSecret();
+    await done;
+    expect(events.whereType<TextDelta>(), isNotEmpty);
+  });
+
+  test('stopping withdraws an open vault prompt', () async {
+    unawaited(player.play(const [VaultStep(VaultKind.unlock, name: '1Password')]));
+    await drain();
+    player.stop();
+    expect(events.whereType<RequestWithdrawn>(), hasLength(1));
   });
 }

@@ -17,10 +17,10 @@ abstract final class HistoryParser {
   /// The conversation list from a `session.list` result.
   static List<ConversationSummary> conversations(Json result) {
     final rows = result.isList ? result.list : result['sessions'].list;
-    return [for (final row in rows) ?_conversation(row)];
+    return [for (final row in rows) ?conversationRow(row)];
   }
 
-  static ConversationSummary? _conversation(Json row) {
+  static ConversationSummary? conversationRow(Json row) {
     final id = firstText(row, const ['id', 'session_id', 'stored_session_id']);
     if (id == null) return null;
     return ConversationSummary(

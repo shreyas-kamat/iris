@@ -11,19 +11,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/device_state.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/app/theme_controller.dart';
 import 'package:iris/app/usage.dart';
+import 'package:iris/core/json.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/palette.dart';
 import 'package:iris/features/chat/archived_screen.dart';
 import 'package:iris/features/chat/chat_screen.dart';
+import 'package:iris/features/chat/connection_card.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
 import 'package:iris/features/settings/settings_screen.dart';
@@ -232,6 +236,12 @@ const _reportingOptions = ModelOptions(
     ),
   ],
 );
+
+/// Two chats pinned, so the Pinned section shows above Recent.
+class _TwoPinned extends Pins {
+  @override
+  List<String> build() => const ['1', '2'];
+}
 
 class _ThreeProviders extends UsageSelection {
   @override
@@ -550,6 +560,186 @@ void main() {
           usageSelectionProvider.overrideWith(_ThreeProviders.new),
         ],
         name: 'usage_settings',
+      );
+    });
+
+    testWidgets('home with pinned and live chats, $mode', (tester) async {
+      final backend = FakeChatBackend()..conversationsResult = Ok(_conversations);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const ConversationListScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          conversationsProvider.overrideWith(
+            (ref) async => ConversationPage(items: _conversations, total: 7),
+          ),
+          pinsProvider.overrideWith(_TwoPinned.new),
+          liveChatsProvider.overrideWith(
+            (ref) => Stream.value({
+              '3': const LiveStatus(
+                runtimeId: 'run-3',
+                storedId: '3',
+                status: 'working',
+              ),
+            }),
+          ),
+        ],
+        name: 'home_pinned_live',
+      );
+    });
+
+    testWidgets('chat with the long-press menu on the newest reply, $mode', (
+      tester,
+    ) async {
+      final backend = FakeChatBackend()..historyResult = Ok(_exchange);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Investigate worker heartbeat gaps',
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_message_menu',
+        after: () async {
+          await tester.longPress(find.textContaining('The gaps line up'));
+          await tester.pump(const Duration(milliseconds: 400));
+        },
+      );
+    });
+
+    testWidgets('chat with a queue of three while a reply runs, $mode', (
+      tester,
+    ) async {
+      final backend = FakeChatBackend()
+        ..historyResult = Ok(_exchange)
+        ..busyModeResult = const Ok(BusyMode.queue);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Investigate worker heartbeat gaps',
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_queue_tray',
+        after: () async {
+          backend.emit(const MessageStarted('run-1'));
+          await tester.pump(const Duration(milliseconds: 400));
+          final semantics = tester.ensureSemantics();
+          for (final text in [
+            'Also check node-4',
+            'Then restart the worker',
+            'Tell me when it is done',
+          ]) {
+            await tester.enterText(find.byType(EditableText), text);
+            await tester.pump();
+            await tester.tap(find.bySemanticsLabel('Queue, sends after the running reply'));
+            await tester.pump(const Duration(milliseconds: 400));
+          }
+          semantics.dispose();
+        },
+      );
+    });
+
+    testWidgets('chat with the unlock prompt for the password manager, $mode', (
+      tester,
+    ) async {
+      final backend = FakeChatBackend()
+        ..historyResult = Ok(_exchange)
+        ..resumeResult = const Ok(ResumedConversation(runtimeId: 'run-1'));
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Investigate worker heartbeat gaps',
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_unlock_prompt',
+        after: () async {
+          backend.emit(
+            InputAsked(
+              InputRequest(
+                requestId: 'srq-2',
+                sessionId: 'run-1',
+                kind: InputKind.vaultUnlock,
+                displayName: '1Password',
+              ),
+            ),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+        },
+      );
+    });
+
+    testWidgets('a connection card with four targets in mixed states, $mode', (
+      tester,
+    ) async {
+      final backend = FakeChatBackend();
+      addTearDown(backend.close);
+      final request = ConnectionRequest.parse(
+        Json.of({
+          'op_id': 'op-4',
+          'timeout_seconds': 300,
+          'targets': [
+            {
+              'name': 'Linear',
+              'kind': 'connector',
+              'action': 'authorize',
+              'state': 'pending',
+              'connect_url': 'https://linear.app/oauth',
+            },
+            {
+              'name': 'github',
+              'kind': 'mcp',
+              'action': 'enable',
+              'state': 'connected',
+            },
+            {
+              'name': 'release-notes',
+              'kind': 'skill',
+              'action': 'enable',
+              'state': 'initiated',
+            },
+            {
+              'name': 'security-scan',
+              'kind': 'plugin',
+              'action': 'install',
+              'state': 'failed',
+            },
+          ],
+        }),
+        sessionId: 'run-1',
+        now: _now,
+      )!;
+      await capture(
+        tester,
+        screen: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: ConnectionCard(
+              request: request,
+              onAnswer: (_) {},
+              onContinue: () {},
+              onOpenSignIn: (_) {},
+              onExpired: () {},
+              now: () => _now,
+            ),
+          ),
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_connection_card',
       );
     });
   }

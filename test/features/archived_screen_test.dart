@@ -18,11 +18,24 @@ void main() {
   testWidgets('nothing archived says so', (tester) async {
     await tester.pumpWidget(themed(ArchivedScreen(backend: backend)));
     await tester.pumpAndSettle();
-    expect(find.text('Nothing archived'), findsOneWidget);
+    expect(find.text('Nothing archived.'), findsOneWidget);
   });
 
-  testWidgets('unarchive removes the row and tells the backend', (tester) async {
-    backend.archivedResult = const Ok([ConversationSummary(id: 'z', title: 'Old notes')]);
+  testWidgets('the empty state says where archived chats wait', (tester) async {
+    await tester.pumpWidget(themed(ArchivedScreen(backend: backend)));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Archived chats wait here until you bring them back.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('unarchive removes the row and tells the backend', (
+    tester,
+  ) async {
+    backend.archivedResult = const Ok([
+      ConversationSummary(id: 'z', title: 'Old notes'),
+    ]);
     await tester.pumpWidget(themed(ArchivedScreen(backend: backend)));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('Unarchive Old notes'));
@@ -32,13 +45,33 @@ void main() {
   });
 
   testWidgets('a failed load offers to try again', (tester) async {
-    backend.archivedResult = const Err(IrisFailure(FailureKind.offline, message: 'down'));
+    backend.archivedResult = const Err(
+      IrisFailure(FailureKind.offline, message: 'down'),
+    );
     await tester.pumpWidget(themed(ArchivedScreen(backend: backend)));
     await tester.pumpAndSettle();
     expect(find.text('Could not load archived chats'), findsOneWidget);
     backend.archivedResult = const Ok([]);
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
-    expect(find.text('Nothing archived'), findsOneWidget);
+    expect(find.text('Nothing archived.'), findsOneWidget);
+  });
+
+  testWidgets('a long-press offers Delete and removes the row', (tester) async {
+    backend.archivedResult = const Ok([
+      ConversationSummary(id: 'z', title: 'Old notes'),
+    ]);
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      themed(ArchivedScreen(backend: backend, onDeleted: deleted.add)),
+    );
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Old notes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(backend.deletes, ['z']);
+    expect(find.text('Old notes'), findsNothing);
+    expect(deleted, ['z'], reason: 'home forgets its branch record');
   });
 }

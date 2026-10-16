@@ -3,11 +3,13 @@ library;
 
 import 'dart:typed_data';
 
+import '../core/failure.dart';
 import '../core/result.dart';
 import '../data/chat/attachment.dart';
 import '../data/chat/chat_backend.dart';
 import '../data/chat/chat_event.dart';
 import '../data/chat/chat_models.dart';
+import '../data/chat/connection_models.dart';
 import 'demo_content.dart';
 import 'demo_world.dart';
 
@@ -48,10 +50,79 @@ final class DemoChatBackend implements ChatBackend {
   Future<Result<NewConversation>> create() async => Ok(_world.create(profile));
 
   @override
-  Future<Result<void>> submit(String runtimeId, String text) async {
+  Future<Result<SubmitOutcome>> submit(
+    String runtimeId,
+    String text, {
+    bool queued = false,
+  }) async {
     _world.submit(runtimeId, text);
+    return const Ok(SubmitOutcome.started);
+  }
+
+  @override
+  Future<Result<void>> delete(String storedId) async {
+    _world.delete(storedId);
     return const Ok(null);
   }
+
+  @override
+  Future<Result<int>> undo(String runtimeId) async => const Ok(1);
+
+  @override
+  Future<Result<NewConversation>> branchWhole(String storedId) async =>
+      Ok(_world.create(profile));
+
+  @override
+  Future<Result<NewConversation>> branchFrom(
+    String storedId,
+    List<SeedMessage> prefix, {
+    required String title,
+  }) async => Ok(_world.create(profile));
+
+  @override
+  Future<Result<void>> compress(String runtimeId) async => const Ok(null);
+
+  @override
+  Future<Result<BusyMode>> busyMode() async => Ok(_world.busyMode);
+
+  @override
+  Future<Result<void>> setBusyMode(BusyMode mode) async {
+    _world.busyMode = mode;
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> setReasoning(String runtimeId, ReasoningEffort effort) async =>
+      const Ok(null);
+
+  @override
+  Future<Result<void>> setFast(String runtimeId, {required bool fast}) async =>
+      const Ok(null);
+
+  @override
+  Future<Result<void>> answerLogin(
+    LoginRequest request, {
+    required String identifier,
+    required String password,
+  }) async {
+    _world.answerPrompt(request.sessionId);
+    return const Ok(null);
+  }
+
+  /// Approving one target leaves the card as it is, so it can show the next;
+  /// Continue (`settle`) ends the card and the script with it.
+  @override
+  Future<Result<void>> answerConnection(
+    ConnectionRequest request,
+    List<TargetAnswer> targets, {
+    bool settle = false,
+  }) async {
+    if (settle) _world.answerPrompt(request.sessionId);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<List<LiveStatus>>> activeSessions() async => const Ok([]);
 
   @override
   Future<Result<String?>> attach(String runtimeId, Attachment file) async =>
@@ -128,6 +199,15 @@ final class DemoChatBackend implements ChatBackend {
   @override
   Future<Result<String>> transcribe(Uint8List wav) async =>
       const Ok('How much disk space is left on the NAS?');
+
+  @override
+  Future<Result<ConversationSummary>> conversation(String storedId) async {
+    final page = _world.page(profile, 0, archived: false).items;
+    for (final row in [..._world.page(profile, 0, archived: true).items, ...page]) {
+      if (row.id == storedId) return Ok(row);
+    }
+    return const Err(IrisFailure(FailureKind.notFound));
+  }
 
   @override
   Future<Result<List<SearchHit>>> search(String query) async =>
