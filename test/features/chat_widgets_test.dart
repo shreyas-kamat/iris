@@ -566,4 +566,29 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.getRect(find.byType(Composer)).right, lessThanOrEqualTo(320));
   });
+
+  testWidgets('the model chip shows its whole name when there is room', (tester) async {
+    tester.view.physicalSize = const Size(411, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final text = TextEditingController();
+    addTearDown(text.dispose);
+    await tester.pumpWidget(
+      themed(
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Composer(
+            controller: text,
+            running: false,
+            onSend: () {},
+            onStop: () {},
+            model: 'gpt-6.1-sol · medium',
+            onModel: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('gpt-6.1-sol · medium'), findsOneWidget);
+    expect(tester.getSize(find.text('gpt-6.1-sol · medium')).width, greaterThan(120));
+  });
 }

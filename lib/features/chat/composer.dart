@@ -293,7 +293,10 @@ class Composer extends StatelessWidget {
                           ],
                           if (model case final model?
                               when recording == null) ...[
+                            // Far heavier than the Spacer, so the chip only shrinks
+                            // when the row is out of room.
                             Flexible(
+                              flex: 1000,
                               child: _ModelChip(model: model, onTap: onModel),
                             ),
                             const SizedBox(width: IrisSpace.xs),
