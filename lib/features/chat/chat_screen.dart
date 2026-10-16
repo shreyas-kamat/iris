@@ -134,6 +134,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _text.removeListener(_watchForSlash);
     _clock?.cancel();
+    _missedTimer?.cancel();
     unawaited(_recorder.cancel());
     _chat.dispose();
     _text.dispose();
@@ -330,7 +331,13 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _transcribing = false;
   Timer? _clock;
 
+  /// The clip said nothing: a note above the composer offers another go.
+  bool _missed = false;
+  Timer? _missedTimer;
+
   Future<void> _startDictation() async {
+    _missedTimer?.cancel();
+    if (_missed) setState(() => _missed = false);
     if (!await _recorder.start()) {
       if (mounted) {
         showIrisToast(
@@ -367,10 +374,11 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _transcribing = false);
     switch (result) {
       case Ok(value: ''):
-        showIrisToast(
-          context,
-          message: "Didn't catch that. Try again a little closer.",
-        );
+        setState(() => _missed = true);
+        _missedTimer?.cancel();
+        _missedTimer = Timer(const Duration(seconds: 6), () {
+          if (mounted) setState(() => _missed = false);
+        });
       case Ok(:final value):
         final before = _text.text.trimRight();
         _text.text = before.isEmpty ? value : '$before $value';
@@ -468,6 +476,18 @@ class _ChatScreenState extends State<ChatScreen> {
               child: _decision(state),
             ),
           ),
+          if (_missed)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.window.gutter,
+                IrisSpace.sm,
+                context.window.gutter,
+                0,
+              ),
+              child: _MissedNote(
+                onTryAgain: () => unawaited(_startDictation()),
+              ),
+            ),
           if ((state.context?.percent ?? 0) >= 95)
             Padding(
               padding: EdgeInsets.fromLTRB(
@@ -519,6 +539,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onAttach: (source) => unawaited(_attach(source)),
             onRemoveAttachment: (i) => setState(() => _draft.removeAt(i)),
             recording: _recording,
+            level: _recording == null ? null : _recorder.level,
             transcribing: _transcribing,
             onMic: () => unawaited(_startDictation()),
             onStopRecording: () => unawaited(_stopDictation()),
@@ -906,4 +927,56 @@ class _Decision extends StatelessWidget {
     ),
     child: child,
   );
+}
+
+/// Shown after a clip that said nothing (frame B9): the mic is one tap from
+/// trying again. It goes by itself after six seconds.
+class _MissedNote extends StatelessWidget {
+  const _MissedNote({required this.onTryAgain});
+
+  final VoidCallback onTryAgain;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.only(left: IrisSpace.md),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: palette.line, width: IrisStroke.hairline),
+      ),
+      child: Row(
+        children: [
+          const IrisOrb(state: AgentState.rest, size: 24, glow: false),
+          const SizedBox(width: IrisSpace.sm),
+          Expanded(
+            child: Text(
+              "Didn't catch that.",
+              style: context.type.body.copyWith(
+                fontSize: 13.5,
+                color: palette.ink,
+              ),
+            ),
+          ),
+          IrisPressable(
+            onTap: onTryAgain,
+            semanticLabel: 'Try again',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: IrisSpace.md),
+              child: Text(
+                'Try again',
+                style: context.type.body.copyWith(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: palette.accent,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

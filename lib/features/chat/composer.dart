@@ -41,6 +41,7 @@ class Composer extends StatelessWidget {
     this.onAttach,
     this.onRemoveAttachment,
     this.recording,
+    this.level,
     this.transcribing = false,
     this.onMic,
     this.onStopRecording,
@@ -93,6 +94,9 @@ class Composer extends StatelessWidget {
 
   /// How long the current clip has run; null when not recording.
   final Duration? recording;
+
+  /// The loudness of what is being recorded, 0 to 1, about ten a second.
+  final Stream<double>? level;
 
   /// The clip is with Hermes being turned into text.
   final bool transcribing;
@@ -193,50 +197,55 @@ class Composer extends StatelessWidget {
                   ),
                 ),
               if (matching.isNotEmpty) const SizedBox(height: IrisSpace.xs),
-              AnimatedContainer(
-                duration: context.reduceMotion
-                    ? Duration.zero
-                    : const Duration(milliseconds: 400),
-                curve: IrisCurves.standard,
-                padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
-                decoration: BoxDecoration(
-                  color: palette.surfaceRaised,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: border, width: IrisStroke.hairline),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (attachments.isNotEmpty) ...[
-                      SizedBox(
-                        height: 52,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: attachments.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(width: IrisSpace.xs),
-                          itemBuilder: (context, i) => AttachmentChip(
-                            name: attachments[i].name,
-                            bytes: attachments[i].bytes,
-                            size: attachments[i].bytes.length,
-                            onRemove: onRemoveAttachment == null
-                                ? null
-                                : () => onRemoveAttachment!(i),
+              if (recording != null || transcribing)
+                _RecordingBar(
+                  elapsed: recording,
+                  transcribing: transcribing,
+                  level: level,
+                  onStop: onStopRecording ?? () {},
+                  onCancel: onCancelRecording ?? () {},
+                )
+              else
+                AnimatedContainer(
+                  duration: context.reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 400),
+                  curve: IrisCurves.standard,
+                  padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                  decoration: BoxDecoration(
+                    color: palette.surfaceRaised,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: border,
+                      width: IrisStroke.hairline,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (attachments.isNotEmpty) ...[
+                        SizedBox(
+                          height: 52,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: attachments.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: IrisSpace.xs),
+                            itemBuilder: (context, i) => AttachmentChip(
+                              name: attachments[i].name,
+                              bytes: attachments[i].bytes,
+                              size: attachments[i].bytes.length,
+                              onRemove: onRemoveAttachment == null
+                                  ? null
+                                  : () => onRemoveAttachment!(i),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: IrisSpace.sm),
-                    ],
-                    // Borderless: the box is the chrome, so the field inside
-                    // it must not draw its own.
-                    if (recording case final elapsed?)
-                      _RecordingStrip(
-                        elapsed: elapsed,
-                        onStop: onStopRecording ?? () {},
-                        onCancel: onCancelRecording ?? () {},
-                      )
-                    else
+                        const SizedBox(height: IrisSpace.sm),
+                      ],
+                      // Borderless: the box is the chrome, so the field inside
+                      // it must not draw its own.
                       TextField(
                         controller: controller,
                         minLines: 1,
@@ -265,94 +274,96 @@ class Composer extends StatelessWidget {
                           ),
                         ),
                       ),
-                    const SizedBox(height: IrisSpace.xs),
-                    Row(
-                      children: [
-                        if (onAttach != null &&
-                            !running &&
-                            recording == null) ...[
-                          _AttachButton(
-                            enabled: enabled,
-                            full:
-                                attachments.length >= Attachment.maxPerMessage,
-                            onPick: onAttach!,
+                      const SizedBox(height: IrisSpace.xs),
+                      Row(
+                        children: [
+                          if (onAttach != null &&
+                              !running &&
+                              recording == null) ...[
+                            _AttachButton(
+                              enabled: enabled,
+                              full:
+                                  attachments.length >=
+                                  Attachment.maxPerMessage,
+                              onPick: onAttach!,
+                            ),
+                            if (attachments.length >= Attachment.maxPerMessage)
+                              const IrisLabel('5 / 5 files', small: true),
+                            const SizedBox(width: IrisSpace.xs),
+                          ],
+                          if (model case final model?
+                              when recording == null) ...[
+                            _ModelChip(model: model, onTap: onModel),
+                            const SizedBox(width: IrisSpace.xs),
+                          ],
+                          if (contextUsage case final usage?)
+                            _ContextRing(usage: usage, onTap: onContext),
+                          const Spacer(),
+                          // Send and Stop share one slot, so the action changes
+                          // in place rather than the row reflowing.
+                          AnimatedSwitcher(
+                            duration: context.reduceMotion
+                                ? Duration.zero
+                                : const Duration(milliseconds: 250),
+                            switchInCurve: IrisCurves.standard,
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                                  opacity: animation,
+                                  child: ScaleTransition(
+                                    scale: Tween(
+                                      begin: .9,
+                                      end: 1.0,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                ),
+                            child: busyKind != null
+                                ? Row(
+                                    key: ValueKey('busy-${busyKind.name}'),
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: IrisSpace.sm,
+                                        ),
+                                        child: Text(
+                                          busyKind.semanticLabel.toUpperCase(),
+                                          style: theme.typography.codeSmall
+                                              .copyWith(
+                                                fontSize: 10.5,
+                                                letterSpacing: 1,
+                                                color: palette.inkMuted,
+                                              ),
+                                        ),
+                                      ),
+                                      _ModeButton(
+                                        kind: busyKind,
+                                        onTap: onSend,
+                                      ),
+                                    ],
+                                  )
+                                : running
+                                ? _StopButton(
+                                    key: const ValueKey('stop'),
+                                    state: state,
+                                    onTap: onStop,
+                                  )
+                                : !canSend && onMic != null && recording == null
+                                ? _MicButton(
+                                    key: const ValueKey('mic'),
+                                    onTap: enabled ? onMic : null,
+                                  )
+                                : _SendButton(
+                                    key: const ValueKey('send'),
+                                    enabled: canSend,
+                                    onTap: onSend,
+                                  ),
                           ),
-                          if (attachments.length >= Attachment.maxPerMessage)
-                            const IrisLabel('5 / 5 files', small: true),
-                          const SizedBox(width: IrisSpace.xs),
                         ],
-                        if (model case final model? when recording == null) ...[
-                          _ModelChip(model: model, onTap: onModel),
-                          const SizedBox(width: IrisSpace.xs),
-                        ],
-                        if (contextUsage case final usage?)
-                          _ContextRing(usage: usage, onTap: onContext),
-                        const Spacer(),
-                        // Send and Stop share one slot, so the action changes
-                        // in place rather than the row reflowing.
-                        AnimatedSwitcher(
-                          duration: context.reduceMotion
-                              ? Duration.zero
-                              : const Duration(milliseconds: 250),
-                          switchInCurve: IrisCurves.standard,
-                          transitionBuilder: (child, animation) =>
-                              FadeTransition(
-                                opacity: animation,
-                                child: ScaleTransition(
-                                  scale: Tween(
-                                    begin: .9,
-                                    end: 1.0,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              ),
-                          child: busyKind != null
-                              ? Row(
-                                  key: ValueKey('busy-${busyKind.name}'),
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        right: IrisSpace.sm,
-                                      ),
-                                      child: Text(
-                                        busyKind.semanticLabel.toUpperCase(),
-                                        style: theme.typography.codeSmall
-                                            .copyWith(
-                                              fontSize: 10.5,
-                                              letterSpacing: 1,
-                                              color: palette.inkMuted,
-                                            ),
-                                      ),
-                                    ),
-                                    _ModeButton(kind: busyKind, onTap: onSend),
-                                  ],
-                                )
-                              : running
-                              ? _StopButton(
-                                  key: const ValueKey('stop'),
-                                  state: state,
-                                  onTap: onStop,
-                                )
-                              : !canSend && onMic != null && recording == null
-                              ? _MicButton(
-                                  key: const ValueKey('mic'),
-                                  busy: transcribing,
-                                  onTap: enabled && !transcribing
-                                      ? onMic
-                                      : null,
-                                )
-                              : _SendButton(
-                                  key: const ValueKey('send'),
-                                  enabled: canSend,
-                                  onTap: onSend,
-                                ),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -679,67 +690,208 @@ class ContextStrip extends StatelessWidget {
   }
 }
 
-class _RecordingStrip extends StatelessWidget {
-  const _RecordingStrip({
+/// The composer while dictating (frame B9): a 72 high bar. Cancel on the left,
+/// a listening orb whose wobble is the live level, the time, and Stop. While
+/// the clip is being turned into text the orb thinks and the Stop slot stays
+/// empty, so nothing shifts. Reduced motion: the orb holds still and the level
+/// shows as ring weight in three steps, at most four times a second.
+class _RecordingBar extends StatefulWidget {
+  const _RecordingBar({
     required this.elapsed,
+    required this.transcribing,
+    required this.level,
     required this.onStop,
     required this.onCancel,
   });
 
-  final Duration elapsed;
+  final Duration? elapsed;
+  final bool transcribing;
+  final Stream<double>? level;
   final VoidCallback onStop;
   final VoidCallback onCancel;
+
+  @override
+  State<_RecordingBar> createState() => _RecordingBarState();
+}
+
+class _RecordingBarState extends State<_RecordingBar> {
+  final _level = ValueNotifier<double>(0);
+  StreamSubscription<double>? _sub;
+  DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Read in build, where it is safe to ask; the stream callback only reads it.
+  bool _reduced = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _listen();
+  }
+
+  @override
+  void didUpdateWidget(_RecordingBar old) {
+    super.didUpdateWidget(old);
+    if (old.level != widget.level) _listen();
+  }
+
+  void _listen() {
+    unawaited(_sub?.cancel());
+    _sub = widget.level?.listen((value) {
+      // Under reduced motion the level changes at most four times a second.
+      final now = DateTime.now();
+      if (_reduced &&
+          now.difference(_last) < const Duration(milliseconds: 250)) {
+        return;
+      }
+      _last = now;
+      _level.value = value.clamp(0.0, 1.0);
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sub?.cancel());
+    _level.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.iris;
     final palette = theme.palette;
-    final seconds = elapsed.inSeconds;
+    final listening = palette.colorFor(AgentState.loading);
+    final reduced = _reduced = context.reduceMotion;
+    final seconds = widget.elapsed?.inSeconds ?? 0;
     final clock =
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
-    return Row(
-      children: [
-        Icon(
-          Icons.fiber_manual_record,
-          size: 12,
-          color: palette.colorFor(AgentState.failed),
+    return Container(
+      key: const ValueKey('recording-bar'),
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: IrisSpace.sm),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: listening.withValues(alpha: .33),
+          width: IrisStroke.hairline,
         ),
-        const SizedBox(width: IrisSpace.sm),
-        Text(
-          clock,
-          style: theme.typography.numeric.copyWith(color: palette.ink),
-        ),
-        const Spacer(),
-        IrisPressable(
-          onTap: onCancel,
-          semanticLabel: 'Cancel recording',
-          child: ExcludeSemantics(
-            child: Text(
-              'Cancel',
-              style: theme.typography.label.copyWith(color: palette.inkMuted),
+      ),
+      child: Row(
+        children: [
+          if (widget.transcribing)
+            const SizedBox(width: 44)
+          else
+            IrisPressable(
+              onTap: widget.onCancel,
+              semanticLabel: 'Cancel recording',
+              child: SizedBox(
+                height: 44,
+                child: Center(
+                  child: ExcludeSemantics(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: IrisSpace.sm,
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: theme.typography.label.copyWith(
+                          color: palette.inkMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: IrisSpace.md),
-        IrisPressable(
-          onTap: onStop,
-          semanticLabel: 'Stop recording',
-          child: ExcludeSemantics(
-            child: Text(
-              'Done',
-              style: theme.typography.label.copyWith(color: palette.accent),
+          const Spacer(),
+          if (widget.transcribing)
+            Semantics(
+              label: 'Transcribing',
+              excludeSemantics: true,
+              child: const IrisOrb(
+                state: AgentState.thinking,
+                size: 56,
+                glow: false,
+              ),
+            )
+          else
+            ExcludeSemantics(
+              child: ValueListenableBuilder<double>(
+                valueListenable: _level,
+                builder: (context, level, _) => AnimatedScale(
+                  key: const ValueKey('level-orb'),
+                  scale: reduced ? 1 : 1 + .15 * level,
+                  duration: reduced
+                      ? Duration.zero
+                      : const Duration(milliseconds: 100),
+                  child: DecoratedBox(
+                    position: DecorationPosition.foreground,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: reduced
+                          ? Border.all(
+                              color: listening,
+                              width: level < .2
+                                  ? 1
+                                  : level < .6
+                                  ? 2
+                                  : 3.5,
+                            )
+                          : null,
+                    ),
+                    child: const IrisOrb(
+                      state: AgentState.loading,
+                      size: 56,
+                      glow: false,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+          if (!widget.transcribing) ...[
+            const SizedBox(width: IrisSpace.sm),
+            Text(
+              clock,
+              style: theme.typography.codeSmall.copyWith(
+                fontSize: 12,
+                color: listening,
+              ),
+            ),
+          ],
+          const Spacer(),
+          if (widget.transcribing)
+            const SizedBox(width: 44, height: 44)
+          else
+            IrisPressable(
+              onTap: widget.onStop,
+              semanticLabel: 'Stop recording',
+              ensureTapTarget: false,
+              child: Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.accent,
+                  shape: BoxShape.circle,
+                ),
+                child: ExcludeSemantics(
+                  child: SendGlyph(
+                    SendKind.stop,
+                    color: palette.accentInk,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
 class _MicButton extends StatelessWidget {
-  const _MicButton({required this.busy, required this.onTap, super.key});
+  const _MicButton({required this.onTap, super.key});
 
-  final bool busy;
   final VoidCallback? onTap;
 
   @override
@@ -747,26 +899,17 @@ class _MicButton extends StatelessWidget {
     final palette = context.iris.palette;
     return IrisPressable(
       onTap: onTap,
-      semanticLabel: busy ? 'Transcribing' : 'Dictate',
+      semanticLabel: 'Dictate',
       ensureTapTarget: false,
       child: Container(
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: palette.surfaceSunken,
+          color: palette.accentQuiet,
           shape: BoxShape.circle,
         ),
-        child: busy
-            ? SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: palette.accent,
-                ),
-              )
-            : Icon(Icons.mic_none, size: 20, color: palette.ink),
+        child: Icon(Icons.mic_none, size: 22, color: palette.accent),
       ),
     );
   }

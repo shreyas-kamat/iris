@@ -1,6 +1,8 @@
 /// A whole conversation screen against a scripted backend.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -841,14 +843,78 @@ void main() {
     expect(asked, AttachSource.photos);
     semantics.dispose();
   });
+
+  testWidgets(
+    'a clip that says nothing leaves a Try again note, which re-arms the mic',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final recorder = FakeRecorder();
+      backend.transcribeResult = const Ok('');
+      await tester.pumpWidget(
+        themed(
+          ChatScreen(
+            backend: backend,
+            conversationId: 'stored-1',
+            recorder: recorder,
+          ),
+        ),
+      );
+      await settle(tester);
+      await tester.tap(find.bySemanticsLabel('Dictate'));
+      await settle(tester);
+      await tester.tap(find.bySemanticsLabel('Stop recording'));
+      await settle(tester);
+      await settle(tester);
+      expect(find.text("Didn't catch that."), findsOneWidget);
+      await tester.tap(find.text('Try again'));
+      await settle(tester);
+      expect(recorder.starts, 2);
+      expect(find.text("Didn't catch that."), findsNothing);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets('the note goes by itself after six seconds', (tester) async {
+    final semantics = tester.ensureSemantics();
+    backend.transcribeResult = const Ok('');
+    await tester.pumpWidget(
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          recorder: FakeRecorder(),
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Dictate'));
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Stop recording'));
+    await settle(tester);
+    await settle(tester);
+    expect(find.text("Didn't catch that."), findsOneWidget);
+    await tester.pump(const Duration(seconds: 7));
+    expect(find.text("Didn't catch that."), findsNothing);
+    semantics.dispose();
+  });
 }
 
 final class FakeRecorder implements VoiceRecorder {
   bool allowed = true;
   bool recording = false;
+  int starts = 0;
+  final _level = StreamController<double>.broadcast();
+
+  void speak(double level) => _level.add(level);
 
   @override
-  Future<bool> start() async => recording = allowed;
+  Stream<double> get level => _level.stream;
+
+  @override
+  Future<bool> start() async {
+    starts++;
+    return recording = allowed;
+  }
 
   @override
   Future<Uint8List?> stop() async {
