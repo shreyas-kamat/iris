@@ -182,7 +182,7 @@ final class BranchRecord {
   });
 }
 
-/// The branch record for the conversation [childId] in the active profile.
+/// The branch record for the conversation `childId` in the active profile.
 final branchRecordProvider = Provider.family<BranchRecord?, String>((
   ref,
   childId,
