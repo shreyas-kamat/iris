@@ -9,8 +9,10 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import '../core/json.dart';
 import '../data/chat/chat_event.dart';
 import '../data/chat/chat_models.dart';
+import '../data/chat/connection_models.dart';
 import 'demo_script.dart';
 
 typedef Delay = Future<void> Function(Duration duration);
@@ -140,6 +142,54 @@ final class ScriptPlayer {
               ),
             ),
           );
+          await answer.future;
+          _secret = null;
+          _secretId = null;
+          if (_stopped) return false;
+        case VaultStep(:final kind, :final name, :final site, :final hint):
+          final id = '$sessionId-vault-${_serial++}';
+          final answer = _secret = Completer<void>();
+          _secretId = id;
+          emit(switch (kind) {
+            VaultKind.unlock => InputAsked(
+              InputRequest(
+                requestId: id,
+                sessionId: sessionId,
+                kind: InputKind.vaultUnlock,
+                displayName: name,
+              ),
+            ),
+            VaultKind.code => InputAsked(
+              InputRequest(
+                requestId: id,
+                sessionId: sessionId,
+                kind: InputKind.vaultCode,
+                site: site,
+                hint: hint,
+              ),
+            ),
+            VaultKind.login => LoginAsked(
+              LoginRequest(
+                requestId: id,
+                sessionId: sessionId,
+                origin: 'https://${site.toLowerCase()}.com',
+                site: site,
+              ),
+            ),
+          });
+          await answer.future;
+          _secret = null;
+          _secretId = null;
+          if (_stopped) return false;
+        case ConnectStep(:final targets):
+          final id = '$sessionId-connect-${_serial++}';
+          final answer = _secret = Completer<void>();
+          _secretId = id;
+          final request = ConnectionRequest.parse(
+            Json.of({'op_id': id, 'timeout_seconds': 300, 'targets': targets}),
+            sessionId: sessionId,
+          );
+          if (request != null) emit(ConnectionAsked(request));
           await answer.future;
           _secret = null;
           _secretId = null;

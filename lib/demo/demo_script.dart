@@ -47,6 +47,32 @@ final class SecretStep extends DemoStep {
   final String command;
 }
 
+/// Which password-manager prompt a [VaultStep] shows.
+enum VaultKind { unlock, code, login }
+
+/// A password-manager prompt: unlock, a one-time code, or a save-login
+/// request. Any answer continues; none is kept.
+final class VaultStep extends DemoStep {
+  const VaultStep(this.kind, {this.name = '', this.site = '', this.hint = ''});
+  final VaultKind kind;
+
+  /// The manager's name, for an unlock prompt.
+  final String name;
+
+  /// The site the login or code is for.
+  final String site;
+
+  /// What the code field asks for.
+  final String hint;
+}
+
+/// A connection card for [targets] (the wire shape of `connection.request`
+/// targets). Any answer continues; none is kept.
+final class ConnectStep extends DemoStep {
+  const ConnectStep(this.targets);
+  final List<Map<String, Object?>> targets;
+}
+
 /// Reply text, in Markdown.
 final class SayStep extends DemoStep {
   const SayStep(this.markdown);

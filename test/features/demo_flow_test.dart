@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/demo/demo_mode.dart';
+import 'package:iris/design/components/controls.dart';
 import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/home/link_status_screen.dart';
@@ -124,6 +125,33 @@ void main() {
     await tester.tap(find.text('Demo').last);
     await settle(tester);
     expect(find.text('Add a server'), findsNothing);
+    handle.dispose();
+  });
+
+  testWidgets('Deploy the docs site asks for the unlock, then settles it', (
+    tester,
+  ) async {
+    final handle = await enterDemo(tester);
+    await tester.tap(find.bySemanticsLabel('New conversation'));
+    await settle(tester);
+    await tester.ensureVisible(find.text('Deploy the docs site'));
+    await tester.tap(find.text('Deploy the docs site'));
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.text('1Password is locked'), findsOneWidget);
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(IrisField),
+        matching: find.byType(EditableText),
+      ),
+      'typed',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Unlock'));
+    await settle(tester);
+    expect(find.text('Unlocked 1Password'), findsOneWidget);
+    expect(find.text('1Password is locked'), findsNothing);
     handle.dispose();
   });
 }

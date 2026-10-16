@@ -104,14 +104,22 @@ final class DemoChatBackend implements ChatBackend {
     LoginRequest request, {
     required String identifier,
     required String password,
-  }) async => const Ok(null);
+  }) async {
+    _world.answerPrompt(request.sessionId);
+    return const Ok(null);
+  }
 
+  /// Approving one target leaves the card as it is, so it can show the next;
+  /// Continue (`settle`) ends the card and the script with it.
   @override
   Future<Result<void>> answerConnection(
     ConnectionRequest request,
     List<TargetAnswer> targets, {
     bool settle = false,
-  }) async => const Ok(null);
+  }) async {
+    if (settle) _world.answerPrompt(request.sessionId);
+    return const Ok(null);
+  }
 
   @override
   Future<Result<List<LiveStatus>>> activeSessions() async => const Ok([]);
