@@ -7,11 +7,13 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
+import 'package:iris/core/json.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/rpc/rpc_frame.dart';
 import 'package:iris/features/chat/chat_controller.dart';
 import 'package:iris/features/chat/chat_state.dart';
@@ -995,37 +997,43 @@ void main() {
       );
     });
 
-    test('a send that fails brings the card back and records nothing', () async {
-      final controller = opened();
-      await controller.open();
-      backend.emit(InputAsked(unlock));
-      await settle();
-      backend.answerResult = const Err(IrisFailure(FailureKind.offline));
-      await controller.answerInput(unlock, 'hunter2');
-      expect(controller.value.inputs, hasLength(1));
-      expect(controller.value.items.whereType<PromptRecord>(), isEmpty);
-    });
+    test(
+      'a send that fails brings the card back and records nothing',
+      () async {
+        final controller = opened();
+        await controller.open();
+        backend.emit(InputAsked(unlock));
+        await settle();
+        backend.answerResult = const Err(IrisFailure(FailureKind.offline));
+        await controller.answerInput(unlock, 'hunter2');
+        expect(controller.value.inputs, hasLength(1));
+        expect(controller.value.items.whereType<PromptRecord>(), isEmpty);
+      },
+    );
 
-    test('a login is answered with both values, recorded, and kept nowhere', () async {
-      final controller = opened();
-      await controller.open();
-      backend.emit(LoginAsked(login));
-      await settle();
-      await controller.answerLogin(
-        login,
-        identifier: 'jamie@hermes.dev',
-        password: 'hunter2',
-      );
-      expect(backend.logins, [('srq-2', 'jamie@hermes.dev', 'hunter2')]);
-      expect(controller.value.logins, isEmpty);
-      expect(
-        controller.value.items.whereType<PromptRecord>().single.title,
-        'Saved GitHub login',
-      );
-      final text = everything(controller);
-      expect(text, isNot(contains('hunter2')));
-      expect(text, isNot(contains('jamie@hermes.dev')));
-    });
+    test(
+      'a login is answered with both values, recorded, and kept nowhere',
+      () async {
+        final controller = opened();
+        await controller.open();
+        backend.emit(LoginAsked(login));
+        await settle();
+        await controller.answerLogin(
+          login,
+          identifier: 'jamie@hermes.dev',
+          password: 'hunter2',
+        );
+        expect(backend.logins, [('srq-2', 'jamie@hermes.dev', 'hunter2')]);
+        expect(controller.value.logins, isEmpty);
+        expect(
+          controller.value.items.whereType<PromptRecord>().single.title,
+          'Saved GitHub login',
+        );
+        final text = everything(controller);
+        expect(text, isNot(contains('hunter2')));
+        expect(text, isNot(contains('jamie@hermes.dev')));
+      },
+    );
 
     test('skipping a login sends an empty answer', () async {
       final controller = opened();
@@ -1051,6 +1059,139 @@ void main() {
       final record = controller.value.items.whereType<PromptRecord>().single;
       expect(record.outcome, PromptOutcome.expired);
       expect(record.detail, 'expired 14:02 · Hermes stopped waiting');
+    });
+  });
+
+  group('connection card', () {
+    ConnectionRequest card() => ConnectionRequest.parse(
+      Json.of({
+        'op_id': 'op1',
+        'timeout_seconds': 300,
+        'targets': [
+          {
+            'name': 'Linear',
+            'kind': 'connector',
+            'action': 'authorize',
+            'state': 'pending',
+            'connect_url': 'https://linear.app/oauth',
+          },
+          {
+            'name': 'GitHub',
+            'kind': 'mcp',
+            'action': 'connect',
+            'state': 'pending',
+          },
+        ],
+      }),
+      sessionId: 'run-1',
+    )!;
+
+    Future<ChatController> withCard() async {
+      final controller = controllerFor()
+        ..clock = () => DateTime(2026, 10, 16, 14, 7);
+      await controller.open();
+      backend.emit(ConnectionAsked(card()));
+      await settle();
+      return controller;
+    }
+
+    test(
+      'approving one target sends just that target and keeps the card',
+      () async {
+        final controller = await withCard();
+        await controller.answerConnectionTarget(
+          card(),
+          const TargetAnswer.approved('GitHub', env: {'GITHUB_TOKEN': 'ghp_x'}),
+        );
+        final (op, answers, settles) = backend.connectionAnswers.single;
+        expect(op, 'op1');
+        expect(answers.single.name, 'GitHub');
+        expect(settles, isFalse);
+        expect(controller.value.connections, hasLength(1));
+      },
+    );
+
+    test('credentials are never kept in state', () async {
+      final controller = await withCard();
+      await controller.answerConnectionTarget(
+        card(),
+        const TargetAnswer.approved(
+          'GitHub',
+          env: {'GITHUB_TOKEN': 'ghp_secret'},
+        ),
+      );
+      expect(
+        '${controller.value.connections}${controller.value.items}',
+        isNot(contains('ghp_secret')),
+      );
+    });
+
+    test('a failed answer says so and the card stays', () async {
+      final toasts = <String>[];
+      final controller = await withCard()
+        ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+      backend.connectionResult = const Err(IrisFailure(FailureKind.offline));
+      await controller.answerConnectionTarget(
+        card(),
+        const TargetAnswer.skipped('Linear'),
+      );
+      expect(toasts.single, startsWith('Could not send'));
+      expect(controller.value.connections, hasLength(1));
+    });
+
+    test('Continue skips everything still open and closes the card', () async {
+      final controller = await withCard();
+      await controller.settleConnection(card());
+      final (_, answers, settles) = backend.connectionAnswers.single;
+      expect(settles, isTrue);
+      expect(answers.map((a) => (a.name, a.approved)), [
+        ('Linear', false),
+        ('GitHub', false),
+      ]);
+      expect(controller.value.connections, isEmpty);
+    });
+
+    test('Continue leaves resolved targets alone', () async {
+      final controller = await withCard();
+      backend.emit(
+        ConnectionChanged(
+          'run-1',
+          opId: 'op1',
+          targets: [card().targets.first.withState(TargetState.connected)],
+          settled: false,
+        ),
+      );
+      await settle();
+      await controller.settleConnection(controller.value.connections.single);
+      expect(backend.connectionAnswers.single.$2.map((a) => a.name), [
+        'GitHub',
+      ]);
+    });
+
+    test('a failed Continue says so and the card stays', () async {
+      final toasts = <String>[];
+      final controller = await withCard()
+        ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+      backend.connectionResult = const Err(IrisFailure(FailureKind.offline));
+      await controller.settleConnection(card());
+      expect(toasts.single, startsWith('Could not send'));
+      expect(controller.value.connections, hasLength(1));
+    });
+
+    test('an expired card becomes an expired line', () async {
+      final controller = await withCard();
+      controller.expireConnection('op1');
+      expect(controller.value.connections, isEmpty);
+      final record = controller.value.items.whereType<PromptRecord>().single;
+      expect(record.outcome, PromptOutcome.expired);
+      expect(record.detail, 'expired 14:07 · Hermes stopped waiting');
+    });
+
+    test('expiring a card that is not open does nothing', () async {
+      final controller = await withCard();
+      controller.expireConnection('nope');
+      expect(controller.value.connections, hasLength(1));
+      expect(controller.value.items.whereType<PromptRecord>(), isEmpty);
     });
   });
 }

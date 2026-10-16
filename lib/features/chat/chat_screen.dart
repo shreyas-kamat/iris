@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +29,7 @@ import 'branched_header.dart';
 import 'chat_controller.dart';
 import 'chat_state.dart';
 import 'composer.dart';
+import 'connection_card.dart';
 import 'context_sheet.dart';
 import 'decision_cards.dart';
 import 'login_card.dart';
@@ -526,6 +528,18 @@ class _ChatScreenState extends State<ChatScreen> {
     ),
   );
 
+  /// The most a connection card may take: 60% of the screen left over
+  /// once the keyboard (up while typing a credential) and the system bars
+  /// are out, and never so much that the header and composer cannot fit.
+  static double _connectionRoom(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final room =
+        media.size.height - media.viewInsets.bottom - media.padding.vertical;
+    // The header, the composer and the gaps around the card.
+    const chrome = 200.0;
+    return math.max(96, math.min(room * .6, room - chrome));
+  }
+
   Widget _decision(ChatState state) {
     if (state.approvals.isNotEmpty) {
       final request = state.approvals.first;
@@ -557,6 +571,27 @@ class _ChatScreenState extends State<ChatScreen> {
         child: InputCard(
           request: request,
           onAnswer: (value) => _chat.answerInput(request, value),
+        ),
+      );
+    }
+    if (state.connections.isNotEmpty) {
+      final request = state.connections.first;
+      return _Decision(
+        key: ValueKey('connection-${request.opId}'),
+        // A card with many rows scrolls inside a bounded slot, so it never
+        // pushes the composer off the screen.
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: _connectionRoom(context)),
+          child: SingleChildScrollView(
+            child: ConnectionCard(
+              request: request,
+              onAnswer: (answer) =>
+                  unawaited(_chat.answerConnectionTarget(request, answer)),
+              onContinue: () => unawaited(_chat.settleConnection(request)),
+              onOpenSignIn: (target) => unawaited(_chat.openSignIn(target)),
+              onExpired: () => _chat.expireConnection(request.opId),
+            ),
+          ),
         ),
       );
     }

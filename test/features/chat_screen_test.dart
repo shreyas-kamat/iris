@@ -6,12 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/device_state.dart';
 import 'package:iris/core/failure.dart';
+import 'package:iris/core/json.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/features/chat/chat_screen.dart';
+import 'package:iris/features/chat/composer.dart';
 import 'package:iris/features/chat/decision_cards.dart';
 import 'package:iris/features/chat/voice_recorder.dart';
 
@@ -117,6 +120,61 @@ void main() {
       semantics.dispose();
     },
   );
+
+  // With the keyboard up (typing a credential) there is far less room.
+  for (final keyboard in [0.0, 260.0]) {
+    testWidgets(
+      'a connection card with eight rows scrolls and leaves the composer on screen'
+      '${keyboard > 0 ? ', keyboard up' : ''}',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        // The harness pins a larger phone; this one is the smallest supported.
+        await tester.pumpWidget(
+          themed(
+            MediaQuery(
+              data: MediaQueryData(
+                size: const Size(320, 568),
+                viewInsets: EdgeInsets.only(bottom: keyboard),
+                disableAnimations: true,
+              ),
+              child: ChatScreen(backend: backend, conversationId: 'stored-1'),
+            ),
+          ),
+        );
+        await settle(tester);
+        backend.emit(
+          ConnectionAsked(
+            ConnectionRequest.parse(
+              Json.of({
+                'op_id': 'op1',
+                'timeout_seconds': 300,
+                'targets': [
+                  for (var i = 0; i < 8; i++)
+                    {
+                      'name': 'server-$i',
+                      'kind': 'mcp',
+                      'action': 'enable',
+                      'state': 'pending',
+                    },
+                ],
+              }),
+              sessionId: 'run-1',
+            )!,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+        expect(find.text('CONNECT · 8 ITEMS'), findsOneWidget);
+        final composer = tester.getRect(find.byType(Composer));
+        expect(composer.bottom, lessThanOrEqualTo(568));
+        expect(composer.top, lessThan(568));
+        // The card goes before the test ends, so its countdown stops.
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 
   testWidgets('an approval shows above the composer and is answered', (
     tester,

@@ -15,8 +15,10 @@ import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/chat/connection_models.dart';
 import '../../data/rpc/rpc_frame.dart';
 import 'chat_state.dart';
+import 'links.dart';
 import 'prompt_records.dart' as records;
 
 typedef ToastCallback =
@@ -681,6 +683,69 @@ final class ChatController extends ValueNotifier<ChatState> {
 
   Future<void> skipLogin(LoginRequest request) =>
       answerLogin(request, identifier: '', password: '');
+
+  /// Approves or skips one target of an open card. The card stays: Hermes
+  /// reports the new state in a `connection.update`. Credentials in
+  /// [answer] go straight to the wire and are kept nowhere.
+  Future<void> answerConnectionTarget(
+    ConnectionRequest request,
+    TargetAnswer answer,
+  ) async {
+    final result = await _backend.answerConnection(request, [answer]);
+    if (_disposed) return;
+    if (result case Err(:final failure)) {
+      onToast?.call('Could not send that: ${describe(failure)}');
+    }
+  }
+
+  /// Continue: settles the card, counting every target still open as
+  /// skipped. The card closes when Hermes says so; if it does not, it
+  /// closes here once the answer was accepted.
+  Future<void> settleConnection(ConnectionRequest request) async {
+    // The card shown may be older than the state: settle what is open now.
+    final current =
+        value.connections.where((c) => c.opId == request.opId).firstOrNull ??
+        request;
+    final open = [
+      for (final target in current.targets)
+        if (!target.state.resolved) TargetAnswer.skipped(target.name),
+    ];
+    final result = await _backend.answerConnection(current, open, settle: true);
+    if (_disposed) return;
+    switch (result) {
+      case Ok():
+        _update(value.withoutConnection(request.opId));
+      case Err(:final failure):
+        onToast?.call('Could not send that: ${describe(failure)}');
+    }
+  }
+
+  /// Opens a target's sign-in page in the browser. Hermes then reports
+  /// progress on its own.
+  Future<void> openSignIn(ConnectionTarget target) async {
+    final url = target.connectUrl;
+    if (url == null) return;
+    await openLink(url);
+  }
+
+  /// The card's deadline passed. It leaves an expired line, as a withdrawn
+  /// prompt does.
+  void expireConnection(String opId) {
+    if (!value.connections.any((c) => c.opId == opId)) return;
+    final at = clock();
+    _update(
+      value
+          .withoutConnection(opId)
+          .withPromptRecord(
+            PromptRecord(
+              id: 'prompt-${value.items.length}',
+              title: 'Connection setup',
+              detail: 'expired ${records.clock(at)} · Hermes stopped waiting',
+              outcome: PromptOutcome.expired,
+            ),
+          ),
+    );
+  }
 
   /// Runs a slash command and does what it asks: show output, send a prompt,
   /// fill the composer, or follow an alias — at most three deep, so an alias

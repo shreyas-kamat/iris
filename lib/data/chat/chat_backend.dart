@@ -312,10 +312,10 @@ final class DashboardChat implements ChatBackend {
   )).map(CatalogParser.conversationPage);
 
   @override
-  Future<Result<List<AgentProfile>>> profiles() async => (await _session
-      .connection
-      .client
-      .get('/api/profiles')).map(CatalogParser.profiles);
+  Future<Result<List<AgentProfile>>> profiles() async =>
+      (await _session.connection.client.get(
+        '/api/profiles',
+      )).map(CatalogParser.profiles);
 
   @override
   Future<Result<HistoryPage>> history(
@@ -446,10 +446,20 @@ final class DashboardChat implements ChatBackend {
           pending.add(parsed);
         }
       }
+      final runtime =
+          HistoryParser.firstText(json, const ['session_id']) ?? storedId;
+      // A connection card open before Iris attached comes back with the
+      // resume, not as a server request. Null without an op id.
+      if (ConnectionRequest.parse(
+            json['pending_connection'],
+            sessionId: runtime,
+          )
+          case final card?) {
+        pending.add(ConnectionAsked(card));
+      }
       final info = json['info'];
       return ResumedConversation(
-        runtimeId:
-            HistoryParser.firstText(json, const ['session_id']) ?? storedId,
+        runtimeId: runtime,
         running: json['running'].boolOrNull ?? info['running'].boolean(),
         pending: pending,
         model: HistoryParser.firstText(info, const ['model']),
@@ -475,11 +485,7 @@ final class DashboardChat implements ChatBackend {
     bool queued = false,
   }) async => (await _session.call(
     'prompt.submit',
-    params: {
-      'session_id': runtimeId,
-      'text': text,
-      if (queued) 'queued': true,
-    },
+    params: {'session_id': runtimeId, 'text': text, if (queued) 'queued': true},
     timeout: submitTimeout,
   )).map((json) => SubmitOutcome.fromStatus(json['status'].stringOrNull));
 
@@ -501,7 +507,11 @@ final class DashboardChat implements ChatBackend {
       _newConversation(
         await _session.call(
           'session.branch_stored',
-          params: _scoped({'parent_session_id': storedId, 'cols': 96, 'source': 'desktop'}),
+          params: _scoped({
+            'parent_session_id': storedId,
+            'cols': 96,
+            'source': 'desktop',
+          }),
         ),
         endpoint: 'session.branch_stored',
       );
@@ -526,12 +536,11 @@ final class DashboardChat implements ChatBackend {
   );
 
   @override
-  Future<Result<void>> compress(String runtimeId) async =>
-      (await _session.call(
-        'session.compress',
-        params: {'session_id': runtimeId},
-        timeout: const Duration(seconds: 120),
-      )).map((_) {});
+  Future<Result<void>> compress(String runtimeId) async => (await _session.call(
+    'session.compress',
+    params: {'session_id': runtimeId},
+    timeout: const Duration(seconds: 120),
+  )).map((_) {});
 
   @override
   Future<Result<BusyMode>> busyMode() async => (await _session.call(
@@ -540,11 +549,10 @@ final class DashboardChat implements ChatBackend {
   )).map((json) => BusyMode.fromWire(json['value'].stringOrNull));
 
   @override
-  Future<Result<void>> setBusyMode(BusyMode mode) async =>
-      (await _session.call(
-        'config.set',
-        params: _scoped({'key': 'busy', 'value': mode.wire}),
-      )).map((_) {});
+  Future<Result<void>> setBusyMode(BusyMode mode) async => (await _session.call(
+    'config.set',
+    params: _scoped({'key': 'busy', 'value': mode.wire}),
+  )).map((_) {});
 
   @override
   Future<Result<void>> setReasoning(
@@ -609,8 +617,7 @@ final class DashboardChat implements ChatBackend {
       )).map(
         (json) => [
           for (final row in json['sessions'].list)
-            if (row['id'].stringOrNull case final String id
-                when id.isNotEmpty)
+            if (row['id'].stringOrNull case final String id when id.isNotEmpty)
               LiveStatus(
                 runtimeId: id,
                 storedId: row['session_key'].string(),
@@ -686,11 +693,10 @@ final class DashboardChat implements ChatBackend {
     return staged.map(_fileReference);
   }
 
-  static bool _refusedAsImage(IrisFailure failure) =>
-      switch (failure.cause) {
-        RpcError(code: 4016 || 4018) => true,
-        _ => false,
-      };
+  static bool _refusedAsImage(IrisFailure failure) => switch (failure.cause) {
+    RpcError(code: 4016 || 4018) => true,
+    _ => false,
+  };
 
   /// The reply's `ref_text`, or one built from the staged path.
   static String? _fileReference(Json result) {
@@ -773,16 +779,15 @@ final class DashboardChat implements ChatBackend {
     required String model,
     required String provider,
     required bool confirmed,
-  }) async =>
-      (await _session.call(
-        'config.set',
-        params: {
-          'key': 'model',
-          'session_id': runtimeId,
-          'value': '$model --provider $provider --session',
-          if (confirmed) 'confirm_expensive_model': true,
-        },
-      )).map((json) => CatalogParser.modelSwitch(json, requested: model));
+  }) async => (await _session.call(
+    'config.set',
+    params: {
+      'key': 'model',
+      'session_id': runtimeId,
+      'value': '$model --provider $provider --session',
+      if (confirmed) 'confirm_expensive_model': true,
+    },
+  )).map((json) => CatalogParser.modelSwitch(json, requested: model));
 
   @override
   Future<Result<List<SlashCommand>>> commands() async =>
@@ -801,8 +806,9 @@ final class DashboardChat implements ChatBackend {
     // Only a gateway answer means slash.exec declined to run it. A timeout or
     // a dropped socket may mean it IS running, and dispatching it again could
     // run it twice.
-    if (result case Err(:final failure)
-        when failure.kind == FailureKind.rejected) {
+    if (result case Err(
+      :final failure,
+    ) when failure.kind == FailureKind.rejected) {
       final space = cleaned.indexOf(' ');
       final dispatched = await _session.call(
         'command.dispatch',
@@ -849,10 +855,8 @@ final class DashboardChat implements ChatBackend {
       _patchSession(storedId, {'title': title});
 
   @override
-  Future<Result<void>> setArchived(
-    String storedId, {
-    required bool archived,
-  }) => _patchSession(storedId, {'archived': archived});
+  Future<Result<void>> setArchived(String storedId, {required bool archived}) =>
+      _patchSession(storedId, {'archived': archived});
 
   /// The owning profile goes in the body: the dashboard opens that
   /// profile's database from it, and without it a named profile's write
@@ -887,15 +891,20 @@ final class DashboardChat implements ChatBackend {
       case Ok(:final value):
         final error = value['error'].stringOrNull?.trim();
         if (error != null && error.isNotEmpty) {
-          return Err(IrisFailure(FailureKind.server, message: error, endpoint: route));
+          return Err(
+            IrisFailure(FailureKind.server, message: error, endpoint: route),
+          );
         }
-        final words = value['transcript'].stringOrNull ?? value['text'].stringOrNull;
+        final words =
+            value['transcript'].stringOrNull ?? value['text'].stringOrNull;
         if (words == null) {
-          return Err(const IrisFailure(
-            FailureKind.malformed,
-            message: "Hermes didn't send back what you said.",
-            endpoint: route,
-          ));
+          return Err(
+            const IrisFailure(
+              FailureKind.malformed,
+              message: "Hermes didn't send back what you said.",
+              endpoint: route,
+            ),
+          );
         }
         return Ok(words.trim());
     }
