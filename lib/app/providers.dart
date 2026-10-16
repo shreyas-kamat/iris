@@ -23,6 +23,7 @@ import '../data/net/server_config.dart';
 import '../data/prefs/preferences_store.dart';
 import '../data/repositories/server_repository.dart';
 import '../data/rpc/dashboard_session.dart';
+import '../data/rpc/rpc_frame.dart';
 import '../demo/demo_chat_backend.dart';
 import '../demo/demo_mode.dart';
 import 'preferences.dart';
@@ -285,6 +286,8 @@ final liveChatsProvider = StreamProvider.autoDispose<Map<String, LiveStatus>>((
       },
       Err() => const {},
     });
+    // A server without the call will not grow one: stop asking.
+    if (rows.failureOrNull?.rpcError?.isMethodNotFound ?? false) return;
     // A timer the provider can cancel, so a disposed screen leaves nothing
     // running behind it.
     next = Timer(interval, () => unawaited(poll()));

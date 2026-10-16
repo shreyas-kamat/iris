@@ -97,6 +97,7 @@ final class FakeChatBackend implements ChatBackend {
   Result<void> loginResult = const Ok(null);
   Result<void> connectionResult = const Ok(null);
   Result<List<LiveStatus>> activeResult = const Ok([]);
+  int activeCalls = 0;
 
   /// `(runtimeId, text, queued)` for every submit.
   final List<(String, String, bool)> submits = [];
@@ -111,7 +112,9 @@ final class FakeChatBackend implements ChatBackend {
   final List<(String, String, String)> logins = [];
   final List<(String, List<TargetAnswer>, bool)> connectionAnswers = [];
 
-  Result<ConversationSummary> conversationResult = const Err(IrisFailure(FailureKind.notFound));
+  Result<ConversationSummary> conversationResult = const Err(
+    IrisFailure(FailureKind.notFound),
+  );
   final List<String> conversationReads = [];
 
   @override
@@ -196,8 +199,8 @@ final class FakeChatBackend implements ChatBackend {
   }
 
   final List<(String, String)> attached = [];
-  Result<String?> Function(Attachment file) attachResult =
-      (file) => Ok(file.isImage ? null : '@file:/s/${file.name}');
+  Result<String?> Function(Attachment file) attachResult = (file) =>
+      Ok(file.isImage ? null : '@file:/s/${file.name}');
 
   @override
   Future<Result<String?>> attach(String runtimeId, Attachment file) async {
@@ -358,7 +361,10 @@ final class FakeChatBackend implements ChatBackend {
   }
 
   @override
-  Future<Result<void>> setReasoning(String runtimeId, ReasoningEffort effort) async {
+  Future<Result<void>> setReasoning(
+    String runtimeId,
+    ReasoningEffort effort,
+  ) async {
     efforts.add(effort);
     return effortResult;
   }
@@ -390,6 +396,8 @@ final class FakeChatBackend implements ChatBackend {
   }
 
   @override
-  Future<Result<List<LiveStatus>>> activeSessions() async => activeResult;
-
+  Future<Result<List<LiveStatus>>> activeSessions() async {
+    activeCalls++;
+    return activeResult;
+  }
 }

@@ -28,19 +28,43 @@ void main() {
     expect(live['s3']!.waiting, isTrue);
   });
 
-  test('a server without session.active_list simply has nothing live', () async {
-    final backend = FakeChatBackend();
-    // IrisFailure with an RpcError(isMethodNotFound): build it the way
-    // test/data/rpc_client_test.dart does for "unknown method".
-    backend.activeResult = Err(unknownMethod('session.active_list'));
-    final container = ProviderContainer(
-      overrides: [
-        activeChatProvider.overrideWith((ref) async => backend),
-        liveIntervalProvider.overrideWithValue(const Duration(hours: 1)),
-      ],
-    );
-    addTearDown(container.dispose);
-    container.listen(liveChatsProvider, (_, _) {});
-    expect(await container.read(liveChatsProvider.future), isEmpty);
-  });
+  test(
+    'a server without session.active_list simply has nothing live',
+    () async {
+      final backend = FakeChatBackend();
+      // IrisFailure with an RpcError(isMethodNotFound): build it the way
+      // test/data/rpc_client_test.dart does for "unknown method".
+      backend.activeResult = Err(unknownMethod('session.active_list'));
+      final container = ProviderContainer(
+        overrides: [
+          activeChatProvider.overrideWith((ref) async => backend),
+          liveIntervalProvider.overrideWithValue(const Duration(hours: 1)),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(liveChatsProvider, (_, _) {});
+      expect(await container.read(liveChatsProvider.future), isEmpty);
+    },
+  );
+
+  test(
+    'a server without session.active_list is asked once, not every 15 s',
+    () async {
+      final backend = FakeChatBackend()
+        ..activeResult = Err(unknownMethod('session.active_list'));
+      final container = ProviderContainer(
+        overrides: [
+          activeChatProvider.overrideWith((ref) async => backend),
+          liveIntervalProvider.overrideWithValue(
+            const Duration(milliseconds: 5),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(liveChatsProvider, (_, _) {});
+      await container.read(liveChatsProvider.future);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(backend.activeCalls, 1);
+    },
+  );
 }

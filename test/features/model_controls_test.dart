@@ -87,7 +87,9 @@ void main() {
             name: 'Anthropic',
             models: ['opus', for (var i = 0; i < 80; i++) 'model-$i'],
             isCurrent: true,
-            capabilities: const {'opus': ModelCaps(reasoning: true, fast: true)},
+            capabilities: const {
+              'opus': ModelCaps(reasoning: true, fast: true),
+            },
           ),
         ],
       ),
