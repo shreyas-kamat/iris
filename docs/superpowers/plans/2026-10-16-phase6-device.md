@@ -20,8 +20,9 @@ cleanup -> deleted
 Findings:
 - The server's busy mode is `interrupt`; the test set it to queue and restored it.
 - A `queued: true` submit while a turn ran answered `queued`, and both turns completed.
-- **Delete while live was accepted, not refused**, on this server. The "Stop the reply" toast path
-  (device checklist item 2) therefore comes from the app's own check, not the server's refusal.
+- **Delete while live was accepted, not refused**, on this server. The app had no check of its own, so a
+  replying chat could be deleted mid-reply. Fixed in the final review: home refuses a chat its Live poll
+  reports as replying, with the "Stop the reply" toast (device checklist item 2).
 - Both throwaway chats (original and branch) were deleted; nothing left over.
 
 ## Device pass — 2026-10-16

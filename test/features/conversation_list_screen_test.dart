@@ -674,6 +674,27 @@ void main() {
     );
   });
 
+  testWidgets(
+    'a chat home knows is replying is not deleted, even if the server would',
+    (tester) async {
+      // The user's server accepts a REST delete of a live chat.
+      backend.activeResult = const Ok([
+        LiveStatus(runtimeId: 'run-1', storedId: 'stored-1', status: 'working'),
+      ]);
+      await openDelete(tester);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(backend.deletes, isEmpty);
+      expect(find.text('Weekly planning'), findsWidgets);
+      expect(
+        find.text('Stop the reply before deleting this chat.'),
+        findsOneWidget,
+      );
+      expect(find.text('Open'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    },
+  );
+
   testWidgets('cancelling the confirm deletes nothing', (tester) async {
     await openDelete(tester);
     await tester.tap(find.text('Cancel'));

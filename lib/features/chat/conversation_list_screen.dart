@@ -316,6 +316,19 @@ class _ConversationListScreenState
     String title,
   ) async {
     if (!await showDeleteSheet(context, title) || !mounted) return;
+    void stopFirst() => showIrisToast(
+      context,
+      message: 'Stop the reply before deleting this chat.',
+      actionLabel: 'Open',
+      onAction: () => unawaited(_open(chat, conversation: conversation)),
+    );
+    // Not every server refuses: the dashboard's REST delete can remove a
+    // chat mid-reply. What home knows is replying is refused here.
+    final replying = ref.read(liveChatsProvider).value ?? const {};
+    if (replying.containsKey(conversation.id)) {
+      stopFirst();
+      return;
+    }
     unawaited(IrisHaptics.commit());
     setState(() => _gone.add(conversation.id));
     final result = await chat.delete(conversation.id);
@@ -325,17 +338,14 @@ class _ConversationListScreenState
         ref.read(pinsProvider.notifier).unpin(conversation.id);
         ref.read(branchRecordsProvider).forget(conversation.id);
         showIrisToast(context, message: 'Deleted ‘$title’');
+      case Err(:final failure) when refusedAsLive(failure):
+        setState(() => _gone.remove(conversation.id));
+        stopFirst();
       case Err(:final failure):
         setState(() => _gone.remove(conversation.id));
         showIrisToast(
           context,
-          message: refusedAsLive(failure)
-              ? 'Stop the reply before deleting this chat.'
-              : 'Could not delete: ${ChatController.describe(failure)}',
-          actionLabel: refusedAsLive(failure) ? 'Open' : null,
-          onAction: refusedAsLive(failure)
-              ? () => unawaited(_open(chat, conversation: conversation))
-              : null,
+          message: 'Could not delete: ${ChatController.describe(failure)}',
         );
     }
   }
