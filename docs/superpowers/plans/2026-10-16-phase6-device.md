@@ -38,7 +38,7 @@ Screenshots were taken during the pass and are not committed; names below are th
 | 3 | Branch from the menu; the new chat opens with "Branched from …"; still there after a kill and reopen | **Pass** on the real server (d3-opened, d3-persist). The branch copies the transcript and ends with "Branched here · 18:18". In the demo the branch opens empty and the line is gone after a restart (demo state is in memory) |
 | 4 | Reply menu: Copy, Select text, Branch from here. Latest user message: Copy, Select text, Undo. Undo collapses the exchange, restores the prompt, toast "Undid the last turn" | **Pass** (d4-reply-menu, d4-user-menu, d4-undone). The older-message-has-no-Undo case was not walked |
 | 5 | Busy mode Queue / Steer / Interrupt in a running reply | **Not walked** (replies finish in seconds on this server, so the tray is hard to catch by hand; covered by the widget tests and the live test) |
-| 6 | Model sheet | Opens with a filter and a long list (d6-model). Neither effort nor fast showed for `gpt-6.1-sol` although the composer chip reads "· medium" — the sheet follows the gateway's capabilities, the chip follows the session. **Open question**, not changed |
+| 6 | Model sheet | Opens with a filter and a long list (d6-model). Neither effort nor fast showed for `gpt-6.1-sol` although the composer chip reads "· medium" — the sheet follows the gateway's capabilities, the chip follows the session. **Bug, fixed in the final review**: the gateway does report `gpt-6.1-sol` with `{reasoning: true, fast: true}`; the controls were drawn after every model of every provider (several hundred rows) and were never scrolled to. They now sit above the filter. Not yet re-seen on the device |
 | 7 | Demo "Deploy the docs site" prompt cards | **Not walked** |
 | 8 | "+" menu: Photos, Files, "up to 5 files · 20 MB each" | **Pass** (d8-plus). Chips, dictation, context ring and usage thresholds **not walked** |
 | 9 | 200% font on a 320 dp window | **Found three problems, all fixed** (below) |
@@ -96,6 +96,7 @@ pass for the surfaces they touched.
 
 ### Still open
 
-- Model sheet shows no effort or fast controls for `gpt-6.1-sol` while the chip says "medium" (see the first round).
+- ~~Model sheet shows no effort or fast controls for `gpt-6.1-sol`~~: fixed in the final review (see the first round);
+  to be confirmed on the device against the real server.
 - In the demo, Enable and Skip on a connection row do nothing visible: the real server answers with a
   `connection.update`, the demo backend never sends one. Continue still works.
