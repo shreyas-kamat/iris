@@ -172,4 +172,20 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('a long provider name keeps its width at 200% text on a 320 dp screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final long = UsageRow(slug: 'codex', name: 'ChatGPT or Codex Subscription', usage: codex.usage);
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(320, 800), textScaler: TextScaler.linear(2), disableAnimations: true),
+        child: _strip(AsyncData([long])),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.text('ChatGPT or Codex Subscription')).width, greaterThan(150));
+  });
 }

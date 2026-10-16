@@ -162,29 +162,39 @@ class _ProviderRowState extends State<_ProviderRow>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
+            // A wrap, not a row: at a large text size the name and the figure
+            // each take a line rather than squeezing the name to one letter.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              runSpacing: IrisSpace.xs,
               children: [
-                Expanded(
-                  child: Text(
-                    widget.row.name,
-                    style: type.body.copyWith(fontSize: 14, color: palette.ink),
-                  ),
+                Text(
+                  widget.row.name,
+                  style: type.body.copyWith(fontSize: 14, color: palette.ink),
                 ),
-                if (tightest != null)
-                  _UsedCaption(window: tightest, now: widget.now),
-                const SizedBox(width: IrisSpace.xs),
-                SpringBuilder(
-                  value: _open ? .5 : 0,
-                  spring: IrisSprings.snappy,
-                  builder: (context, turns, child) => Transform.rotate(
-                    angle: turns * 2 * math.pi,
-                    child: child,
-                  ),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 16,
-                    color: palette.inkMuted,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (tightest != null)
+                      Flexible(
+                        child: _UsedCaption(window: tightest, now: widget.now),
+                      ),
+                    const SizedBox(width: IrisSpace.xs),
+                    SpringBuilder(
+                      value: _open ? .5 : 0,
+                      spring: IrisSprings.snappy,
+                      builder: (context, turns, child) => Transform.rotate(
+                        angle: turns * 2 * math.pi,
+                        child: child,
+                      ),
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 16,
+                        color: palette.inkMuted,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
