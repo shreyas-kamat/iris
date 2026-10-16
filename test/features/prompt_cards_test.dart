@@ -213,6 +213,10 @@ void main() {
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect((id, pw), ('jamie@hermes.dev', 'hunter2'));
+      // Cleared as the answer leaves, as the password card does.
+      for (final field in tester.widgetList<EditableText>(fields)) {
+        expect(field.controller.text, isEmpty);
+      }
     });
 
     testWidgets(

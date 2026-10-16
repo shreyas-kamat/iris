@@ -43,8 +43,14 @@ class _LoginCardState extends State<LoginCard> {
   }
 
   Future<void> _save() async {
+    final identifier = _identifier.text;
+    final password = _password.text;
+    // Cleared before the answer leaves, so neither value lives in a widget
+    // while it is in flight.
+    _identifier.clear();
+    _password.clear();
     setState(() => _sending = true);
-    await widget.onSave(_identifier.text, _password.text);
+    await widget.onSave(identifier, password);
     if (mounted) setState(() => _sending = false);
   }
 
