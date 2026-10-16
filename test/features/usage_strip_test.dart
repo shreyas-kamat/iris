@@ -179,9 +179,17 @@ void main() {
     addTearDown(tester.view.reset);
     final long = UsageRow(slug: 'codex', name: 'ChatGPT or Codex Subscription', usage: codex.usage);
     await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(size: Size(320, 800), textScaler: TextScaler.linear(2), disableAnimations: true),
-        child: _strip(AsyncData([long])),
+      ProviderScope(
+        overrides: [
+          providerUsageProvider.overrideWithValue(AsyncData([long])),
+          clockProvider.overrideWithValue(() => _now),
+        ],
+        child: themed(
+          const MediaQuery(
+            data: MediaQueryData(size: Size(320, 800), textScaler: TextScaler.linear(2), disableAnimations: true),
+            child: Align(alignment: Alignment.topCenter, child: UsageStrip()),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
