@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -19,6 +20,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../../design/tokens/typography.dart';
 import 'attachment_chip.dart';
 import 'links.dart';
 
@@ -33,6 +35,8 @@ class TranscriptEntry extends StatelessWidget {
     this.live,
     this.onRetry,
     this.retrying = false,
+    this.attempt = 1,
+    this.onStop,
     this.onHold,
     this.collapsing = false,
     super.key,
@@ -46,6 +50,12 @@ class TranscriptEntry extends StatelessWidget {
 
   /// A retry is on its way.
   final bool retrying;
+
+  /// Which try this is, shown while retrying.
+  final int attempt;
+
+  /// Stops a retry that is under way.
+  final VoidCallback? onStop;
 
   /// Called with the entry's screen rectangle on a long-press, to open its
   /// menu. Only the person's and the agent's messages are held.
@@ -76,6 +86,8 @@ class TranscriptEntry extends StatelessWidget {
       notice,
       onRetry: onRetry!,
       retrying: retrying,
+      attempt: attempt,
+      onStop: onStop,
     ),
     final Notice notice => _NoticeLine(notice),
     final PromptRecord record => SettledLine(
@@ -569,100 +581,246 @@ class _CaretState extends State<_Caret> with SingleTickerProviderStateMixin {
 }
 
 /// A turn that failed, with a way to run it again: the design's failed-turn
-/// card. While the retry is on its way the pill shows it working, so a second
-/// tap cannot send a second retry.
-class _FailedCard extends StatelessWidget {
+/// card (frame B2). The cause is the first line, in plain words; Details opens
+/// the whole message in mono. While the retry is on its way the card goes
+/// neutral and shows the attempt and a Stop, so a second tap cannot send a
+/// second retry.
+class _FailedCard extends StatefulWidget {
   const _FailedCard(
     this.notice, {
     required this.onRetry,
     required this.retrying,
+    required this.attempt,
+    this.onStop,
   });
 
   final Notice notice;
   final VoidCallback onRetry;
   final bool retrying;
+  final int attempt;
+  final VoidCallback? onStop;
+
+  @override
+  State<_FailedCard> createState() => _FailedCardState();
+}
+
+class _FailedCardState extends State<_FailedCard> {
+  bool _details = false;
+
+  String get _cause {
+    final line = widget.notice.text.split('\n').first.trim();
+    return line.length > 140 ? '${line.substring(0, 140)}…' : line;
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final type = context.type;
     final failed = palette.colorFor(AgentState.failed);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+    final retrying = widget.retrying;
+    return AnimatedContainer(
+      duration: context.reduceMotion ? Duration.zero : IrisDurations.normal,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: failed.withValues(alpha: .08),
-        borderRadius: const BorderRadius.all(IrisRadius.lg),
+        color: retrying ? palette.surface : failed.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: failed.withValues(alpha: .22),
+          color: retrying ? palette.lineStrong : failed.withValues(alpha: .32),
           width: IrisStroke.hairline,
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              notice.text,
-              style: type.body.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                height: 1.4,
-                color: failed,
+      child: retrying
+          ? _retrying(palette, type)
+          : _failed(palette, type, failed),
+    );
+  }
+
+  Widget _retrying(IrisPalette palette, IrisTypography type) => Semantics(
+    container: true,
+    excludeSemantics: true,
+    label: 'Retrying',
+    child: Row(
+      children: [
+        const IrisOrb(state: AgentState.loading, size: 22, glow: false),
+        const SizedBox(width: IrisSpace.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Retrying…',
+                style: type.body.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: palette.ink,
+                ),
+              ),
+              Text(
+                'attempt ${widget.attempt}',
+                style: type.codeSmall.copyWith(color: palette.inkMuted),
+              ),
+            ],
+          ),
+        ),
+        if (widget.onStop != null)
+          IrisPressable(
+            onTap: widget.onStop,
+            semanticLabel: 'Stop',
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: palette.lineStrong),
+              ),
+              child: Text(
+                'Stop',
+                style: type.body.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: palette.ink,
+                ),
               ),
             ),
           ),
-          const SizedBox(width: IrisSpace.md),
-          AnimatedSwitcher(
-            duration: context.reduceMotion
-                ? Duration.zero
-                : IrisDurations.normal,
-            switchInCurve: IrisCurves.standard,
-            child: retrying
-                ? Semantics(
-                    key: const ValueKey('retrying'),
-                    container: true,
-                    excludeSemantics: true,
-                    label: 'Retrying',
-                    child: const SizedBox(
-                      width: 34,
-                      height: 34,
-                      child: Center(
-                        child: IrisOrb(
-                          state: AgentState.loading,
-                          size: 22,
-                          glow: false,
-                        ),
+      ],
+    ),
+  );
+
+  Widget _failed(IrisPalette palette, IrisTypography type, Color failed) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Shake(
+                child: IrisOrb(state: AgentState.failed, size: 28, glow: false),
+              ),
+              const SizedBox(width: IrisSpace.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'The turn stopped',
+                      style: type.body.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: palette.ink,
                       ),
                     ),
-                  )
-                : IrisPressable(
-                    key: const ValueKey('retry'),
-                    onTap: () {
-                      unawaited(IrisHaptics.commit());
-                      onRetry();
-                    },
-                    scale: .95,
-                    semanticLabel: 'Retry',
-                    child: Container(
-                      height: 34,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: failed,
-                        borderRadius: const BorderRadius.all(IrisRadius.full),
+                    const SizedBox(height: 2),
+                    Text(
+                      _cause,
+                      style: type.body.copyWith(
+                        fontSize: 13.5,
+                        height: 1.4,
+                        color: palette.inkMuted,
                       ),
-                      child: Text(
-                        'Retry',
-                        style: type.body.copyWith(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: palette.inkInverse,
-                        ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (_details) ...[
+            const SizedBox(height: IrisSpace.md),
+            Container(
+              key: const ValueKey('failure-details'),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: palette.surfaceSunken,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: SelectableText(
+                widget.notice.text,
+                style: type.codeSmall.copyWith(
+                  fontSize: 11,
+                  color: palette.ink,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: IrisSpace.md),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: IrisPressable(
+                  key: const ValueKey('retry'),
+                  onTap: () {
+                    unawaited(IrisHaptics.commit());
+                    widget.onRetry();
+                  },
+                  scale: .97,
+                  semanticLabel: 'Retry',
+                  child: Container(
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: failed,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Text(
+                      'Retry',
+                      style: type.body.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: palette.inkInverse,
                       ),
                     ),
                   ),
+                ),
+              ),
+              const SizedBox(width: IrisSpace.sm),
+              Expanded(
+                child: IrisPressable(
+                  onTap: () => setState(() => _details = !_details),
+                  scale: .97,
+                  semanticLabel: 'Details',
+                  child: Container(
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: palette.lineStrong),
+                    ),
+                    child: Text(
+                      'Details',
+                      style: type.body.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: palette.ink,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
+      );
+}
+
+/// The failed orb shakes once as it arrives. Still under reduced motion.
+class _Shake extends StatelessWidget {
+  const _Shake({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (context.reduceMotion) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 420),
+      builder: (context, t, child) => Transform.translate(
+        offset: Offset(math.sin(t * math.pi * 4) * 3 * (1 - t), 0),
+        child: child,
       ),
+      child: child,
     );
   }
 }

@@ -681,6 +681,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? () => unawaited(_chat.retry())
                           : null,
                       retrying: state.retrying,
+                      attempt: state.attempt,
+                      onStop: () => unawaited(_chat.stop()),
                       collapsing: state.collapsing.contains(item.id),
                       onHold: (rect) => unawaited(_hold(state, item, rect)),
                       key: ValueKey(item.id),

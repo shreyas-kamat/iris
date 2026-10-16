@@ -590,7 +590,13 @@ final class ChatController extends ValueNotifier<ChatState> {
   Future<void> retry() async {
     final runtimeId = _runtimeId;
     if (runtimeId == null || value.running || value.retrying) return;
-    _update(value.copyWith(retrying: true, turn: TurnPhase.thinking));
+    _update(
+      value.copyWith(
+        retrying: true,
+        attempt: value.attempt + 1,
+        turn: TurnPhase.thinking,
+      ),
+    );
     await _slash(runtimeId, '/retry', depth: 0);
     if (_disposed) return;
     if (value.running) {

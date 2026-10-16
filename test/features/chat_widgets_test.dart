@@ -430,7 +430,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Retry'), findsNothing);
-    expect(find.byKey(const ValueKey('retrying')), findsOneWidget);
+    expect(find.text('Retrying…'), findsOneWidget);
     expect(find.bySemanticsLabel('Retrying'), findsOneWidget);
   });
 

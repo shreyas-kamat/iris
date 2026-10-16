@@ -524,6 +524,24 @@ void main() {
       await controller.retry();
       expect(backend.slashes, isEmpty);
     });
+
+    test(
+      'each retry counts as an attempt, and a new message starts again',
+      () async {
+        backend.historyResult = const Ok([UserTurn(id: '1', text: 'x')]);
+        final controller = controllerFor();
+        await controller.open();
+        backend.emit(const TurnFailed('run-1', 'boom'));
+        await settle();
+        expect(controller.value.attempt, 1);
+        await controller.retry();
+        expect(controller.value.attempt, 2);
+        backend.emit(const MessageCompleted('run-1', content: 'ok'));
+        await settle();
+        await controller.send('next');
+        expect(controller.value.attempt, 1);
+      },
+    );
   });
 
   group('input prompts', () {

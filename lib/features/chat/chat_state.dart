@@ -44,6 +44,7 @@ final class ChatState {
     this.commands = const [],
     this.context,
     this.retrying = false,
+    this.attempt = 1,
     this.logins = const [],
     this.connections = const [],
     this.effort,
@@ -85,6 +86,10 @@ final class ChatState {
   /// A retry is on its way; the failed card shows it working.
   final bool retrying;
 
+  /// Which try the turn is on: 1, then up by one for each retry. A new
+  /// message from the person starts again at 1.
+  final int attempt;
+
   /// Login prompts waiting for the person.
   final List<LoginRequest> logins;
 
@@ -125,6 +130,7 @@ final class ChatState {
     List<SlashCommand>? commands,
     ContextUsage? context,
     bool? retrying,
+    int? attempt,
     List<LoginRequest>? logins,
     List<ConnectionRequest>? connections,
     ReasoningEffort? effort,
@@ -149,6 +155,7 @@ final class ChatState {
     commands: commands ?? this.commands,
     context: context ?? this.context,
     retrying: retrying ?? this.retrying,
+    attempt: attempt ?? this.attempt,
     logins: logins ?? this.logins,
     connections: connections ?? this.connections,
     effort: effort ?? this.effort,
@@ -239,6 +246,7 @@ final class ChatState {
         provider: provider,
         commands: commands,
         context: context,
+        attempt: attempt,
         logins: logins,
         connections: connections,
         effort: effort,
@@ -266,6 +274,7 @@ final class ChatState {
     provider: provider,
     commands: commands,
     context: context,
+    attempt: attempt,
     logins: logins,
     connections: connections,
     effort: effort,
@@ -320,6 +329,7 @@ final class ChatState {
       ),
     ],
     turn: TurnPhase.thinking,
+    attempt: 1,
   );
 
   /// The person steered the running turn. The reply so far is finished, so
