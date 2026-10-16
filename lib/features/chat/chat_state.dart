@@ -48,6 +48,7 @@ final class ChatState {
     this.connections = const [],
     this.effort,
     this.fast,
+    this.collapsing = const {},
   });
 
   final ChatPhase phase;
@@ -91,6 +92,9 @@ final class ChatState {
   final ReasoningEffort? effort;
   final bool? fast;
 
+  /// The ids of an undone exchange, folding away before it leaves.
+  final Set<String> collapsing;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -113,6 +117,7 @@ final class ChatState {
     List<ConnectionRequest>? connections,
     ReasoningEffort? effort,
     bool? fast,
+    Set<String>? collapsing,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
@@ -133,6 +138,7 @@ final class ChatState {
     connections: connections ?? this.connections,
     effort: effort ?? this.effort,
     fast: fast ?? this.fast,
+    collapsing: collapsing ?? this.collapsing,
   );
 
   /// The state after [event].
@@ -245,7 +251,36 @@ final class ChatState {
     connections: connections,
     effort: effort,
     fast: fast,
+    collapsing: collapsing,
   );
+
+  /// The id of the last turn the person started: where "the last exchange"
+  /// begins. Steered turns are corrections inside a turn, not starts. Null
+  /// when none is loaded.
+  String? get lastExchangeStartId {
+    for (final item in items.reversed) {
+      if (item is UserTurn && !item.steered) return item.id;
+    }
+    return null;
+  }
+
+  /// The ids of the last exchange: its user turn and everything after.
+  Set<String> get lastExchangeIds {
+    final start = lastExchangeStartId;
+    if (start == null) return const {};
+    final at = items.indexWhere((i) => i.id == start);
+    return {for (final item in items.sublist(at)) item.id};
+  }
+
+  ChatState withCollapsing(Set<String> ids) => copyWith(collapsing: ids);
+
+  /// The transcript without its last exchange.
+  ChatState withoutLastExchange() {
+    final start = lastExchangeStartId;
+    if (start == null) return this;
+    final at = items.indexWhere((i) => i.id == start);
+    return copyWith(items: items.sublist(0, at), collapsing: const {});
+  }
 
   /// The person's message, shown at once.
   ChatState withUserTurn(String text, {List<String> attachments = const []}) =>

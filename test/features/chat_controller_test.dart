@@ -12,10 +12,12 @@ import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/rpc/rpc_frame.dart';
 import 'package:iris/features/chat/chat_controller.dart';
 import 'package:iris/features/chat/chat_state.dart';
 
 import '../support/fake_chat_backend.dart';
+import '../support/fakes.dart';
 
 void main() {
   late FakeChatBackend backend;
@@ -401,7 +403,8 @@ void main() {
     await controller.loadCommands();
     await controller.loadCommands();
     expect(backend.calls.where((c) => c == 'commands'), hasLength(1));
-    expect(controller.value.commands.single.name, '/new');
+    // The server's commands come first; Iris's own are added after them.
+    expect(controller.value.commands.first.name, '/new');
   });
 
   group('steering', () {
@@ -568,6 +571,117 @@ void main() {
     await controller.open();
     expect(controller.value.context?.percent, 40);
   });
+
+  group('undo', () {
+    Future<(ChatController, List<String>)> opened() async {
+      backend.historyResult = const Ok([
+        UserTurn(id: '1', text: 'first'),
+        AssistantTurn(id: '2', text: 'one'),
+        UserTurn(id: '3', text: 'Draft the fix as a PR.'),
+        AssistantTurn(id: '4', text: 'Opened #482'),
+      ]);
+      final toasts = <String>[];
+      final controller = controllerFor()
+        ..collapseDelay = Duration.zero
+        ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+      await controller.open();
+      return (controller, toasts);
+    }
+
+    test('removes the last exchange, returns the prompt, and says so', () async {
+      final (controller, toasts) = await opened();
+      String? returned;
+      controller.onPromptReturned = (text) => returned = text;
+      await controller.undo();
+      expect(backend.undos, ['run-1']);
+      expect(controller.value.items.map((i) => i.id), ['1', '2']);
+      expect(returned, 'Draft the fix as a PR.');
+      expect(toasts.single, 'Undid the last turn');
+    });
+
+    test('is refused while a reply is running, without calling the server', () async {
+      final (controller, toasts) = await opened();
+      backend.emit(const MessageStarted('run-1'));
+      await settle();
+      await controller.undo();
+      expect(backend.undos, isEmpty);
+      expect(toasts.single, 'Stop the reply first to undo.');
+    });
+
+    test('a 4009 from Hermes gives the same advice and keeps the transcript', () async {
+      final (controller, toasts) = await opened();
+      backend.undoResult = const Err(IrisFailure(
+        FailureKind.rejected,
+        message: 'session busy',
+        cause: RpcError(code: 4009, message: 'session busy'),
+      ));
+      await controller.undo();
+      expect(toasts.single, 'Stop the reply first to undo.');
+      expect(controller.value.items, hasLength(4));
+    });
+
+    test('a server without session.undo says so', () async {
+      final (controller, toasts) = await opened();
+      backend.undoResult = Err(unknownMethod('session.undo'));
+      await controller.undo();
+      expect(toasts.single, "Undo isn't supported on this server.");
+      expect(controller.value.items, hasLength(4));
+    });
+
+    test('nothing removed means nothing changes', () async {
+      final (controller, toasts) = await opened();
+      backend.undoResult = const Ok(0);
+      await controller.undo();
+      expect(toasts.single, 'Nothing to undo');
+      expect(controller.value.items, hasLength(4));
+    });
+
+    test('steered turns inside the exchange go with it, and files are noted', () async {
+      backend.historyResult = const Ok([
+        UserTurn(id: '1', text: 'go', attachments: ['log.txt']),
+        AssistantTurn(id: '2', text: 'working'),
+        UserTurn(id: '3', text: 'only prod', steered: true),
+        AssistantTurn(id: '4', text: 'done'),
+      ]);
+      final toasts = <String>[];
+      final controller = controllerFor()
+        ..collapseDelay = Duration.zero
+        ..onToast = (message, {actionLabel, onAction}) => toasts.add(message);
+      await controller.open();
+      String? returned;
+      controller.onPromptReturned = (text) => returned = text;
+      await controller.undo();
+      expect(controller.value.items, isEmpty);
+      expect(returned, 'go');
+      expect(toasts.single, 'Undid the last turn. Re-attach any files.');
+    });
+
+    test('typing /undo runs undo, not a slash command, and adds no bubble', () async {
+      final (controller, _) = await opened();
+      await controller.send('/undo');
+      expect(backend.undos, ['run-1']);
+      expect(backend.slashes, isEmpty);
+    });
+
+    test('with the user turn off the loaded page the newest page is reloaded', () async {
+      backend.historyResult = const Ok([AssistantTurn(id: '9', text: 'tail of a long reply')]);
+      final controller = controllerFor()..collapseDelay = Duration.zero;
+      await controller.open();
+      backend.calls.clear();
+      await controller.undo();
+      expect(backend.calls, contains('history stored-1'));
+    });
+  });
+
+  test('the local slash commands are always offered', () async {
+    backend.commandsResult = const Ok([SlashCommand(name: '/help', description: 'Help')]);
+    final controller = controllerFor();
+    await controller.open();
+    await controller.loadCommands();
+    final names = controller.value.commands.map((c) => c.name);
+    expect(names, containsAll(['/help', '/queue', '/steer', '/undo', '/branch']));
+  });
+
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

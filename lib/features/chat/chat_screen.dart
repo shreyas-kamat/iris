@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/result.dart';
 import '../../data/chat/attachment.dart';
@@ -27,6 +28,7 @@ import 'chat_state.dart';
 import 'composer.dart';
 import 'context_sheet.dart';
 import 'decision_cards.dart';
+import 'message_menu.dart';
 import 'model_sheet.dart';
 import 'transcript_view.dart';
 import 'voice_recorder.dart';
@@ -97,8 +99,19 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _chat.onPrefill = _prefill;
     _chat.onSteerReturned = _steerReturned;
+    _chat.onToast = _toast;
+    _chat.onPromptReturned = _prefill;
     _text.addListener(_watchForSlash);
     unawaited(_chat.open());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Under reduced motion the undone exchange leaves at once.
+    _chat.collapseDelay = context.reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 320);
   }
 
   @override
@@ -109,6 +122,54 @@ class _ChatScreenState extends State<ChatScreen> {
     _chat.dispose();
     _text.dispose();
     super.dispose();
+  }
+
+  void _toast(String message, {String? actionLabel, VoidCallback? onAction}) {
+    if (!mounted) return;
+    showIrisToast(
+      context,
+      message: message,
+      actionLabel: actionLabel,
+      onAction: onAction,
+      top: true,
+    );
+  }
+
+  Future<void> _hold(ChatState state, TranscriptItem item, Rect anchor) async {
+    final isUser = item is UserTurn;
+    final text = switch (item) {
+      UserTurn(:final text) => text,
+      AssistantTurn(:final text) => text,
+      _ => '',
+    };
+    if (text.trim().isEmpty) return;
+    final actions = [
+      MessageAction.copy,
+      MessageAction.select,
+      if (isUser &&
+          item.id == state.lastExchangeStartId &&
+          !state.running &&
+          _chat.isLive)
+        MessageAction.undo,
+    ];
+    final chosen = await showMessageMenu(
+      context,
+      anchor: anchor,
+      alignEnd: isUser,
+      actions: actions,
+    );
+    if (!mounted) return;
+    switch (chosen) {
+      case MessageAction.copy:
+        await Clipboard.setData(ClipboardData(text: text));
+        if (mounted) _toast('Copied');
+      case MessageAction.select:
+        await showSelectableText(context, text);
+      case MessageAction.undo:
+        await _chat.undo();
+      case MessageAction.branch || null:
+        break;
+    }
   }
 
   /// The command catalogue is read the first time the person types a slash.
@@ -181,7 +242,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         showIrisToast(
           context,
-          message: 'Iris needs the microphone. Allow it in Settings to dictate.',
+          message:
+              'Iris needs the microphone. Allow it in Settings to dictate.',
         );
       }
       return;
@@ -447,6 +509,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       ? () => unawaited(_chat.retry())
                       : null,
                   retrying: state.retrying,
+                  collapsing: state.collapsing.contains(item.id),
+                  onHold: (rect) => unawaited(_hold(state, item, rect)),
                   key: ValueKey(item.id),
                 ),
               ),

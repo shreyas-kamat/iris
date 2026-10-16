@@ -30,6 +30,8 @@ class TranscriptEntry extends StatelessWidget {
     this.live,
     this.onRetry,
     this.retrying = false,
+    this.onHold,
+    this.collapsing = false,
     super.key,
   });
 
@@ -42,8 +44,28 @@ class TranscriptEntry extends StatelessWidget {
   /// A retry is on its way.
   final bool retrying;
 
+  /// Called with the entry's screen rectangle on a long-press, to open its
+  /// menu. Only the person's and the agent's messages are held.
+  final void Function(Rect anchor)? onHold;
+
+  /// The entry is part of an undone exchange, folding away.
+  final bool collapsing;
+
   @override
-  Widget build(BuildContext context) => switch (item) {
+  Widget build(BuildContext context) {
+    final entry = _entry();
+    final holdable = item is UserTurn || item is AssistantTurn;
+    final held = holdable && onHold != null
+        ? GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onLongPress: () => onHold!(_rectOf(context)),
+            child: entry,
+          )
+        : entry;
+    return collapsing ? _Collapse(child: held) : held;
+  }
+
+  Widget _entry() => switch (item) {
     final UserTurn turn => _UserBubble(turn),
     final AssistantTurn turn => _AssistantBlock(turn, live: live),
     final ToolCall call => ToolCard(call),
@@ -54,6 +76,47 @@ class TranscriptEntry extends StatelessWidget {
     ),
     final Notice notice => _NoticeLine(notice),
   };
+}
+
+Rect _rectOf(BuildContext context) {
+  final box = context.findRenderObject()! as RenderBox;
+  return box.localToGlobal(Offset.zero) & box.size;
+}
+
+/// The last exchange folds away: height to 0, scaled to .96, faded by 60% of
+/// the way, blurred a pixel (frame A3). Under reduced motion it only fades.
+class _Collapse extends StatelessWidget {
+  const _Collapse({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (context.reduceMotion) {
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 1, end: 0),
+        duration: const Duration(milliseconds: 150),
+        builder: (context, t, child) => Opacity(opacity: t, child: child),
+        child: child,
+      );
+    }
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 1, end: 0),
+      duration: const Duration(milliseconds: 300),
+      curve: IrisCurves.exit,
+      builder: (context, t, child) => ClipRect(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          heightFactor: t,
+          child: Opacity(
+            opacity: (t / .4).clamp(0.0, 1.0),
+            child: Transform.scale(scale: .96 + .04 * t, child: child),
+          ),
+        ),
+      ),
+      child: child,
+    );
+  }
 }
 
 class _UserBubble extends StatelessWidget {
@@ -88,35 +151,38 @@ class _UserBubble extends StatelessWidget {
                 spacing: IrisSpace.xs,
                 runSpacing: IrisSpace.xs,
                 children: [
-                  for (final name in turn.attachments) AttachmentChip(name: name),
+                  for (final name in turn.attachments)
+                    AttachmentChip(name: name),
                 ],
               ),
             if (turn.attachments.isNotEmpty && turn.text.isNotEmpty)
               const SizedBox(height: IrisSpace.xs),
             if (turn.text.isNotEmpty)
               ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: constraints.maxWidth * .82),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: theme.palette.accentQuiet,
-                  borderRadius: _shape,
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * .82,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 15,
-                    vertical: 11,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.palette.accentQuiet,
+                    borderRadius: _shape,
                   ),
-                  child: SelectableText(
-                    turn.text,
-                    style: theme.typography.body.copyWith(
-                      fontSize: 15,
-                      height: 1.45,
-                      color: theme.palette.ink,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 11,
+                    ),
+                    child: Text(
+                      turn.text,
+                      style: theme.typography.body.copyWith(
+                        fontSize: 15,
+                        height: 1.45,
+                        color: theme.palette.ink,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
             if (turn.steered) ...[
               const SizedBox(height: IrisSpace.xs),
               Row(
@@ -199,14 +265,12 @@ class _AssistantBlock extends StatelessWidget {
           const SizedBox(height: IrisSpace.sm),
         ],
         if (hasText)
-          SelectionArea(
-            child: IrisMarkdown(
-              turn.text,
-              highlight: !streaming,
-              onTapLink: (href) => href == leaveDemoLink
-                  ? leaveDemo(context)
-                  : unawaited(openLink(href)),
-            ),
+          IrisMarkdown(
+            turn.text,
+            highlight: !streaming,
+            onTapLink: (href) => href == leaveDemoLink
+                ? leaveDemo(context)
+                : unawaited(openLink(href)),
           ),
         if (streaming) ...[
           if (hasText) const SizedBox(height: IrisSpace.xs),

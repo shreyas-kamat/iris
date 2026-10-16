@@ -48,6 +48,9 @@ final class UserTurn extends TranscriptItem {
     required this.text,
     this.steered = false,
     this.attachments = const [],
+    this.steerPending = false,
+    this.steerStep,
+    this.fromQueue = false,
   }) : super(id);
 
   final String text;
@@ -57,6 +60,15 @@ final class UserTurn extends TranscriptItem {
 
   /// The names of the files sent with it.
   final List<String> attachments;
+
+  /// A steer Hermes has not yet picked up: it waits for the next step.
+  final bool steerPending;
+
+  /// For a steer, the step (the nth tool of the turn) that picked it up.
+  final int? steerStep;
+
+  /// Sent from the queue tray when the previous turn finished.
+  final bool fromQueue;
 }
 
 /// Something the agent said, possibly still arriving.
@@ -66,6 +78,7 @@ final class AssistantTurn extends TranscriptItem {
     required this.text,
     this.reasoning = '',
     this.streaming = false,
+    this.redirected = false,
   }) : super(id);
 
   final String text;
@@ -76,16 +89,24 @@ final class AssistantTurn extends TranscriptItem {
   /// Still arriving.
   final bool streaming;
 
+  /// Cut off because the person redirected the turn.
+  final bool redirected;
+
   /// Says nothing at all — neither text nor thinking.
   bool get isEmpty => text.trim().isEmpty && reasoning.trim().isEmpty;
 
-  AssistantTurn copyWith({String? text, String? reasoning, bool? streaming}) =>
-      AssistantTurn(
-        id: id,
-        text: text ?? this.text,
-        reasoning: reasoning ?? this.reasoning,
-        streaming: streaming ?? this.streaming,
-      );
+  AssistantTurn copyWith({
+    String? text,
+    String? reasoning,
+    bool? streaming,
+    bool? redirected,
+  }) => AssistantTurn(
+    id: id,
+    text: text ?? this.text,
+    reasoning: reasoning ?? this.reasoning,
+    streaming: streaming ?? this.streaming,
+    redirected: redirected ?? this.redirected,
+  );
 }
 
 enum ToolStatus { running, done, failed }

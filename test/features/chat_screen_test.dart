@@ -1,9 +1,9 @@
 /// A whole conversation screen against a scripted backend.
 library;
 
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
@@ -485,6 +485,63 @@ void main() {
     );
     semantics.dispose();
   });
+
+  /// A conversation with two exchanges, opened.
+  Future<void> pumpChat(WidgetTester tester) async {
+    backend.historyResult = const Ok([
+      UserTurn(id: '1', text: 'Why?'),
+      AssistantTurn(id: '2', text: 'Because.'),
+      UserTurn(id: '3', text: 'Draft the fix.'),
+      AssistantTurn(id: '4', text: 'Done.'),
+    ]);
+    await tester.pumpWidget(
+      themed(ChatScreen(backend: backend, conversationId: 'stored-1', title: 'Greetings')),
+    );
+    await settle(tester);
+    await settle(tester);
+  }
+
+
+  testWidgets('long-press on your latest message offers Copy and Undo; older ones Copy only', (tester) async {
+    await pumpChat(tester);
+    await tester.longPress(find.text('Draft the fix.'));
+    await tester.pumpAndSettle();
+    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Undo'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Why?'));
+    await tester.pumpAndSettle();
+    expect(find.text('Copy'), findsOneWidget);
+    expect(find.text('Undo'), findsNothing);
+  });
+
+  testWidgets('Undo from the menu removes the exchange and refills the composer', (tester) async {
+    await pumpChat(tester);
+    await tester.longPress(find.text('Draft the fix.'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(backend.undos, ['run-1']);
+    expect(find.text('Done.'), findsNothing);
+    final field = tester.widget<EditableText>(find.byType(EditableText));
+    expect(field.controller.text, 'Draft the fix.');
+  });
+
+  testWidgets('Copy puts the whole message on the clipboard', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String;
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await pumpChat(tester);
+    await tester.longPress(find.text('Done.'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy'));
+    await tester.pumpAndSettle();
+    expect(copied, 'Done.');
+  });
 }
 
 final class FakeRecorder implements VoiceRecorder {
@@ -502,4 +559,5 @@ final class FakeRecorder implements VoiceRecorder {
 
   @override
   Future<void> cancel() async => recording = false;
+
 }

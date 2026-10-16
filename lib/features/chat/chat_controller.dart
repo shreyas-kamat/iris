@@ -15,7 +15,15 @@ import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/rpc/rpc_frame.dart';
 import 'chat_state.dart';
+
+typedef ToastCallback =
+    void Function(
+      String message, {
+      String? actionLabel,
+      VoidCallback? onAction,
+    });
 
 final class ChatController extends ValueNotifier<ChatState> {
   ChatController(this._backend, {String? conversationId, String? title})
@@ -45,6 +53,32 @@ final class ChatController extends ValueNotifier<ChatState> {
   /// Called with steer text Hermes could not take, so the screen can put it
   /// back in the composer.
   ValueChanged<String>? onSteerReturned;
+
+  /// Shows a short message to the person; the screen turns it into a toast.
+  ToastCallback? onToast;
+
+  /// Called with the text of an undone prompt, so the screen can put it back
+  /// in the composer for editing.
+  ValueChanged<String>? onPromptReturned;
+
+  /// How long the undone exchange takes to collapse before it leaves the
+  /// transcript. The screen sets zero under reduced motion.
+  Duration collapseDelay = const Duration(milliseconds: 320);
+
+  /// Commands Iris itself answers, offered even when the server's catalogue
+  /// lacks them.
+  static const localCommands = [
+    SlashCommand(name: '/queue', description: 'Send after the current reply'),
+    SlashCommand(
+      name: '/steer',
+      description: 'Slip into the running turn at its next step',
+    ),
+    SlashCommand(
+      name: '/undo',
+      description: 'Remove the last turn and edit your prompt',
+    ),
+    SlashCommand(name: '/branch', description: 'Copy this chat into a new one'),
+  ];
 
   /// The stored id: given when opened, or set by a new chat's first send.
   String? get conversationId => _storedId;
@@ -162,9 +196,15 @@ final class ChatController extends ValueNotifier<ChatState> {
     final result = await _backend.commands();
     _loadingCommands = false;
     if (result case Ok(value: final commands)) {
-      _update(value.copyWith(commands: commands));
+      _update(value.copyWith(commands: _withLocalCommands(commands)));
     }
   }
+
+  static List<SlashCommand> _withLocalCommands(List<SlashCommand> served) => [
+    ...served,
+    for (final local in localCommands)
+      if (!served.any((c) => c.name == local.name)) local,
+  ];
 
   /// Sends [text], creating the conversation first if this is a new chat.
   /// Text that starts with a slash runs as a command. During a run, text
@@ -175,6 +215,10 @@ final class ChatController extends ValueNotifier<ChatState> {
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return;
+    if (trimmed == '/undo') {
+      await undo();
+      return;
+    }
     if (value.running) {
       if (!trimmed.startsWith('/')) await _steer(trimmed);
       return;
@@ -204,6 +248,65 @@ final class ChatController extends ValueNotifier<ChatState> {
       }
     }
     await _submit(runtimeId, promptWithReferences(trimmed, references));
+  }
+
+  /// Takes back the last exchange and hands its prompt back for editing.
+  Future<void> undo() async {
+    final runtimeId = _runtimeId;
+    void say(String message, {String? actionLabel, VoidCallback? onAction}) =>
+        onToast?.call(message, actionLabel: actionLabel, onAction: onAction);
+    if (runtimeId == null) {
+      say('Nothing to undo');
+      return;
+    }
+    if (value.running) {
+      say(
+        'Stop the reply first to undo.',
+        actionLabel: 'Stop',
+        onAction: () => unawaited(stop()),
+      );
+      return;
+    }
+    final result = await _backend.undo(runtimeId);
+    if (_disposed) return;
+    switch (result) {
+      case Err(:final failure):
+        final rpc = failure.rpcError;
+        if (rpc?.isMethodNotFound ?? false) {
+          say("Undo isn't supported on this server.");
+        } else if (rpc?.code == 4009) {
+          say(
+            'Stop the reply first to undo.',
+            actionLabel: 'Stop',
+            onAction: () => unawaited(stop()),
+          );
+        } else {
+          say('Could not undo: ${describe(failure)}');
+        }
+      case Ok(value: 0):
+        say('Nothing to undo');
+      case Ok():
+        final start = value.lastExchangeStartId;
+        if (start == null) {
+          // The turn began before the page that is loaded: read it again.
+          await _reloadNewest();
+          say('Undid the last turn');
+          return;
+        }
+        final turn = value.items.firstWhere((i) => i.id == start) as UserTurn;
+        _update(value.withCollapsing(value.lastExchangeIds));
+        if (collapseDelay > Duration.zero) {
+          await Future<void>.delayed(collapseDelay);
+        }
+        if (_disposed) return;
+        _update(value.withoutLastExchange());
+        onPromptReturned?.call(turn.text);
+        say(
+          turn.attachments.isEmpty
+              ? 'Undid the last turn'
+              : 'Undid the last turn. Re-attach any files.',
+        );
+    }
   }
 
   Future<void> _submit(String runtimeId, String text) async {
@@ -314,7 +417,9 @@ final class ChatController extends ValueNotifier<ChatState> {
         switch (outcome.kind) {
           case SlashKind.exec:
             final output = outcome.text.trim();
-            _update(value.withNotice(output.isEmpty ? 'Done.' : output).settled());
+            _update(
+              value.withNotice(output.isEmpty ? 'Done.' : output).settled(),
+            );
           case SlashKind.send:
             final prompt = outcome.text.trim();
             if (prompt.isEmpty) {
