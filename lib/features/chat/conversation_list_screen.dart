@@ -388,9 +388,16 @@ class _ConversationListScreenState
   }
 
   Future<void> _openArchived(ChatBackend chat) async {
-    await Navigator.of(
-      context,
-    ).push(IrisPageRoute<void>(builder: (_) => ArchivedScreen(backend: chat)));
+    await Navigator.of(context).push(
+      IrisPageRoute<void>(
+        builder: (_) => ArchivedScreen(
+          backend: chat,
+          onDeleted: ref.read(branchRecordsProvider).forget,
+          onBranched: (childId, record) =>
+              ref.read(branchRecordsProvider).save(childId, record),
+        ),
+      ),
+    );
     if (mounted) ref.invalidate(conversationsProvider);
   }
 

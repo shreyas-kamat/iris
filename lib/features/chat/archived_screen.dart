@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/device_state.dart';
 import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
@@ -25,9 +26,21 @@ import 'conversation_row.dart';
 import 'delete_sheet.dart';
 
 class ArchivedScreen extends StatefulWidget {
-  const ArchivedScreen({required this.backend, super.key});
+  const ArchivedScreen({
+    required this.backend,
+    this.onDeleted,
+    this.onBranched,
+    super.key,
+  });
 
   final ChatBackend backend;
+
+  /// Called with a chat's stored id once it is deleted, so what the device
+  /// keeps about it can go too.
+  final ValueChanged<String>? onDeleted;
+
+  /// Passed to an opened chat, so a branch made there is remembered.
+  final void Function(String childStoredId, BranchRecord record)? onBranched;
 
   @override
   State<ArchivedScreen> createState() => _ArchivedScreenState();
@@ -101,7 +114,9 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
             ? 'Stop the reply before deleting this chat.'
             : 'Could not delete: ${ChatController.describe(failure)}',
       );
+      return;
     }
+    widget.onDeleted?.call(row.id);
   }
 
   Future<void> _open(ConversationSummary row) => Navigator.of(context).push(
@@ -111,6 +126,7 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
         conversationId: row.id,
         title: row.title,
         archived: true,
+        onBranched: widget.onBranched,
       ),
     ),
   );

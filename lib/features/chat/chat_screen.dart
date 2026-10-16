@@ -204,6 +204,7 @@ class _ChatScreenState extends State<ChatScreen> {
             backend: widget.backend,
             conversationId: record.parentId,
             title: record.parentTitle,
+            onBranched: widget.onBranched,
             pickFiles: widget.pickFiles,
             recorder: widget.recorder,
           ),

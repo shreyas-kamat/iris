@@ -61,7 +61,10 @@ void main() {
     backend.archivedResult = const Ok([
       ConversationSummary(id: 'z', title: 'Old notes'),
     ]);
-    await tester.pumpWidget(themed(ArchivedScreen(backend: backend)));
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      themed(ArchivedScreen(backend: backend, onDeleted: deleted.add)),
+    );
     await tester.pumpAndSettle();
     await tester.longPress(find.text('Old notes'));
     await tester.pumpAndSettle();
@@ -69,5 +72,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(backend.deletes, ['z']);
     expect(find.text('Old notes'), findsNothing);
+    expect(deleted, ['z'], reason: 'home forgets its branch record');
   });
 }
