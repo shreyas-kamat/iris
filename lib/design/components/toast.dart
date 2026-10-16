@@ -29,6 +29,7 @@ void showIrisToast(
   String? actionLabel,
   VoidCallback? onAction,
   double bottomInset = 104,
+  bool top = false,
 }) {
   if (_current case final previous? when previous.mounted) previous.remove();
   _current = null;
@@ -45,6 +46,7 @@ void showIrisToast(
       actionLabel: actionLabel,
       onAction: onAction,
       bottomInset: bottomInset,
+      top: top,
       onDone: dismiss,
     ),
   );
@@ -57,6 +59,7 @@ class _Toast extends StatefulWidget {
     required this.message,
     required this.bottomInset,
     required this.onDone,
+    this.top = false,
     this.actionLabel,
     this.onAction,
   });
@@ -66,6 +69,10 @@ class _Toast extends StatefulWidget {
   final VoidCallback? onAction;
   final double bottomInset;
   final VoidCallback onDone;
+
+  /// Sits under the header instead of above the composer, so it never
+  /// covers what is pinned above the composer.
+  final bool top;
 
   @override
   State<_Toast> createState() => _ToastState();
@@ -111,13 +118,16 @@ class _ToastState extends State<_Toast> {
     return Positioned(
       left: IrisSpace.lg,
       right: IrisSpace.lg,
-      bottom: widget.bottomInset + MediaQuery.paddingOf(context).bottom,
+      top: widget.top ? MediaQuery.paddingOf(context).top + 64 : null,
+      bottom: widget.top
+          ? null
+          : widget.bottomInset + MediaQuery.paddingOf(context).bottom,
       child: SpringBuilder(
         value: _shown || reduce ? 1 : 0,
         builder: (context, t, child) => Opacity(
           opacity: t.clamp(0.0, 1.0),
           child: Transform.translate(
-            offset: Offset(0, (1 - t) * 24),
+            offset: Offset(0, (1 - t) * (widget.top ? -24 : 24)),
             child: child,
           ),
         ),
