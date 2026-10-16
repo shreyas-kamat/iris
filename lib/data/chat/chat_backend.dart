@@ -212,6 +212,9 @@ abstract interface class ChatBackend {
   /// A page of this profile's archived conversations, newest first.
   Future<Result<ConversationPage>> archivedConversations(int offset);
 
+  /// One conversation's row, for a pin that is not in the loaded pages.
+  Future<Result<ConversationSummary>> conversation(String storedId);
+
   /// This profile's conversations matching [query], one hit per conversation.
   Future<Result<List<SearchHit>>> search(String query);
 
@@ -895,6 +898,29 @@ final class DashboardChat implements ChatBackend {
           ));
         }
         return Ok(words.trim());
+    }
+  }
+
+  @override
+  Future<Result<ConversationSummary>> conversation(String storedId) async {
+    final path = '/api/sessions/${Uri.encodeComponent(storedId)}';
+    final result = await _session.connection.client.get(
+      path,
+      query: _scoped(const {}),
+    );
+    switch (result) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(:final value):
+        final row = HistoryParser.conversationRow(value);
+        return row == null
+            ? Err(
+                IrisFailure.malformed(
+                  message: 'The dashboard did not describe that conversation.',
+                  endpoint: path,
+                ),
+              )
+            : Ok(row);
     }
   }
 

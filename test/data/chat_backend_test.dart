@@ -902,4 +902,22 @@ void main() {
     });
   });
 
+
+    test('one conversation is read by id, scoped to the profile', () async {
+      http.on('GET', '/api/sessions/abc', (_) => FakeReply.json({
+        'id': 'abc',
+        'title': 'Old notes',
+        'message_count': 3,
+      }));
+      final row = (await chat.conversation('abc')).valueOrNull!;
+      expect(row.id, 'abc');
+      expect(row.title, 'Old notes');
+      expect(row.messageCount, 3);
+    });
+
+    test('a conversation that is gone is a notFound failure', () async {
+      http.on('GET', '/api/sessions/gone', (_) => FakeReply.json({'detail': 'not found'}, status: 404));
+      expect((await chat.conversation('gone')).failureOrNull?.kind, FailureKind.notFound);
+    });
+
 }

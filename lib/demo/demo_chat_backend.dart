@@ -3,6 +3,7 @@ library;
 
 import 'dart:typed_data';
 
+import '../core/failure.dart';
 import '../core/result.dart';
 import '../data/chat/attachment.dart';
 import '../data/chat/chat_backend.dart';
@@ -190,6 +191,15 @@ final class DemoChatBackend implements ChatBackend {
   @override
   Future<Result<String>> transcribe(Uint8List wav) async =>
       const Ok('How much disk space is left on the NAS?');
+
+  @override
+  Future<Result<ConversationSummary>> conversation(String storedId) async {
+    final page = _world.page(profile, 0, archived: false).items;
+    for (final row in [..._world.page(profile, 0, archived: true).items, ...page]) {
+      if (row.id == storedId) return Ok(row);
+    }
+    return const Err(IrisFailure(FailureKind.notFound));
+  }
 
   @override
   Future<Result<List<SearchHit>>> search(String query) async =>

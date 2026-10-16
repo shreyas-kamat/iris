@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
@@ -109,6 +110,15 @@ final class FakeChatBackend implements ChatBackend {
   final List<bool> fasts = [];
   final List<(String, String, String)> logins = [];
   final List<(String, List<TargetAnswer>, bool)> connectionAnswers = [];
+
+  Result<ConversationSummary> conversationResult = const Err(IrisFailure(FailureKind.notFound));
+  final List<String> conversationReads = [];
+
+  @override
+  Future<Result<ConversationSummary>> conversation(String storedId) async {
+    conversationReads.add(storedId);
+    return conversationResult;
+  }
 
   /// Delivers [event] as if the gateway had sent it.
   void emit(ChatEvent event) => _events.add(event);

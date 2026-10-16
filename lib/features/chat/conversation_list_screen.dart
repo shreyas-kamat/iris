@@ -158,6 +158,37 @@ class _ConversationListScreenState
 
   bool _loadingMore = false;
 
+  /// The conversation whose menu is open, drawn lifted.
+  String? _lifted;
+
+  final Map<String, ConversationSummary> _fetchedPins = {};
+  final Set<String> _fetching = {};
+
+  /// Pins whose chat is not in the loaded pages are read one by one, so a
+  /// pin on an older chat still shows. A chat that no longer exists drops
+  /// its pin.
+  Future<void> _fetchMissingPins(
+    ChatBackend chat,
+    List<String> pins,
+    Set<String> loaded,
+  ) async {
+    for (final id in pins) {
+      if (loaded.contains(id) ||
+          _fetchedPins.containsKey(id) ||
+          !_fetching.add(id)) {
+        continue;
+      }
+      switch (await chat.conversation(id)) {
+        case Ok(:final value):
+          if (mounted) setState(() => _fetchedPins[id] = value);
+        case Err(:final failure) when failure.kind == FailureKind.notFound:
+          if (mounted) ref.read(pinsProvider.notifier).unpin(id);
+        case Err():
+          break;
+      }
+    }
+  }
+
   Future<void> _open(
     ChatBackend chat, {
     ConversationSummary? conversation,
@@ -192,9 +223,18 @@ class _ConversationListScreenState
     ConversationSummary conversation,
   ) async {
     final title = _titles[conversation.id] ?? conversation.title;
-    final action = await showConversationActions(context, title);
+    setState(() => _lifted = conversation.id);
+    final action = await showConversationActions(
+      context,
+      title,
+      pinned: ref.read(pinsProvider).contains(conversation.id),
+    );
+    if (mounted) setState(() => _lifted = null);
     if (!mounted) return;
     switch (action) {
+      case ConversationAction.pin:
+        unawaited(IrisHaptics.commit());
+        ref.read(pinsProvider.notifier).toggle(conversation.id);
       case ConversationAction.rename:
         final next = await showRenameSheet(context, title);
         if (next == null || !mounted) return;
@@ -250,6 +290,8 @@ class _ConversationListScreenState
 
   Future<void> _archive(ChatBackend chat, String id) async {
     unawaited(IrisHaptics.commit());
+    // An archived chat is not pinned: it is out of home.
+    ref.read(pinsProvider.notifier).unpin(id);
     setState(() => _gone.add(id));
     final result = await chat.setArchived(id, archived: true);
     if (!mounted) return;
@@ -330,10 +372,16 @@ class _ConversationListScreenState
         const LinkState(LinkPhase.connecting);
     final chat = ref.watch(activeChatProvider).value;
     final conversations = ref.watch(conversationsProvider);
+    final pinnedIds = ref.watch(pinsProvider);
+    final replying =
+        ref.watch(liveChatsProvider).value ?? const <String, LiveStatus>{};
     final profiles =
         ref.watch(profilesProvider).value ?? const <AgentProfile>[];
     final profile = ref.watch(activeProfileProvider);
     final (linkState, headline, _) = describeLink(link);
+    final headlineText = replying.isEmpty
+        ? headline
+        : '$headline · ${replying.length} replying';
     final live = link.phase == LinkPhase.live;
     final now = ref.read(clockProvider)();
     // The orb shows the agent as idle while the link is up. Only a broken
@@ -344,6 +392,15 @@ class _ConversationListScreenState
         context,
       ).push(IrisPageRoute<void>(builder: (_) => const LinkStatusScreen())),
     );
+
+    if (chat != null && conversations.value != null && pinnedIds.isNotEmpty) {
+      final loaded = {
+        for (final c in [...conversations.value!.items, ..._more]) c.id,
+      };
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_fetchMissingPins(chat, pinnedIds, loaded));
+      });
+    }
 
     return IrisScaffold(
       header: _HomeBar(
@@ -368,6 +425,10 @@ class _ConversationListScreenState
           NotificationListener<ScrollEndNotification>(
             onNotification: _snap,
             child: _ConversationList(
+              pins: pinnedIds,
+              live: replying,
+              lifted: _lifted,
+              fetchedPins: _fetchedPins,
               top: [
                 // Fades as it scrolls under the bar, where the compact link
                 // takes over.
@@ -382,7 +443,7 @@ class _ConversationListScreenState
                     child: _Hero(
                       orbState: orbState,
                       linkState: linkState,
-                      headline: headline,
+                      headline: headlineText,
                       host: server == null ? '' : _hostOf(server.baseUrl),
                       total: conversations.value == null
                           ? null
@@ -894,6 +955,10 @@ class _NewChatBar extends StatelessWidget {
 
 class _ConversationList extends StatelessWidget {
   const _ConversationList({
+    required this.pins,
+    required this.live,
+    required this.lifted,
+    required this.fetchedPins,
     required this.top,
     required this.now,
     required this.conversations,
@@ -912,6 +977,18 @@ class _ConversationList extends StatelessWidget {
     required this.onRetry,
     required this.onRefresh,
   });
+
+  /// Pinned conversation ids, newest pin first.
+  final List<String> pins;
+
+  /// Conversations replying right now, by stored id.
+  final Map<String, LiveStatus> live;
+
+  /// The conversation whose menu is open.
+  final String? lifted;
+
+  /// Pinned conversations that were not in the loaded pages.
+  final Map<String, ConversationSummary> fetchedPins;
 
   /// What scrolls in above the rows: the hero and the usage strip.
   final List<Widget> top;
@@ -1028,6 +1105,19 @@ class _ConversationList extends StatelessWidget {
     final open = onOpen;
     final next = onMore;
     final searching = search.text.trim().isNotEmpty;
+    final byId = {...fetchedPins, for (final c in list) c.id: c};
+    final pinnedRows = [
+      for (final id in pins)
+        if (byId[id] != null) byId[id]!,
+    ];
+    final liveRows = [
+      for (final c in list)
+        if (live.containsKey(c.id) && !pins.contains(c.id)) c,
+    ];
+    final recentRows = [
+      for (final c in list)
+        if (!pins.contains(c.id) && !live.containsKey(c.id)) c,
+    ];
 
     return [
       Padding(
@@ -1041,31 +1131,17 @@ class _ConversationList extends StatelessWidget {
       if (searching)
         ..._searchItems(context, gutter, list, open)
       else ...[
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            gutter,
-            IrisSpace.sm,
-            gutter,
-            IrisSpace.sm,
-          ),
-          child: IrisLabel('Recent', color: context.palette.inkFaint),
+        ..._section(
+          context,
+          gutter,
+          'Pinned',
+          pinnedRows,
+          now,
+          open,
+          pinned: true,
         ),
-        for (final conversation in list)
-          Leaving(
-            key: ValueKey(conversation.id),
-            gone: gone.contains(conversation.id),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
-              child: ConversationRow(
-                title: titles[conversation.id] ?? conversation.title,
-                subtitle: _subtitle(conversation, now),
-                onTap: open == null ? null : () => open(conversation),
-                onLongPress: onActions == null
-                    ? null
-                    : () => onActions!(conversation),
-              ),
-            ),
-          ),
+        ..._section(context, gutter, 'Live', liveRows, now, open),
+        ..._section(context, gutter, 'Recent', recentRows, now, open),
         if (hasMore)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: IrisSpace.md),
@@ -1102,6 +1178,50 @@ class _ConversationList extends StatelessWidget {
           ),
         ),
       ],
+    ];
+  }
+
+  /// A labelled run of rows; nothing at all when [rows] is empty, so Pinned
+  /// and Live only show when there is something to show.
+  List<Widget> _section(
+    BuildContext context,
+    double gutter,
+    String label,
+    List<ConversationSummary> rows,
+    DateTime now,
+    ValueChanged<ConversationSummary>? open, {
+    bool pinned = false,
+  }) {
+    if (rows.isEmpty) return const [];
+    return [
+      Padding(
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          IrisSpace.sm,
+          gutter,
+          IrisSpace.sm,
+        ),
+        child: IrisLabel(label, color: context.palette.inkFaint),
+      ),
+      for (final conversation in rows)
+        Leaving(
+          key: ValueKey(conversation.id),
+          gone: gone.contains(conversation.id),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+            child: ConversationRow(
+              title: titles[conversation.id] ?? conversation.title,
+              subtitle: _subtitle(conversation, now),
+              pinned: pinned,
+              lifted: lifted == conversation.id,
+              live: live[conversation.id],
+              onTap: open == null ? null : () => open(conversation),
+              onLongPress: onActions == null
+                  ? null
+                  : () => onActions!(conversation),
+            ),
+          ),
+        ),
     ];
   }
 

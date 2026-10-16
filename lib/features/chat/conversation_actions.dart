@@ -12,12 +12,13 @@ import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 
-enum ConversationAction { rename, archive, delete }
+enum ConversationAction { pin, rename, archive, delete }
 
 Future<ConversationAction?> showConversationActions(
   BuildContext context,
-  String title,
-) {
+  String title, {
+  required bool pinned,
+}) {
   unawaited(IrisHaptics.selection());
   return showIrisSheet<ConversationAction>(
     context: context,
@@ -27,6 +28,16 @@ Future<ConversationAction?> showConversationActions(
         title: title,
         child: Column(
           children: [
+            IrisListRow(
+              title: pinned ? 'Unpin' : 'Pin',
+              leading: Icon(
+                pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                size: IrisSize.icon,
+                color: palette.inkMuted,
+              ),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ConversationAction.pin),
+            ),
             IrisListRow(
               title: 'Rename',
               leading: Icon(

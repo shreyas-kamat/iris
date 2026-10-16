@@ -253,3 +253,48 @@ final profilesProvider = FutureProvider<List<AgentProfile>?>((ref) async {
 /// times on screen can be fixed under test. Without this, a golden of the home
 /// screen would depend on what hour it was rendered.
 final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
+/// How often home asks which conversations are replying.
+final liveIntervalProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 15),
+);
+
+/// Conversations replying right now, by stored id, from the gateway's
+/// read-only `session.active_list`. Read when home opens and then on a timer
+/// while it is on screen. A server without the call has nothing live: the
+/// section just never shows.
+final liveChatsProvider = StreamProvider.autoDispose<Map<String, LiveStatus>>((
+  ref,
+) async* {
+  final chat = await ref.watch(activeChatProvider.future);
+  if (chat == null) {
+    yield const {};
+    return;
+  }
+  final interval = ref.watch(liveIntervalProvider);
+  final updates = StreamController<Map<String, LiveStatus>>();
+  Timer? next;
+  var disposed = false;
+  Future<void> poll() async {
+    final rows = await chat.activeSessions();
+    if (disposed) return;
+    updates.add(switch (rows) {
+      Ok(:final value) => {
+        for (final row in value)
+          if (row.replying && row.storedId.isNotEmpty) row.storedId: row,
+      },
+      Err() => const {},
+    });
+    // A timer the provider can cancel, so a disposed screen leaves nothing
+    // running behind it.
+    next = Timer(interval, () => unawaited(poll()));
+  }
+
+  ref.onDispose(() {
+    disposed = true;
+    next?.cancel();
+    unawaited(updates.close());
+  });
+  unawaited(poll());
+  yield* updates.stream;
+});

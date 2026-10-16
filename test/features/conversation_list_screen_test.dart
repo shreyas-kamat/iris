@@ -6,7 +6,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/device_state.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
@@ -30,6 +32,7 @@ void main() {
     List<ConversationSummary> conversations, {
     int? total,
     List<AgentProfile> profiles = const [],
+    List<Override> overrides = const [],
   }) => ProviderScope(
     overrides: [
       activeServerProvider.overrideWithValue(
@@ -50,6 +53,7 @@ void main() {
         ),
       ),
       profilesProvider.overrideWith((ref) async => profiles),
+      ...overrides,
     ],
     child: themed(const ConversationListScreen()),
   );
@@ -643,4 +647,88 @@ void main() {
     expect(find.text('Weekly planning'), findsOneWidget);
   });
 
+  const twoChats = [
+    ConversationSummary(id: 'stored-1', title: 'Weekly planning'),
+    ConversationSummary(id: 'stored-2', title: 'Runbook'),
+  ];
+
+  testWidgets('Pinned sits above Recent and is hidden when nothing is pinned', (tester) async {
+    await tester.pumpWidget(home(twoChats));
+    await settle(tester);
+    expect(find.text('PINNED'), findsNothing);
+    await tester.longPress(find.text('Runbook'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pin'));
+    await tester.pumpAndSettle();
+    expect(find.text('PINNED'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('PINNED')).dy,
+      lessThan(tester.getTopLeft(find.text('RECENT')).dy),
+    );
+    expect(find.text('Runbook'), findsOneWidget, reason: 'listed once, not twice');
+  });
+
+  testWidgets('the menu offers Unpin for a pinned chat, and unpinning hides the section', (tester) async {
+    await tester.pumpWidget(
+      home(twoChats, overrides: [pinsProvider.overrideWith(() => _PinnedAlready(['stored-2']))]),
+    );
+    await settle(tester);
+    expect(find.text('PINNED'), findsOneWidget);
+    await tester.longPress(find.text('Runbook'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pin'), findsNothing);
+    await tester.tap(find.text('Unpin'));
+    await tester.pumpAndSettle();
+    expect(find.text('PINNED'), findsNothing);
+  });
+
+  testWidgets('replying chats show in Live with a state chip', (tester) async {
+    await tester.pumpWidget(
+      home(
+        twoChats,
+        overrides: [
+          liveChatsProvider.overrideWith(
+            (ref) => Stream.value({
+              'stored-1': const LiveStatus(runtimeId: 'r1', storedId: 'stored-1', status: 'working'),
+            }),
+          ),
+        ],
+      ),
+    );
+    await settle(tester);
+    await settle(tester);
+    expect(find.text('LIVE'), findsOneWidget);
+    expect(find.text('REPLYING'), findsOneWidget);
+  });
+
+  testWidgets('a pin on a chat outside the loaded page is read once and shown', (tester) async {
+    backend.conversationResult = const Ok(ConversationSummary(id: 'old-1', title: 'Old notes'));
+    await tester.pumpWidget(
+      home(twoChats, overrides: [pinsProvider.overrideWith(() => _PinnedAlready(['old-1']))]),
+    );
+    await settle(tester);
+    await settle(tester);
+    expect(backend.conversationReads, ['old-1']);
+    expect(find.text('Old notes'), findsOneWidget);
+    expect(find.text('PINNED'), findsOneWidget);
+  });
+
+  testWidgets('a pin on a chat that no longer exists is dropped quietly', (tester) async {
+    await tester.pumpWidget(
+      home(twoChats, overrides: [pinsProvider.overrideWith(() => _PinnedAlready(['gone-1']))]),
+    );
+    await settle(tester);
+    await settle(tester);
+    expect(backend.conversationReads, ['gone-1']);
+    expect(find.text('PINNED'), findsNothing);
+  });
+}
+
+class _PinnedAlready extends Pins {
+  _PinnedAlready(this.ids);
+
+  final List<String> ids;
+
+  @override
+  List<String> build() => ids;
 }
