@@ -1,6 +1,6 @@
 # Phase 6 device pass
 
-## Live write test � 2026-10-16
+## Live write test — 2026-10-16
 
 `flutter test --tags live_write --run-skipped test/live/phase6_write_live_test.dart` against the user's Hermes
 (passed, 22 s: replies were fast this time, not the 95-160 s the plan expected).
@@ -63,3 +63,39 @@ against a regression of the new behaviour).
 - The Hermes dashboard dropped connections twice during the pass (the app showed "Reconnecting"; the live probe
   from this machine failed too) and recovered within a couple of minutes. Not caused by the app.
 - A small spinner sits beside the model chip in a chat for a while after it opens ("context ring loading").
+
+## Device pass, second round — 2026-10-16
+
+Run on the real server (item 5) and the demo (items 2, 7, 8) after the first round. The emulator hung once and was
+cold-booted. Animations were off (`animator_duration_scale 0`) for the demo steps, so those double as a reduced-motion
+pass for the surfaces they touched.
+
+| # | Item | Result |
+|---|---|---|
+| 5 | Queue / Steer / Interrupt, real server | **Pass.** Queue: "Queued for after this reply" toast, tray shows `1 second`, `2 third`, "held on this phone", drains in order. Steer: "Steered" toast, dashed bubble "WAITING FOR NEXT STEP", then "STEER · PICKED UP AT STEP 2". Interrupt: the cut reply is marked "stopped · redirected" and the new message is answered. The server's busy mode was `interrupt` at the start and was put back to it |
+| 7 | Demo "Deploy the docs site" | **Pass.** Unlock, six-cell code (auto-sent), save login, then the connection card: Open sign-in opens Chrome and the row reads "Waiting for sign-in… Reopen", the desktop-only row has Skip, Continue ends the script. Each vault prompt leaves a settled line with "value hidden"; no typed text appears anywhere. Stopping mid-prompt leaves the dashed "1Password request withdrawn · expired" line |
+| 8 | Dictation | The mic asks for permission, then the bar shows Cancel, the live orb, a timer and a stop button; stopping in the demo returns a canned transcript. "Didn't catch that" needs the real server and was **not walked** |
+| 2 | Delete a chat | **Found a bug the first round missed** (below), fixed, re-checked: sheet, row leaves, "Deleted ‘…’" toast. The "Stop the reply" toast for a replying chat was **not reached** (the demo reply finishes before the menu opens) |
+
+### Found and fixed in this round
+
+1. **The delete confirmation had no surface.** It returned bare padding from `showIrisSheet`, so "Delete ‘…’?" and the
+   buttons were drawn straight over the conversation list (the first round's screenshot `d2-confirm` shows it; it was
+   wrongly marked a pass). It now uses `IrisSheet` with a grabber and the sheet buttons, and a test asserts the sheet
+   exists. Every other sheet in the app was checked and already used `IrisSheet`.
+2. **A sheet opened over a pushed page moved the page left** (`IrisPageRoute` drifted its page for any route pushed over
+   it, so Settings slid 28% left with a black strip showing behind the scrim). Only another page does that now.
+
+### Not walked, and why
+
+- Attachment chips and "5 / 5 FILES": needs the system file picker on the emulator.
+- Context ring at ≥50 / ≥90 / the 95% strip, usage bars at ≥85%: the demo tops out at 31% context and 61% usage, the
+  real server was at 31–41%. Covered by the Task 15 goldens and widget tests only.
+- "Didn't catch that" with Try again; the "Stop the reply" delete toast; an older message having no Undo.
+- Reduced motion beyond the demo steps above (system "Remove animations" toggle not used).
+
+### Still open
+
+- Model sheet shows no effort or fast controls for `gpt-6.1-sol` while the chip says "medium" (see the first round).
+- In the demo, Enable and Skip on a connection row do nothing visible: the real server answers with a
+  `connection.update`, the demo backend never sends one. Continue still works.
