@@ -467,6 +467,18 @@ class _ChatScreenState extends State<ChatScreen> {
               child: _decision(state),
             ),
           ),
+          if ((state.context?.percent ?? 0) >= 95)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.window.gutter,
+                IrisSpace.sm,
+                context.window.gutter,
+                0,
+              ),
+              child: ContextStrip(
+                onBranch: () => unawaited(_branch(summarise: true)),
+              ),
+            ),
           IrisAnimatedSize(
             alignment: Alignment.bottomCenter,
             child: state.queue.isEmpty

@@ -744,6 +744,43 @@ void main() {
       expect(find.text('BRANCHED HERE · 14:02'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'at 96% context the strip offers Branch with a summary; at 94% it is absent',
+    (tester) async {
+      backend.historyResult = const Ok([
+        UserTurn(id: '1', text: 'hi'),
+        AssistantTurn(id: '2', text: 'hello'),
+      ]);
+      await tester.pumpWidget(
+        themed(
+          ChatScreen(
+            backend: backend,
+            conversationId: 'stored-1',
+            title: 'Greetings',
+          ),
+        ),
+      );
+      await settle(tester);
+      await settle(tester);
+      backend.emit(const ContextChanged('run-1', ContextUsage(percent: 94)));
+      await settle(tester);
+      expect(
+        find.text('Context is nearly full. Older turns will be summarised.'),
+        findsNothing,
+      );
+      backend.emit(const ContextChanged('run-1', ContextUsage(percent: 96)));
+      await settle(tester);
+      expect(
+        find.text('Context is nearly full. Older turns will be summarised.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Branch'));
+      await tester.pumpAndSettle();
+      expect(backend.branches, ['stored-1']);
+      expect(backend.compressions, ['run-branch']);
+    },
+  );
 }
 
 final class FakeRecorder implements VoiceRecorder {

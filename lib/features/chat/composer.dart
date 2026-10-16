@@ -532,15 +532,92 @@ class _ContextRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final percent = usage.percent.round();
+    // Accent until the window is nearly full, then needs-you: the one moment
+    // the ring asks anything of the person.
+    final tint = percent >= 90
+        ? palette.colorFor(AgentState.waiting)
+        : palette.accent;
     return IrisPressable(
       onTap: onTap,
       semanticLabel: 'Context window, $percent percent',
       child: ExcludeSemantics(
-        child: IrisRing(
-          value: usage.percent / 100,
-          semanticLabel: 'Context window, $percent percent',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IrisRing(
+              value: usage.percent / 100,
+              semanticLabel: 'Context window, $percent percent',
+              size: 26,
+              color: tint,
+            ),
+            if (percent >= 50) ...[
+              const SizedBox(width: IrisSpace.xs),
+              Text(
+                '$percent%',
+                style: context.type.codeSmall.copyWith(
+                  fontSize: 11.5,
+                  color: percent >= 90 ? tint : palette.inkMuted,
+                ),
+              ),
+            ],
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown above the composer once the context window is 95% full: Branch
+/// starts a fresh chat that carries a summary.
+class ContextStrip extends StatelessWidget {
+  const ContextStrip({required this.onBranch, super.key});
+
+  final VoidCallback onBranch;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final needs = palette.colorFor(AgentState.waiting);
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.only(left: IrisSpace.md),
+      decoration: BoxDecoration(
+        color: needs.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: needs.withValues(alpha: .32),
+          width: IrisStroke.hairline,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Context is nearly full. Older turns will be summarised.',
+              style: context.type.body.copyWith(
+                fontSize: 13,
+                color: palette.ink,
+              ),
+            ),
+          ),
+          IrisPressable(
+            onTap: onBranch,
+            semanticLabel: 'Branch with a summary',
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: IrisSpace.md),
+              child: Text(
+                'Branch',
+                style: context.type.body.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: palette.accent,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

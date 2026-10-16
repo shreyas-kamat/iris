@@ -402,8 +402,13 @@ class IrisGauge extends StatelessWidget {
     required this.value,
     this.label,
     this.width = 56,
+    this.tint,
     super.key,
   });
+
+  /// Overrides the usual shading, for a meter that is the accent until it
+  /// needs the person to act.
+  final Color? tint;
 
   /// Fill from 0 to 1.
   final double value;
@@ -439,7 +444,9 @@ class IrisGauge extends StatelessWidget {
                     child: FractionallySizedBox(
                       widthFactor: shown,
                       heightFactor: 1,
-                      child: ColoredBox(color: gaugeTint(palette, shown)),
+                      child: ColoredBox(
+                        color: tint ?? gaugeTint(palette, shown),
+                      ),
                     ),
                   );
                 },
@@ -476,6 +483,7 @@ class IrisRing extends StatelessWidget {
     required this.value,
     required this.semanticLabel,
     this.size = 20,
+    this.color,
     super.key,
   });
 
@@ -483,6 +491,9 @@ class IrisRing extends StatelessWidget {
   final double value;
   final String semanticLabel;
   final double size;
+
+  /// Overrides [gaugeTint].
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -500,8 +511,8 @@ class IrisRing extends StatelessWidget {
             return CustomPaint(
               painter: _RingPainter(
                 fill: shown,
-                track: palette.surfaceSunken,
-                tint: gaugeTint(palette, shown),
+                track: palette.lineStrong,
+                tint: color ?? gaugeTint(palette, shown),
               ),
             );
           },
@@ -520,7 +531,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = IrisStroke.ring;
+    const stroke = 3.0;
     final rect = (Offset.zero & size).deflate(stroke / 2);
     final paint = Paint()
       ..style = PaintingStyle.stroke
