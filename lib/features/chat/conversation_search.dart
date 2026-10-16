@@ -14,6 +14,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import 'relative_time.dart';
 
 /// The field's row height, including its breathing room.
 const double searchFieldExtent = 64;
@@ -174,80 +175,236 @@ class SearchField extends StatelessWidget {
   }
 }
 
-/// A conversation the search found: its title, and the matching words in
-/// ink among muted text.
+/// A conversation the search found (frame B4): its title with the matched
+/// words in accent, the matching snippet with them marked, and a mono line
+/// of when and how many messages matched. The best hit sits in a card.
 class SearchHitRow extends StatelessWidget {
-  const SearchHitRow({required this.hit, required this.onTap, super.key});
+  const SearchHitRow({
+    required this.hit,
+    required this.onTap,
+    this.query = '',
+    this.now,
+    this.pinned = false,
+    this.best = false,
+    super.key,
+  });
 
   final SearchHit hit;
   final VoidCallback? onTap;
+
+  /// What was searched for, to mark in the title.
+  final String query;
+
+  /// For the relative time; without it the time is left out.
+  final DateTime? now;
+  final bool pinned;
+
+  /// The first hit, drawn in a card.
+  final bool best;
+
+  bool get _matchesTitle {
+    final needle = query.trim().toLowerCase();
+    return needle.isNotEmpty && hit.title.toLowerCase().contains(needle);
+  }
+
+  List<TextSpan> _title(Color accent) {
+    final needle = query.trim().toLowerCase();
+    final title = hit.title;
+    final at = needle.isEmpty ? -1 : title.toLowerCase().indexOf(needle);
+    if (at < 0) return [TextSpan(text: title)];
+    return [
+      TextSpan(text: title.substring(0, at)),
+      TextSpan(
+        text: title.substring(at, at + needle.length),
+        style: TextStyle(color: accent),
+      ),
+      TextSpan(text: title.substring(at + needle.length)),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
     final type = context.type;
-    return IrisPressable(
-      onTap: onTap,
-      semanticLabel: hit.title,
-      ensureTapTarget: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: palette.surfaceSunken,
-                borderRadius: const BorderRadius.all(IrisRadius.md),
-              ),
-              child: const IrisOrb(
-                state: AgentState.rest,
-                size: 30,
-                glow: false,
-              ),
+    final meta = [
+      if (hit.lastActive != null && now != null)
+        relativeTime(hit.lastActive!, now!),
+      '${hit.matches} ${hit.matches == 1 ? 'match' : 'matches'}',
+      if (pinned) 'pinned',
+    ].join(' · ');
+    final row = Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: palette.surfaceSunken,
+              borderRadius: const BorderRadius.all(IrisRadius.md),
             ),
-            const SizedBox(width: IrisSpace.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: const IrisOrb(state: AgentState.rest, size: 30, glow: false),
+          ),
+          const SizedBox(width: IrisSpace.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_matchesTitle)
+                  Text.rich(
+                    TextSpan(children: _title(palette.accent)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: type.body.copyWith(fontSize: 14, color: palette.ink),
+                  )
+                else
                   Text(
                     hit.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: type.body.copyWith(fontSize: 14, color: palette.ink),
                   ),
-                  if (hit.snippet.isNotEmpty) ...[
-                    const SizedBox(height: IrisSpace.xxs),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          for (final run in hit.snippet)
-                            TextSpan(
-                              text: run.text,
-                              style: run.matched
-                                  ? TextStyle(
-                                      color: palette.ink,
-                                      fontWeight: FontWeight.w500,
-                                    )
-                                  : null,
-                            ),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: type.caption.copyWith(color: palette.inkMuted),
+                if (hit.snippet.isNotEmpty) ...[
+                  const SizedBox(height: IrisSpace.xxs),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        for (final run in hit.snippet)
+                          TextSpan(
+                            text: run.text,
+                            style: run.matched
+                                ? TextStyle(
+                                    color: palette.ink,
+                                    backgroundColor: palette.accentQuiet,
+                                  )
+                                : null,
+                          ),
+                      ],
                     ),
-                  ],
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: type.caption.copyWith(color: palette.inkMuted),
+                  ),
                 ],
-              ),
+                const SizedBox(height: IrisSpace.xs),
+                Text(
+                  meta,
+                  style: type.codeSmall.copyWith(
+                    fontSize: 11,
+                    color: palette.inkFaint,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+    return IrisPressable(
+      onTap: onTap,
+      semanticLabel: hit.title,
+      ensureTapTarget: false,
+      child: best
+          ? DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: palette.line,
+                  width: IrisStroke.hairline,
+                ),
+              ),
+              child: row,
+            )
+          : row,
+    );
+  }
+}
+
+/// Under an empty, focused field: the last searches as chips, newest first,
+/// with Clear, and what a search covers.
+class RecentSearchChips extends StatelessWidget {
+  const RecentSearchChips({
+    required this.queries,
+    required this.onPick,
+    required this.onClear,
+    super.key,
+  });
+
+  final List<String> queries;
+  final ValueChanged<String> onPick;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (queries.isNotEmpty) ...[
+          Row(
+            children: [
+              Expanded(
+                child: IrisLabel('Recent searches', color: palette.inkFaint),
+              ),
+              IrisPressable(
+                onTap: onClear,
+                semanticLabel: 'Clear recent searches',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: IrisSpace.xs),
+                  child: Text(
+                    'Clear',
+                    style: type.caption.copyWith(color: palette.accent),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: IrisSpace.sm),
+          Wrap(
+            spacing: IrisSpace.sm,
+            runSpacing: IrisSpace.sm,
+            children: [
+              for (final query in queries)
+                IrisPressable(
+                  onTap: () => onPick(query),
+                  semanticLabel: 'Search $query',
+                  ensureTapTarget: false,
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: palette.lineStrong,
+                        width: IrisStroke.hairline,
+                      ),
+                    ),
+                    child: ExcludeSemantics(
+                      child: Text(
+                        query,
+                        style: type.body.copyWith(
+                          fontSize: 14,
+                          color: palette.ink,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: IrisSpace.md),
+        ],
+        Text(
+          'Searches titles and messages on this server, including archived '
+          'chats.',
+          style: type.caption.copyWith(color: palette.inkMuted),
+        ),
+      ],
     );
   }
 }

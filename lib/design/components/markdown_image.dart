@@ -8,14 +8,18 @@
 /// name in mono) and failed ("Couldn't load", tap to retry).
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/iris_theme.dart';
 import '../tokens/metrics.dart';
 import '../tokens/palette.dart';
 import 'dashed_border.dart';
+import 'image_host_scope.dart';
 import 'iris_orb.dart';
 import 'primitives.dart';
+import 'sheet.dart';
 
 class MarkdownImage extends StatefulWidget {
   const MarkdownImage({required this.url, this.alt, super.key});
@@ -38,11 +42,56 @@ class MarkdownImage extends StatefulWidget {
 
 class _MarkdownImageState extends State<MarkdownImage> {
   bool _load = false;
+  bool _asked = false;
 
   /// Bumped on a retry so the image is asked for again.
   int _attempt = 0;
 
   String get _host => Uri.parse(widget.url).host;
+
+  /// A host the person said to load from without asking loads at once. Read
+  /// the first time only, so a later change to the list never loads an image
+  /// the person has already seen waiting.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_asked) return;
+    _asked = true;
+    final hosts = ImageHostScope.maybeOf(context)?.hosts;
+    if (hosts != null && hosts.contains(_host.toLowerCase())) _load = true;
+  }
+
+  Future<void> _offerAlways() async {
+    final scope = ImageHostScope.maybeOf(context);
+    if (scope == null) return;
+    final host = _host;
+    final yes = await showIrisSheet<bool>(
+      context: context,
+      builder: (sheetContext) => IrisSheet(
+        child: IrisPressable(
+          onTap: () => Navigator.of(sheetContext).pop(true),
+          semanticLabel: 'Always load from $host',
+          child: SizedBox(
+            height: 48,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ExcludeSemantics(
+                child: Text(
+                  'Always load from $host',
+                  style: sheetContext.type.body.copyWith(
+                    color: sheetContext.palette.ink,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (yes != true || !mounted) return;
+    scope.onAllow(host);
+    setState(() => _load = true);
+  }
 
   String get _name {
     final alt = widget.alt?.trim() ?? '';
@@ -67,6 +116,11 @@ class _MarkdownImageState extends State<MarkdownImage> {
         excludeSemantics: true,
         child: IrisPressable(
           onTap: () => setState(() => _load = true),
+          // Without a scope a long press does nothing, but is still one: it
+          // must not count as a tap and load the image.
+          onLongPress: ImageHostScope.maybeOf(context) == null
+              ? () {}
+              : () => unawaited(_offerAlways()),
           ensureTapTarget: false,
           child: _Card(
             fill: palette.surfaceSunken,

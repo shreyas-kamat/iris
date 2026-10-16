@@ -611,10 +611,14 @@ final class SearchHit {
     this.lastActive,
     this.archived = false,
     this.messageCount = 0,
+    this.matches = 1,
   });
 
   final String storedId;
   final String title;
+
+  /// How many of the conversation's messages matched.
+  final int matches;
 
   /// The best matching message, with the matched words marked.
   final List<SnippetRun> snippet;

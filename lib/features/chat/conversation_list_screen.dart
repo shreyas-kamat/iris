@@ -83,7 +83,7 @@ class _ConversationListScreenState
   /// hero once it is scrolled far enough away.
   double _heroHeight = 140;
 
-  /// The query the server is asked, settled 250 ms after the last keystroke.
+  /// The query the server is asked, settled 200 ms after the last keystroke.
   String _serverQuery = '';
   Timer? _debounce;
 
@@ -93,6 +93,8 @@ class _ConversationListScreenState
     _search.addListener(_onQuery);
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
+      // Recent searches show while the empty field has focus.
+      if (mounted) setState(() {});
     });
     _scroll.addListener(_onScroll);
   }
@@ -143,7 +145,7 @@ class _ConversationListScreenState
       if (query.isEmpty) _serverQuery = '';
     });
     if (query.isEmpty) return;
-    _debounce = Timer(const Duration(milliseconds: 250), () {
+    _debounce = Timer(const Duration(milliseconds: 200), () {
       if (mounted) setState(() => _serverQuery = query);
     });
   }
@@ -409,6 +411,16 @@ class _ConversationListScreenState
 
   @override
   Widget build(BuildContext context) {
+    // A search that found something is worth finding again; one that found
+    // nothing is not.
+    final settled = _serverQuery;
+    if (settled.isNotEmpty) {
+      ref.listen(conversationSearchProvider(settled), (_, next) {
+        if (next case AsyncData(:final value) when value.isNotEmpty) {
+          ref.read(recentSearchesProvider.notifier).add(settled);
+        }
+      });
+    }
     // A refreshed first page starts the list over.
     ref.listen(conversationsProvider, (_, next) {
       // While it loads, the old rows are still on screen: keep what was
@@ -516,6 +528,9 @@ class _ConversationListScreenState
               serverHits: _serverQuery.isEmpty
                   ? null
                   : ref.watch(conversationSearchProvider(_serverQuery)),
+              recent: ref.watch(recentSearchesProvider),
+              onRecent: (query) => _search.text = query,
+              onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
               titles: _titles,
               gone: _gone,
               onActions: chat == null
@@ -1021,6 +1036,9 @@ class _ConversationList extends StatelessWidget {
     required this.search,
     required this.searchFocus,
     required this.serverHits,
+    required this.recent,
+    required this.onRecent,
+    required this.onClearRecent,
     required this.titles,
     required this.gone,
     required this.onActions,
@@ -1055,6 +1073,11 @@ class _ConversationList extends StatelessWidget {
 
   /// The server's answer to the settled query; null when none is active.
   final AsyncValue<List<SearchHit>>? serverHits;
+
+  /// The last searches on this server, newest first.
+  final List<String> recent;
+  final ValueChanged<String> onRecent;
+  final VoidCallback onClearRecent;
   final Map<String, String> titles;
   final Set<String> gone;
   final ValueChanged<ConversationSummary>? onActions;
@@ -1182,6 +1205,15 @@ class _ConversationList extends StatelessWidget {
       ),
       if (searching)
         ..._searchItems(context, gutter, list, open)
+      else if (recent.isNotEmpty || searchFocus.hasFocus)
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, 0),
+          child: RecentSearchChips(
+            queries: recent,
+            onPick: onRecent,
+            onClear: onClearRecent,
+          ),
+        )
       else ...[
         ..._section(
           context,
@@ -1306,6 +1338,12 @@ class _ConversationList extends StatelessWidget {
           else
             row,
     ], search.text);
+    final shown = hits == null
+        ? const <SearchHit>[]
+        : [
+            for (final hit in hits)
+              if (!hit.archived && !gone.contains(hit.storedId)) hit,
+          ];
     final rows = hits == null
         ? <Widget>[
             for (final conversation in local)
@@ -1320,9 +1358,7 @@ class _ConversationList extends StatelessWidget {
               ),
           ]
         : <Widget>[
-            for (final found in hits.where(
-              (hit) => !hit.archived && !gone.contains(hit.storedId),
-            ))
+            for (final (index, found) in shown.indexed)
               Builder(
                 key: ValueKey('hit-${found.storedId}'),
                 builder: (context) {
@@ -1335,12 +1371,17 @@ class _ConversationList extends StatelessWidget {
                       IrisSpace.xs,
                     ),
                     child: SearchHitRow(
+                      query: search.text,
+                      now: now,
+                      best: index == 0,
+                      pinned: pins.contains(found.storedId),
                       hit: SearchHit(
                         storedId: found.storedId,
                         title: title,
                         snippet: found.snippet,
                         lastActive: found.lastActive,
                         messageCount: found.messageCount,
+                        matches: found.matches,
                       ),
                       onTap: open == null
                           ? null
@@ -1356,7 +1397,22 @@ class _ConversationList extends StatelessWidget {
               ),
           ];
     final settled = hits != null || failed;
+    final matches = shown.fold<int>(0, (sum, hit) => sum + hit.matches);
     return [
+      if (hits != null && shown.isNotEmpty)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            IrisSpace.sm,
+            gutter,
+            IrisSpace.sm,
+          ),
+          child: IrisLabel(
+            '${shown.length} ${shown.length == 1 ? 'chat' : 'chats'} · '
+            '$matches ${matches == 1 ? 'match' : 'matches'}',
+            color: palette.inkFaint,
+          ),
+        ),
       if (failed)
         Padding(
           padding: EdgeInsets.fromLTRB(
@@ -1384,11 +1440,26 @@ class _ConversationList extends StatelessWidget {
       if (rows.isEmpty && (settled || local.isEmpty))
         Padding(
           padding: const EdgeInsets.symmetric(vertical: IrisSpace.xl),
-          child: Center(
-            child: Text(
-              'No matches',
-              style: type.caption.copyWith(color: palette.inkMuted),
-            ),
+          child: Column(
+            children: [
+              const IrisOrb(state: AgentState.rest, size: 72, glow: false),
+              const SizedBox(height: IrisSpace.md),
+              Text(
+                'No chats mention \u2018${search.text.trim()}\u2019.',
+                textAlign: TextAlign.center,
+                style: type.body.copyWith(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w500,
+                  color: palette.ink,
+                ),
+              ),
+              const SizedBox(height: IrisSpace.xs),
+              Text(
+                'Try fewer words or a different spelling.',
+                textAlign: TextAlign.center,
+                style: type.caption.copyWith(color: palette.inkMuted),
+              ),
+            ],
           ),
         ),
     ];

@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../design/components/image_host_scope.dart';
 import '../design/platform/platform_feel.dart';
 import '../design/theme/iris_theme.dart';
 import '../features/chat/conversation_list_screen.dart';
 import '../features/servers/server_gate.dart';
+import 'device_state.dart';
 import 'theme_controller.dart';
 
 class IrisApp extends ConsumerWidget {
@@ -58,9 +60,14 @@ class IrisApp extends ConsumerWidget {
           // contributes nothing but that.
           builder: (context, navigator) => AnimatedIrisTheme(
             data: theme,
-            child: Material(
-              type: MaterialType.transparency,
-              child: navigator,
+            // Hosts the person said to load images from without asking.
+            child: ImageHostScope(
+              hosts: ref.watch(imageHostsProvider),
+              onAllow: ref.read(imageHostsProvider.notifier).allow,
+              child: Material(
+                type: MaterialType.transparency,
+                child: navigator,
+              ),
             ),
           ),
           home: ServerGate(
