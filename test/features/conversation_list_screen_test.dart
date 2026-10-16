@@ -373,6 +373,9 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Archive'));
         await tester.pumpAndSettle();
+        // The archive toast is over the lower rows of the next menu (it is
+        // taller now, with a Delete row); let the toast go first.
+        await tester.pump(const Duration(seconds: 6));
         await tester.longPress(find.text('Plan the week'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Rename'));
@@ -600,4 +603,44 @@ void main() {
     expect(localMatches(rows, 'the b').map((r) => r.id), ['a']);
     expect(localMatches(rows, '  '), rows);
   });
+
+  Future<void> openDelete(WidgetTester tester) async {
+    await tester.pumpWidget(
+      home(const [ConversationSummary(id: 'stored-1', title: 'Weekly planning')]),
+    );
+    await settle(tester);
+    await tester.longPress(find.text('Weekly planning'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('long-press, Delete, confirm removes the row and tells the server', (tester) async {
+    await openDelete(tester);
+    // The confirm sheet's button is now the only "Delete" on screen.
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(backend.deletes, ['stored-1']);
+    expect(find.text('Weekly planning'), findsNothing);
+  });
+
+  testWidgets('a live chat refuses to delete and the row stays', (tester) async {
+    backend.deleteResult = const Err(
+      IrisFailure(FailureKind.rejected, message: 'cannot delete an active session'),
+    );
+    await openDelete(tester);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Weekly planning'), findsOneWidget);
+    expect(find.text('Stop the reply before deleting this chat.'), findsOneWidget);
+  });
+
+  testWidgets('cancelling the confirm deletes nothing', (tester) async {
+    await openDelete(tester);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(backend.deletes, isEmpty);
+    expect(find.text('Weekly planning'), findsOneWidget);
+  });
+
 }

@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/device_state.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
 import '../../core/failure.dart';
@@ -45,6 +46,7 @@ import 'chat_screen.dart';
 import 'conversation_actions.dart';
 import 'conversation_row.dart';
 import 'conversation_search.dart';
+import 'delete_sheet.dart';
 import 'profile_picker.dart';
 import 'relative_time.dart';
 
@@ -209,8 +211,40 @@ class _ConversationListScreenState
         }
       case ConversationAction.archive:
         await _archive(chat, conversation.id);
+      case ConversationAction.delete:
+        await _delete(chat, conversation, title);
       case null:
         break;
+    }
+  }
+
+  Future<void> _delete(
+    ChatBackend chat,
+    ConversationSummary conversation,
+    String title,
+  ) async {
+    if (!await showDeleteSheet(context, title) || !mounted) return;
+    unawaited(IrisHaptics.commit());
+    setState(() => _gone.add(conversation.id));
+    final result = await chat.delete(conversation.id);
+    if (!mounted) return;
+    switch (result) {
+      case Ok():
+        ref.read(pinsProvider.notifier).unpin(conversation.id);
+        ref.read(branchRecordsProvider).forget(conversation.id);
+        showIrisToast(context, message: 'Deleted ‘$title’');
+      case Err(:final failure):
+        setState(() => _gone.remove(conversation.id));
+        showIrisToast(
+          context,
+          message: refusedAsLive(failure)
+              ? 'Stop the reply before deleting this chat.'
+              : 'Could not delete: ${ChatController.describe(failure)}',
+          actionLabel: refusedAsLive(failure) ? 'Open' : null,
+          onAction: refusedAsLive(failure)
+              ? () => unawaited(_open(chat, conversation: conversation))
+              : null,
+        );
     }
   }
 

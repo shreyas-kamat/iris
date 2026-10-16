@@ -20,6 +20,7 @@ import '../../design/tokens/metrics.dart';
 import 'chat_controller.dart';
 import 'chat_screen.dart';
 import 'conversation_row.dart';
+import 'delete_sheet.dart';
 
 class ArchivedScreen extends StatefulWidget {
   const ArchivedScreen({required this.backend, super.key});
@@ -80,6 +81,23 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
       showIrisToast(
         context,
         message: 'Could not unarchive: ${ChatController.describe(failure)}',
+      );
+    }
+  }
+
+  Future<void> _delete(ConversationSummary row) async {
+    if (!await showDeleteSheet(context, row.title) || !mounted) return;
+    unawaited(IrisHaptics.commit());
+    setState(() => _gone.add(row.id));
+    final result = await widget.backend.delete(row.id);
+    if (!mounted) return;
+    if (result case Err(:final failure)) {
+      setState(() => _gone.remove(row.id));
+      showIrisToast(
+        context,
+        message: refusedAsLive(failure)
+            ? 'Stop the reply before deleting this chat.'
+            : 'Could not delete: ${ChatController.describe(failure)}',
       );
     }
   }
@@ -176,6 +194,7 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
             child: ConversationRow(
               title: row.title,
               onTap: () => unawaited(_open(row)),
+              onLongPress: () => unawaited(_delete(row)),
               // Named with the chat's title: a list of identical
               // "Unarchive" buttons says nothing to a screen reader.
               trailing: Semantics(

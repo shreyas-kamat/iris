@@ -41,4 +41,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nothing archived'), findsOneWidget);
   });
+
+  testWidgets('a long-press offers Delete and removes the row', (tester) async {
+    backend.archivedResult = const Ok([ConversationSummary(id: 'z', title: 'Old notes')]);
+    await tester.pumpWidget(themed(ArchivedScreen(backend: backend)));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Old notes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(backend.deletes, ['z']);
+    expect(find.text('Old notes'), findsNothing);
+  });
+
 }

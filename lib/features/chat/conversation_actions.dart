@@ -6,12 +6,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../design/components/controls.dart';
+import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 
-enum ConversationAction { rename, archive }
+enum ConversationAction { rename, archive, delete }
 
 Future<ConversationAction?> showConversationActions(
   BuildContext context,
@@ -46,6 +47,17 @@ Future<ConversationAction?> showConversationActions(
               ),
               onTap: () =>
                   Navigator.of(sheetContext).pop(ConversationAction.archive),
+            ),
+            const IrisDivider(),
+            IrisListRow(
+              title: 'Delete',
+              leading: Icon(
+                Icons.delete_outline,
+                size: IrisSize.icon,
+                color: palette.danger,
+              ),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ConversationAction.delete),
             ),
           ],
         ),
