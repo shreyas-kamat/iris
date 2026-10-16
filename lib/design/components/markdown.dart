@@ -271,7 +271,15 @@ final class _Renderer {
           ),
         ];
       case 'sup' when node.attributes['class'] == 'footnote-ref':
-        return [TextSpan(text: _superscript(node.textContent), style: style)];
+        return [
+          TextSpan(
+            text: _superscript(node.textContent),
+            style: theme.typography.codeSmall.copyWith(
+              fontSize: 11,
+              color: theme.palette.accent,
+            ),
+          ),
+        ];
       case 'sub' || 'sup':
         return inline(
           node.children,
@@ -303,7 +311,8 @@ final class _Renderer {
             child: IrisMath(
               node.textContent,
               display: node.tag == mathDisplayTag,
-              style: style,
+              // Inline maths reads a little larger than the words around it.
+              style: style.copyWith(fontSize: (style.fontSize ?? 16) * 1.1),
             ),
           ),
         ];
@@ -327,18 +336,19 @@ final class _Renderer {
   }
 
   static const _alerts = {
-    'note': ('Note', Icons.info_outline, AgentState.idle),
-    'tip': ('Tip', Icons.lightbulb_outline, AgentState.done),
-    'important': ('Important', Icons.priority_high, AgentState.thinking),
-    'warning': ('Warning', Icons.warning_amber_outlined, AgentState.working),
-    'caution': ('Caution', Icons.dangerous_outlined, AgentState.failed),
+    'note': ('Note', AgentState.loading),
+    'tip': ('Tip', AgentState.done),
+    'important': ('Important', AgentState.thinking),
+    'warning': ('Warning', AgentState.working),
+    'caution': ('Caution', AgentState.failed),
   };
 
   /// A GitHub alert: `> [!NOTE]` and its kin. Any other `div` draws its
   /// children as ordinary blocks.
   Widget alert(md.Element node) {
-    final kind = RegExp(r'markdown-alert-(\w+)')
-        .firstMatch(node.attributes['class'] ?? '')?[1];
+    final kind = RegExp(
+      r'markdown-alert-(\w+)',
+    ).firstMatch(node.attributes['class'] ?? '')?[1];
     final style = _alerts[kind];
     final children = [
       for (final child in node.children ?? const <md.Node>[])
@@ -352,31 +362,42 @@ final class _Renderer {
         children: spaced(blocks(children), IrisSpace.sm),
       );
     }
-    final (title, icon, state) = style;
+    final (title, state) = style;
     final color = theme.palette.colorFor(state);
-    return DecoratedBox(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: color, width: IrisStroke.ring)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(left: IrisSpace.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: IrisSize.iconSmall, color: color),
-                const SizedBox(width: IrisSpace.xs),
-                Text(
-                  title,
-                  style: body.copyWith(color: color, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: IrisSpace.xs),
-            ...spaced(blocks(children), IrisSpace.sm),
-          ],
+        color: color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: color.withValues(alpha: .30),
+          width: IrisStroke.hairline,
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: IrisSpace.xs + 2),
+              Text(
+                title.toUpperCase(),
+                style: theme.typography.codeSmall.copyWith(
+                  fontSize: 11,
+                  letterSpacing: 1,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: IrisSpace.xs),
+          ...spaced(blocks(children), IrisSpace.sm),
+        ],
       ),
     );
   }
@@ -385,8 +406,9 @@ final class _Renderer {
   /// muted, under a hairline. The ↩ back-links go nowhere in an app, so they
   /// are dropped.
   Widget footnotes(md.Element node) {
-    final small = body.copyWith(
-      fontSize: (body.fontSize ?? 16) * 0.85,
+    final small = theme.typography.body.copyWith(
+      fontSize: 13,
+      height: 1.5,
       color: theme.palette.inkMuted,
     );
     final items = elementsIn(node).where((e) => e.tag == 'li').toList();
@@ -397,6 +419,17 @@ final class _Renderer {
           height: IrisSpace.md,
           thickness: IrisStroke.hairline,
           color: theme.palette.line,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: IrisSpace.xs),
+          child: Text(
+            'NOTES',
+            style: theme.typography.codeSmall.copyWith(
+              fontSize: 10.5,
+              letterSpacing: 1,
+              color: theme.palette.inkMuted,
+            ),
+          ),
         ),
         for (final (i, item) in items.indexed)
           Text.rich(
@@ -434,10 +467,22 @@ final class _Renderer {
 
   static String _superscript(String digits) => digits
       .split('')
-      .map((d) => const {
-            '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
-            '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
-          }[d] ?? d)
+      .map(
+        (d) =>
+            const {
+              '0': '⁰',
+              '1': '¹',
+              '2': '²',
+              '3': '³',
+              '4': '⁴',
+              '5': '⁵',
+              '6': '⁶',
+              '7': '⁷',
+              '8': '⁸',
+              '9': '⁹',
+            }[d] ??
+            d,
+      )
       .join();
 
   Widget list(md.Element node) {
@@ -639,8 +684,20 @@ String? highlightLanguage(String? fence) {
 /// The languages an unlabelled block may be detected as. A short list is
 /// fast and rarely wrong; the full grammar set mislabels prose and logs.
 const _detectable = [
-  'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'sql',
-  'go', 'rust', 'java', 'kotlin', 'swift', 'dart', 'dockerfile',
+  'bash',
+  'python',
+  'javascript',
+  'typescript',
+  'json',
+  'yaml',
+  'sql',
+  'go',
+  'rust',
+  'java',
+  'kotlin',
+  'swift',
+  'dart',
+  'dockerfile',
 ];
 
 final Map<String, String?> _detected = {};
@@ -653,7 +710,8 @@ String? detectLanguage(String code) {
   if (_detected.containsKey(code)) return _detected[code];
   final best = _highlighter.highlightAuto(code, _detectable);
   final runnerUp = best.secondBest?.relevance ?? 0;
-  final language = best.language != null &&
+  final language =
+      best.language != null &&
           best.relevance >= 4 &&
           best.relevance >= runnerUp * 1.5
       ? best.language
@@ -687,11 +745,7 @@ TextSpan? _highlighted(String code, String? fence, IrisCodeColors colors) {
 /// then reverts, and the timer is cancelled on dispose so a block that leaves
 /// the screen during that moment does not set state on a dead widget.
 class _CodeBlock extends StatefulWidget {
-  const _CodeBlock({
-    required this.code,
-    this.language,
-    this.highlight = true,
-  });
+  const _CodeBlock({required this.code, this.language, this.highlight = true});
 
   final String code;
   final String? language;
@@ -716,13 +770,14 @@ class _CodeBlockState extends State<_CodeBlock> {
 
   /// The fence's language, or the detected one for a finished, unlabelled block.
   String? get _language =>
-      widget.language ?? (widget.highlight ? detectLanguage(widget.code) : null);
+      widget.language ??
+      (widget.highlight ? detectLanguage(widget.code) : null);
 
   Widget _codeText(BuildContext context) {
     final palette = context.palette;
     final style = context.type.code.copyWith(
       fontSize: 12.5,
-      height: 1.6,
+      height: 1.7,
       color: palette.accent,
     );
     final colors = IrisCodeColors.of(palette);
@@ -733,7 +788,10 @@ class _CodeBlockState extends State<_CodeBlock> {
       return Text(widget.code, key: const ValueKey('plain'), style: style);
     }
     return Text.rich(
-      TextSpan(style: style.copyWith(color: colors.plain), children: [span]),
+      TextSpan(
+        style: style.copyWith(color: colors.plain),
+        children: [span],
+      ),
       key: const ValueKey('highlighted'),
     );
   }
@@ -760,7 +818,8 @@ class _CodeBlockState extends State<_CodeBlock> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              height: 44,
+              padding: const EdgeInsets.only(left: 12),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
@@ -772,31 +831,54 @@ class _CodeBlockState extends State<_CodeBlock> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      _language ?? 'code',
-                      style: type.codeSmall.copyWith(
-                        fontSize: 11,
-                        color: palette.inkFaint,
-                      ),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _language ?? 'code',
+                            overflow: TextOverflow.ellipsis,
+                            style: type.codeSmall.copyWith(
+                              fontSize: 11,
+                              color: palette.ink,
+                            ),
+                          ),
+                        ),
+                        // A guess, and said to be one.
+                        if (widget.language == null && _language != null) ...[
+                          const SizedBox(width: IrisSpace.sm),
+                          Text(
+                            'detected',
+                            style: type.codeSmall.copyWith(
+                              fontSize: 11,
+                              color: palette.inkMuted,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   IrisPressable(
                     onTap: _copy,
-                    ensureTapTarget: false,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.copy, size: 13, color: palette.accent),
-                        const SizedBox(width: 5),
-                        Text(
-                          _copied ? 'Copied' : 'Copy',
-                          style: type.caption.copyWith(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: palette.accent,
-                          ),
+                    child: SizedBox(
+                      height: 44,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.copy, size: 13, color: palette.accent),
+                            const SizedBox(width: 5),
+                            Text(
+                              _copied ? 'Copied' : 'Copy',
+                              style: type.caption.copyWith(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: palette.accent,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ],

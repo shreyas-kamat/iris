@@ -8,6 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/design/components/markdown.dart';
 import 'package:iris/design/components/markdown_image.dart';
 import 'package:iris/design/components/math.dart';
+import 'package:iris/design/theme/iris_theme.dart';
+import 'package:iris/design/tokens/code_colors.dart';
+import 'package:iris/design/tokens/palette.dart';
 
 import '../support/harness.dart';
 
@@ -162,14 +165,18 @@ void main() {
         'python',
       );
       expect(
-        detectLanguage('SELECT id, name FROM users WHERE active = 1 ORDER BY name;'),
+        detectLanguage(
+          'SELECT id, name FROM users WHERE active = 1 ORDER BY name;',
+        ),
         'sql',
       );
       expect(detectLanguage('hello there'), isNull);
       expect(detectLanguage('x'), isNull);
     });
 
-    testWidgets('a finished unlabelled block is coloured and named', (tester) async {
+    testWidgets('a finished unlabelled block is coloured and named', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         themed(
           const IrisMarkdown(
@@ -203,9 +210,13 @@ void main() {
                 .text
             as TextSpan;
 
-    testWidgets('a known language is coloured in several roles', (tester) async {
+    testWidgets('a known language is coloured in several roles', (
+      tester,
+    ) async {
       const code = "final x = 'hi'; // note";
-      await tester.pumpWidget(themed(const IrisMarkdown('```dart\n$code\n```')));
+      await tester.pumpWidget(
+        themed(const IrisMarkdown('```dart\n$code\n```')),
+      );
       await tester.pumpAndSettle();
       final colours = <Color?>{};
       codeSpan(tester, code).visitChildren((span) {
@@ -215,7 +226,9 @@ void main() {
       expect(colours.whereType<Color>().length, greaterThanOrEqualTo(3));
     });
 
-    testWidgets('no language, or a reply still arriving, stays plain', (tester) async {
+    testWidgets('no language, or a reply still arriving, stays plain', (
+      tester,
+    ) async {
       const code = "final x = 'hi';";
       await tester.pumpWidget(themed(const IrisMarkdown('```\n$code\n```')));
       await tester.pumpAndSettle();
@@ -239,17 +252,19 @@ void main() {
     await tester.pumpWidget(
       themed(const IrisMarkdown('> [!TIP]\n> Use a cache.')),
     );
-    expect(find.text('Tip'), findsOneWidget);
+    expect(find.text('TIP'), findsOneWidget);
     expect(find.text('Use a cache.'), findsOneWidget);
-    expect(find.byIcon(Icons.lightbulb_outline), findsOneWidget);
   });
 
-  testWidgets('footnotes are superscript and listed at the end', (tester) async {
+  testWidgets('footnotes are superscript and listed at the end', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       themed(const IrisMarkdown('Fact.[^1]\n\n[^1]: Source.')),
     );
     expect(find.textContaining('¹'), findsOneWidget);
     expect(find.textContaining('Source.'), findsOneWidget);
+    expect(find.text('NOTES'), findsOneWidget);
     expect(find.textContaining('↩'), findsNothing);
   });
 
@@ -290,7 +305,9 @@ void main() {
 
   testWidgets('an image inside a sentence stays its alt text', (tester) async {
     await tester.pumpWidget(
-      themed(const IrisMarkdown('See ![chart](https://img.example/c.png) here')),
+      themed(
+        const IrisMarkdown('See ![chart](https://img.example/c.png) here'),
+      ),
     );
     expect(find.byType(MarkdownImage), findsNothing);
     expect(find.textContaining('chart'), findsOneWidget);
@@ -317,7 +334,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('physics, units and chemistry lay out, not fall back', (tester) async {
+  testWidgets('physics, units and chemistry lay out, not fall back', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       themed(const IrisMarkdown(r'$\dv{f}{x}$ and $\ce{H2O}$ and $\SI{3}{m}$')),
     );
@@ -333,5 +352,105 @@ void main() {
     );
     expect(find.byType(IrisMath), findsOneWidget);
     expect(find.text('latex'), findsOneWidget);
+  });
+
+  testWidgets('a detected language is labelled detected; a fenced one is not', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      themed(
+        const IrisMarkdown(
+          '```\ndef greet(name):\n    print(f"hi {name}")\n\nfor i in range(3):\n    greet(i)\n```',
+        ),
+      ),
+    );
+    expect(find.text('python'), findsOneWidget);
+    expect(find.text('detected'), findsOneWidget);
+    await tester.pumpWidget(
+      themed(const IrisMarkdown('```python\nx = 1\n```')),
+    );
+    expect(find.text('python'), findsOneWidget);
+    expect(find.text('detected'), findsNothing);
+  });
+
+  test(
+    'syntax colour is accent for keywords, muted for comments, ink for the rest',
+    () {
+      final colors = IrisCodeColors.of(
+        IrisThemeData(skin: IrisSkin.aperture, isDark: true).palette,
+      );
+      for (final other in [
+        colors.string,
+        colors.number,
+        colors.title,
+        colors.type,
+        colors.attr,
+        colors.meta,
+      ]) {
+        expect(other, colors.plain);
+      }
+      expect(colors.keyword, isNot(colors.plain));
+      expect(colors.comment, isNot(colors.plain));
+      expect(
+        colors.addition,
+        isNot(colors.plain),
+        reason: 'a diff keeps its meaning',
+      );
+    },
+  );
+
+  testWidgets(
+    'a wide display equation fades at its trailing edge; a short one does not',
+    (tester) async {
+      final wide =
+          r'$$' +
+          List.filled(40, r'\int_0^\infty e^{-x^2}\,dx +').join(' ') +
+          r' 1$$';
+      await tester.pumpWidget(
+        themed(SizedBox(width: 300, child: IrisMarkdown(wide))),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('math-fade')), findsOneWidget);
+      await tester.pumpWidget(
+        themed(const SizedBox(width: 300, child: IrisMarkdown(r'$$x^2$$'))),
+      );
+      await tester.pump();
+      expect(find.byKey(const ValueKey('math-fade')), findsNothing);
+    },
+  );
+
+  testWidgets('an unloaded image is a 4:3 card with the host and the action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      themed(
+        const SizedBox(
+          width: 300,
+          child: IrisMarkdown('![panel](https://grafana.local/a.png)'),
+        ),
+      ),
+    );
+    expect(find.text('grafana.local'), findsOneWidget);
+    expect(find.text('Tap to load'), findsOneWidget);
+    final size = tester.getSize(find.byKey(const ValueKey('image-card')));
+    expect(size.width / size.height, closeTo(4 / 3, .01));
+  });
+
+  testWidgets('a failed image says so and offers Tap to retry', (tester) async {
+    // The test binding answers every HTTP request with a failure.
+    await tester.pumpWidget(
+      themed(
+        const SizedBox(
+          width: 300,
+          child: IrisMarkdown('![panel](https://grafana.local/a.png)'),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Tap to load'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text("Couldn't load"), findsOneWidget);
+    expect(find.text('Tap to retry'), findsOneWidget);
   });
 }

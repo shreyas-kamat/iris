@@ -37,14 +37,17 @@ final class IrisCodeColors {
     Color legible(Color color) => _legible(color, toward: p.ink, on: well);
     return IrisCodeColors(
       plain: p.ink,
-      keyword: legible(p.colorFor(AgentState.thinking)),
-      string: legible(p.colorFor(AgentState.done)),
-      number: legible(p.colorFor(AgentState.working)),
+      // Colour is state, so code is not a rainbow: keywords take the accent,
+      // comments step back, and every other token stays in ink. A diff keeps
+      // its colours because there they carry meaning.
+      keyword: legible(p.accent),
+      string: p.ink,
+      number: p.ink,
       comment: legible(p.inkMuted),
-      title: legible(p.accent),
-      type: legible(p.colorFor(AgentState.streaming)),
-      attr: legible(p.colorFor(AgentState.waiting)),
-      meta: legible(p.inkMuted),
+      title: p.ink,
+      type: p.ink,
+      attr: p.ink,
+      meta: p.ink,
       addition: legible(p.colorFor(AgentState.done)),
       deletion: legible(p.colorFor(AgentState.failed)),
     );
