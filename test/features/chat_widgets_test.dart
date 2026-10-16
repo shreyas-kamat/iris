@@ -568,6 +568,7 @@ void main() {
   });
 
   testWidgets('the model chip shows its whole name when there is room', (tester) async {
+    final semantics = tester.ensureSemantics();
     tester.view.physicalSize = const Size(411, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -590,5 +591,8 @@ void main() {
     );
     expect(find.text('gpt-6.1-sol · medium'), findsOneWidget);
     expect(tester.getSize(find.text('gpt-6.1-sol · medium')).width, greaterThan(120));
+    // Send stays at the right edge, not beside the chip.
+    expect(tester.getRect(find.bySemanticsLabel('Send')).right, greaterThan(411 - 40));
+    semantics.dispose();
   });
 }

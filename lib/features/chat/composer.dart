@@ -277,33 +277,42 @@ class Composer extends StatelessWidget {
                       const SizedBox(height: IrisSpace.xs),
                       Row(
                         children: [
-                          if (onAttach != null &&
-                              !running &&
-                              recording == null) ...[
-                            _AttachButton(
-                              enabled: enabled,
-                              full:
-                                  attachments.length >=
-                                  Attachment.maxPerMessage,
-                              onPick: onAttach!,
+                          // Everything left of the action shares one row, so a
+                          // long model name shrinks to fit and the action keeps
+                          // its place at the right edge.
+                          Expanded(
+                            child: Row(
+                              children: [
+                                if (onAttach != null &&
+                                    !running &&
+                                    recording == null) ...[
+                                  _AttachButton(
+                                    enabled: enabled,
+                                    full:
+                                        attachments.length >=
+                                        Attachment.maxPerMessage,
+                                    onPick: onAttach!,
+                                  ),
+                                  if (attachments.length >=
+                                      Attachment.maxPerMessage)
+                                    const IrisLabel('5 / 5 files', small: true),
+                                  const SizedBox(width: IrisSpace.xs),
+                                ],
+                                if (model case final model?
+                                    when recording == null) ...[
+                                  Flexible(
+                                    child: _ModelChip(
+                                      model: model,
+                                      onTap: onModel,
+                                    ),
+                                  ),
+                                  const SizedBox(width: IrisSpace.xs),
+                                ],
+                                if (contextUsage case final usage?)
+                                  _ContextRing(usage: usage, onTap: onContext),
+                              ],
                             ),
-                            if (attachments.length >= Attachment.maxPerMessage)
-                              const IrisLabel('5 / 5 files', small: true),
-                            const SizedBox(width: IrisSpace.xs),
-                          ],
-                          if (model case final model?
-                              when recording == null) ...[
-                            // Far heavier than the Spacer, so the chip only shrinks
-                            // when the row is out of room.
-                            Flexible(
-                              flex: 1000,
-                              child: _ModelChip(model: model, onTap: onModel),
-                            ),
-                            const SizedBox(width: IrisSpace.xs),
-                          ],
-                          if (contextUsage case final usage?)
-                            _ContextRing(usage: usage, onTap: onContext),
-                          const Spacer(),
+                          ),
                           // Send and Stop share one slot, so the action changes
                           // in place rather than the row reflowing.
                           AnimatedSwitcher(
