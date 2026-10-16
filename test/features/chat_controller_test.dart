@@ -682,6 +682,124 @@ void main() {
     expect(names, containsAll(['/help', '/queue', '/steer', '/undo', '/branch']));
   });
 
+
+  group('branch', () {
+    List<TranscriptItem> history() => const [
+      UserTurn(id: '1', text: 'Why did it fail?'),
+      AssistantTurn(id: '2', text: 'The backup job.'),
+      ToolCall(id: 't', name: 'read_logs'),
+      UserTurn(id: '3', text: 'Draft the fix.'),
+      AssistantTurn(id: '4', text: 'Opened #482.'),
+    ];
+
+    test('the seed keeps user and assistant text and drops tool calls and notices', () {
+      final seed = ChatController.seedFrom([
+        ...history(),
+        const Notice(id: 'n', text: 'Stopped.'),
+        const AssistantTurn(id: '5', text: '   '),
+      ]);
+      expect([for (final m in seed) (m.role, m.content)], [
+        ('user', 'Why did it fail?'),
+        ('assistant', 'The backup job.'),
+        ('user', 'Draft the fix.'),
+        ('assistant', 'Opened #482.'),
+      ]);
+    });
+
+    test('the newest reply branches the whole stored chat', () async {
+      backend.historyResult = Ok(history());
+      final controller = controllerFor();
+      await controller.open();
+      final outcome = (await controller.branch(fromItemId: '4')).valueOrNull!;
+      expect(backend.branches, ['stored-1']);
+      expect(backend.branchPrefixes.single, isEmpty, reason: 'branchWhole carries no prefix');
+      expect(outcome.conversation.storedId, 'stored-branch');
+      expect(outcome.summarised, isFalse);
+    });
+
+    test('an older reply seeds a new session with the prefix through that reply', () async {
+      backend.historyResult = Ok(history());
+      final controller = controllerFor();
+      await controller.open();
+      final outcome = (await controller.branch(fromItemId: '2')).valueOrNull!;
+      expect([for (final m in backend.branchPrefixes.single) m.content], [
+        'Why did it fail?',
+        'The backup job.',
+      ]);
+      expect(outcome.count, 2);
+    });
+
+    test('earlier pages are loaded before the prefix is built', () async {
+      backend
+        ..historyResult = const Ok([
+          UserTurn(id: '3', text: 'Draft the fix.'),
+          AssistantTurn(id: '4', text: 'Opened #482.'),
+        ])
+        ..historyEarlier = const HistoryCursor(offset: 64, fromNewest: false)
+        ..earlierResult = const Ok(HistoryPage(items: [
+          UserTurn(id: '1', text: 'Why did it fail?'),
+          AssistantTurn(id: '2', text: 'The backup job.'),
+        ]));
+      final controller = controllerFor();
+      await controller.open();
+      await controller.branch(fromItemId: '2');
+      expect(backend.calls, contains('earlier stored-1 64'));
+      expect(backend.branchPrefixes.single.first.content, 'Why did it fail?');
+    });
+
+    test('a chat with no stored id cannot branch', () async {
+      final controller = controllerFor(id: null);
+      expect((await controller.branch(fromItemId: 'x')).isErr, isTrue);
+      expect(backend.branches, isEmpty);
+    });
+
+    test('a reply that is still streaming cannot be branched from', () async {
+      backend.historyResult = Ok(history());
+      final controller = controllerFor();
+      await controller.open();
+      backend.emit(const MessageStarted('run-1'));
+      backend.emit(const TextDelta('run-1', 'partial'));
+      await settle();
+      final live = controller.value.items.last.id;
+      expect(controller.canBranchFrom(live), isFalse);
+      expect(controller.canBranchFrom('2'), isTrue);
+    });
+
+    test('summarise runs compress on the new chat, and a failure still opens it', () async {
+      backend.historyResult = Ok(history());
+      final controller = controllerFor();
+      await controller.open();
+      var outcome = (await controller.branch(summarise: true)).valueOrNull!;
+      expect(backend.compressions, ['run-branch']);
+      expect(outcome.summarised, isTrue);
+
+      backend.compressResult = Err(unknownMethod('session.compress'));
+      outcome = (await controller.branch(summarise: true)).valueOrNull!;
+      expect(outcome.summarised, isFalse);
+      expect(outcome.conversation.storedId, 'stored-branch');
+    });
+
+    test('a server without session.branch_stored says so', () async {
+      backend.historyResult = Ok(history());
+      backend.branchResult = Err(unknownMethod('session.branch_stored'));
+      final controller = controllerFor();
+      await controller.open();
+      final result = await controller.branch();
+      expect(result.failureOrNull?.message, "This server can't branch conversations.");
+    });
+
+    test('/branch branches the whole chat', () async {
+      backend.historyResult = Ok(history());
+      final controller = controllerFor();
+      var branched = false;
+      controller.onBranchRequested = () => branched = true;
+      await controller.open();
+      await controller.send('/branch');
+      expect(branched, isTrue);
+      expect(backend.slashes, isEmpty);
+    });
+  });
+
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

@@ -722,6 +722,20 @@ void main() {
     expect(backend.conversationReads, ['gone-1']);
     expect(find.text('PINNED'), findsNothing);
   });
+
+  testWidgets('Branch from the menu copies the chat, remembers the parent and opens the child', (tester) async {
+    await tester.pumpWidget(
+      home(const [ConversationSummary(id: 'stored-1', title: 'Weekly planning')]),
+    );
+    await settle(tester);
+    await tester.longPress(find.text('Weekly planning'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Branch'));
+    await tester.pumpAndSettle();
+    expect(backend.branches, ['stored-1']);
+    expect(find.textContaining('Branched from'), findsOneWidget);
+  });
+
 }
 
 class _PinnedAlready extends Pins {

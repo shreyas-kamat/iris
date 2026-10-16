@@ -23,6 +23,7 @@ import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/rpc/dashboard_session.dart';
+import '../../data/rpc/rpc_frame.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
@@ -41,6 +42,7 @@ import '../home/link_status_screen.dart';
 import '../home/usage_strip.dart';
 import '../settings/settings_screen.dart';
 import 'archived_screen.dart';
+import 'branched_header.dart';
 import 'chat_controller.dart';
 import 'chat_screen.dart';
 import 'conversation_actions.dart';
@@ -192,6 +194,7 @@ class _ConversationListScreenState
   Future<void> _open(
     ChatBackend chat, {
     ConversationSummary? conversation,
+    BranchRecord? branch,
   }) async {
     await Navigator.of(context).push(
       IrisPageRoute<void>(
@@ -202,6 +205,13 @@ class _ConversationListScreenState
           backend: chat,
           conversationId: conversation?.id,
           title: conversation?.title,
+          branch:
+              branch ??
+              (conversation == null
+                  ? null
+                  : ref.read(branchRecordProvider(conversation.id))),
+          onBranched: (childId, record) =>
+              ref.read(branchRecordsProvider).save(childId, record),
         ),
       ),
     );
@@ -249,12 +259,52 @@ class _ConversationListScreenState
             message: 'Could not rename: ${ChatController.describe(failure)}',
           );
         }
+      case ConversationAction.branch:
+        await _branchChat(chat, conversation, title);
       case ConversationAction.archive:
         await _archive(chat, conversation.id);
       case ConversationAction.delete:
         await _delete(chat, conversation, title);
       case null:
         break;
+    }
+  }
+
+  Future<void> _branchChat(
+    ChatBackend chat,
+    ConversationSummary conversation,
+    String title,
+  ) async {
+    final result = await withBranchingOverlay(
+      context,
+      title,
+      chat.branchWhole(conversation.id),
+    );
+    if (!mounted) return;
+    switch (result) {
+      case Err(:final failure):
+        showIrisToast(
+          context,
+          message: (failure.rpcError?.isMethodNotFound ?? false)
+              ? "This server can't branch conversations."
+              : 'Could not branch: ${ChatController.describe(failure)}',
+        );
+      case Ok(value: final created):
+        final record = BranchRecord(
+          parentId: conversation.id,
+          parentTitle: title,
+          count: conversation.messageCount,
+          at: DateTime.now().millisecondsSinceEpoch,
+        );
+        ref.read(branchRecordsProvider).save(created.storedId, record);
+        await _open(
+          chat,
+          conversation: ConversationSummary(
+            id: created.storedId,
+            title: 'Branch of $title',
+          ),
+          branch: record,
+        );
     }
   }
 

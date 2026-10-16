@@ -63,8 +63,9 @@ class Pins extends Notifier<List<String>> {
   }
 }
 
-final recentSearchesProvider =
-    NotifierProvider<RecentSearches, List<String>>(RecentSearches.new);
+final recentSearchesProvider = NotifierProvider<RecentSearches, List<String>>(
+  RecentSearches.new,
+);
 
 /// The last few searches on this server, newest first.
 class RecentSearches extends Notifier<List<String>> {
@@ -147,6 +148,7 @@ final class BranchRecord {
     required this.parentId,
     required this.parentTitle,
     required this.count,
+    this.at = 0,
   });
 
   /// Null for a value that is not a record.
@@ -159,10 +161,12 @@ final class BranchRecord {
       if (parent is! String || parent.isEmpty) return null;
       final title = decoded['parentTitle'];
       final count = decoded['count'];
+      final at = decoded['at'];
       return BranchRecord(
         parentId: parent,
         parentTitle: title is String ? title : '',
         count: count is int ? count : 0,
+        at: at is int ? at : 0,
       );
     } on FormatException {
       return null;
@@ -175,10 +179,15 @@ final class BranchRecord {
   /// Messages copied from the parent.
   final int count;
 
+  /// Epoch milliseconds when the branch was made; 0 for a record from before
+  /// the time was kept.
+  final int at;
+
   String toJson() => jsonEncode({
     'parent': parentId,
     'parentTitle': parentTitle,
     'count': count,
+    'at': at,
   });
 }
 

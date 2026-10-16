@@ -207,27 +207,25 @@ final class ChatState {
   };
 
   /// The newest page of stored history, replacing whatever was shown.
-  ChatState withNewestPage(
-    List<TranscriptItem> page,
-    HistoryCursor? earlier,
-  ) => ChatState(
-    phase: ChatPhase.ready,
-    items: page,
-    turn: turn,
-    approvals: approvals,
-    questions: questions,
-    inputs: inputs,
-    title: title,
-    earlier: earlier,
-    model: model,
-    provider: provider,
-    commands: commands,
-    context: context,
-    logins: logins,
-    connections: connections,
-    effort: effort,
-    fast: fast,
-  );
+  ChatState withNewestPage(List<TranscriptItem> page, HistoryCursor? earlier) =>
+      ChatState(
+        phase: ChatPhase.ready,
+        items: page,
+        turn: turn,
+        approvals: approvals,
+        questions: questions,
+        inputs: inputs,
+        title: title,
+        earlier: earlier,
+        model: model,
+        provider: provider,
+        commands: commands,
+        context: context,
+        logins: logins,
+        connections: connections,
+        effort: effort,
+        fast: fast,
+      );
 
   /// An earlier page, above what is shown.
   ChatState withEarlierPage(
@@ -409,7 +407,9 @@ final class ChatState {
       ),
     );
     // The card vanishing on its own would be a mystery; say why.
-    return hadInput ? next.withNotice('Hermes stopped waiting for that.') : next;
+    return hadInput
+        ? next.withNotice('Hermes stopped waiting for that.')
+        : next;
   }
 
   ChatState withInput(InputRequest request) => copyWith(

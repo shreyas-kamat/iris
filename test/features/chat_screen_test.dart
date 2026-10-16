@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/device_state.dart';
 import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/attachment.dart';
@@ -486,8 +487,7 @@ void main() {
     semantics.dispose();
   });
 
-  /// A conversation with two exchanges, opened.
-  Future<void> pumpChat(WidgetTester tester) async {
+  Future<void> pumpChat(WidgetTester tester, {BranchRecord? branch}) async {
     backend.historyResult = const Ok([
       UserTurn(id: '1', text: 'Why?'),
       AssistantTurn(id: '2', text: 'Because.'),
@@ -495,7 +495,14 @@ void main() {
       AssistantTurn(id: '4', text: 'Done.'),
     ]);
     await tester.pumpWidget(
-      themed(ChatScreen(backend: backend, conversationId: 'stored-1', title: 'Greetings')),
+      themed(
+        ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Greetings',
+          branch: branch,
+        ),
+      ),
     );
     await settle(tester);
     await settle(tester);
@@ -542,6 +549,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(copied, 'Done.');
   });
+
+  testWidgets('long-press on a finished reply offers Branch from here; a streaming one does not', (tester) async {
+    await pumpChat(tester);
+    await tester.longPress(find.text('Done.'));
+    await tester.pumpAndSettle();
+    expect(find.text('Branch from here'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    backend
+      ..emit(const MessageStarted('run-1'))
+      ..emit(const TextDelta('run-1', 'typing'));
+    await settle(tester);
+    await tester.longPress(find.text('typing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Branch from here'), findsNothing);
+  });
+
+  testWidgets('branching from the newest reply copies the whole chat and opens the child', (tester) async {
+    await pumpChat(tester);
+    await tester.longPress(find.text('Done.'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Branch from here'));
+    await tester.pumpAndSettle();
+    expect(backend.branches, ['stored-1']);
+    expect(find.textContaining('Branched from'), findsOneWidget);
+  });
+
+  testWidgets('branching from an older reply seeds the prefix', (tester) async {
+    await pumpChat(tester);
+    await tester.longPress(find.text('Because.'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Branch from here'));
+    await tester.pumpAndSettle();
+    expect([for (final m in backend.branchPrefixes.first) m.content], ['Why?', 'Because.']);
+  });
+
+  testWidgets('a chat opened with a record shows the header line and the divider', (tester) async {
+    await pumpChat(
+      tester,
+      branch: BranchRecord(
+        parentId: 'p',
+        parentTitle: 'Parent chat',
+        count: 2,
+        at: DateTime(2026, 10, 16, 14, 2).millisecondsSinceEpoch,
+      ),
+    );
+    expect(find.textContaining('Parent chat', findRichText: true), findsOneWidget);
+    expect(find.text('BRANCHED HERE · 14:02'), findsOneWidget);
+  });
+
 }
 
 final class FakeRecorder implements VoiceRecorder {

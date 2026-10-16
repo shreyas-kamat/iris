@@ -25,6 +25,23 @@ typedef ToastCallback =
       VoidCallback? onAction,
     });
 
+/// What branching made.
+final class BranchOutcome {
+  const BranchOutcome({
+    required this.conversation,
+    required this.count,
+    required this.summarised,
+  });
+
+  final NewConversation conversation;
+
+  /// Messages copied from the parent.
+  final int count;
+
+  /// The new chat was compressed too (the context strip's Branch).
+  final bool summarised;
+}
+
 final class ChatController extends ValueNotifier<ChatState> {
   ChatController(this._backend, {String? conversationId, String? title})
     : _storedId = conversationId,
@@ -56,6 +73,10 @@ final class ChatController extends ValueNotifier<ChatState> {
 
   /// Shows a short message to the person; the screen turns it into a toast.
   ToastCallback? onToast;
+
+  /// Called when `/branch` is typed: the screen branches with its own
+  /// overlay and navigation.
+  VoidCallback? onBranchRequested;
 
   /// Called with the text of an undone prompt, so the screen can put it back
   /// in the composer for editing.
@@ -219,6 +240,10 @@ final class ChatController extends ValueNotifier<ChatState> {
       await undo();
       return;
     }
+    if (trimmed == '/branch') {
+      onBranchRequested?.call();
+      return;
+    }
     if (value.running) {
       if (!trimmed.startsWith('/')) await _steer(trimmed);
       return;
@@ -248,6 +273,104 @@ final class ChatController extends ValueNotifier<ChatState> {
       }
     }
     await _submit(runtimeId, promptWithReferences(trimmed, references));
+  }
+
+  /// The user and assistant text in [items], oldest first. Tool calls,
+  /// notices and empty turns are left out: they are not conversation.
+  static List<SeedMessage> seedFrom(List<TranscriptItem> items) => [
+    for (final item in items)
+      if (item is UserTurn && item.text.trim().isNotEmpty)
+        SeedMessage('user', item.text)
+      else if (item is AssistantTurn && item.text.trim().isNotEmpty)
+        SeedMessage('assistant', item.text),
+  ];
+
+  /// Whether a branch can start at [itemId]: the chat is stored, and that
+  /// reply is finished.
+  bool canBranchFrom(String itemId) {
+    if (_storedId == null) return false;
+    final item = value.items.where((i) => i.id == itemId);
+    if (item.isEmpty) return false;
+    final it = item.first;
+    return it is AssistantTurn && !it.streaming;
+  }
+
+  /// The prefix up to and including [itemId], reading earlier pages first
+  /// so it is whole. Null when [itemId] is not in this conversation.
+  Future<List<SeedMessage>?> prefixThrough(String itemId) async {
+    var pages = 0;
+    while (value.earlier != null && pages++ < 60) {
+      await loadEarlier();
+      if (_disposed) return null;
+    }
+    final at = value.items.indexWhere((i) => i.id == itemId);
+    if (at < 0) return null;
+    return seedFrom(value.items.sublist(0, at + 1));
+  }
+
+  /// Copies this conversation into a new one: all of it, or up to the reply
+  /// [fromItemId]. With [summarise], the copy is compressed too.
+  Future<Result<BranchOutcome>> branch({
+    String? fromItemId,
+    bool summarise = false,
+  }) async {
+    final storedId = _storedId;
+    if (storedId == null) {
+      return const Err(
+        IrisFailure(
+          FailureKind.rejected,
+          message: 'Send a message first: there is nothing to branch yet.',
+        ),
+      );
+    }
+    final lastReply = value.items.whereType<AssistantTurn>().isEmpty
+        ? null
+        : value.items.whereType<AssistantTurn>().last.id;
+    final whole = fromItemId == null || fromItemId == lastReply;
+    final List<SeedMessage>? prefix;
+    if (whole) {
+      prefix = null;
+    } else {
+      prefix = await prefixThrough(fromItemId);
+      if (prefix == null) {
+        return const Err(
+          IrisFailure(
+            FailureKind.rejected,
+            message: "That message isn't in this chat any more.",
+          ),
+        );
+      }
+    }
+    final result = whole
+        ? await _backend.branchWhole(storedId)
+        : await _backend.branchFrom(
+            storedId,
+            prefix!,
+            title: 'Branch of ${value.title ?? 'conversation'}',
+          );
+    switch (result) {
+      case Err(:final failure):
+        return Err(
+          (failure.rpcError?.isMethodNotFound ?? false)
+              ? const IrisFailure(
+                  FailureKind.rejected,
+                  message: "This server can't branch conversations.",
+                )
+              : failure,
+        );
+      case Ok(value: final created):
+        var summarised = false;
+        if (summarise) {
+          summarised = (await _backend.compress(created.runtimeId)).isOk;
+        }
+        return Ok(
+          BranchOutcome(
+            conversation: created,
+            count: (prefix ?? seedFrom(value.items)).length,
+            summarised: summarised,
+          ),
+        );
+    }
   }
 
   /// Takes back the last exchange and hands its prompt back for editing.

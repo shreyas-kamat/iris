@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../app/device_state.dart';
 import '../../core/result.dart';
 import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
@@ -23,6 +24,7 @@ import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import 'attachment_picker.dart';
+import 'branched_header.dart';
 import 'chat_controller.dart';
 import 'chat_state.dart';
 import 'composer.dart';
@@ -59,6 +61,8 @@ class ChatScreen extends StatefulWidget {
     this.suggestions,
     this.pickFiles,
     this.recorder,
+    this.branch,
+    this.onBranched,
     super.key,
   });
 
@@ -69,6 +73,13 @@ class ChatScreen extends StatefulWidget {
 
   /// Records dictation. Tests pass a fake; null uses the microphone.
   final VoiceRecorder? recorder;
+
+  /// Where this chat was branched from, when it was.
+  final BranchRecord? branch;
+
+  /// Called when a branch is made from here, with the new chat's stored id
+  /// and where it came from, so the caller can remember it.
+  final void Function(String childStoredId, BranchRecord record)? onBranched;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -100,6 +111,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _chat.onPrefill = _prefill;
     _chat.onSteerReturned = _steerReturned;
     _chat.onToast = _toast;
+    _chat.onBranchRequested = () => unawaited(_branch());
     _chat.onPromptReturned = _prefill;
     _text.addListener(_watchForSlash);
     unawaited(_chat.open());
@@ -146,6 +158,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final actions = [
       MessageAction.copy,
       MessageAction.select,
+      if (item is AssistantTurn && _chat.canBranchFrom(item.id))
+        MessageAction.branch,
       if (isUser &&
           item.id == state.lastExchangeStartId &&
           !state.running &&
@@ -167,9 +181,84 @@ class _ChatScreenState extends State<ChatScreen> {
         await showSelectableText(context, text);
       case MessageAction.undo:
         await _chat.undo();
-      case MessageAction.branch || null:
+      case MessageAction.branch:
+        await _branch(fromItemId: item.id);
+      case null:
         break;
     }
+  }
+
+  /// Opens the chat this one was branched from.
+  void _openParent() {
+    final record = widget.branch;
+    if (record == null) return;
+    unawaited(
+      Navigator.of(context).push(
+        IrisPageRoute<void>(
+          builder: (_) => ChatScreen(
+            backend: widget.backend,
+            conversationId: record.parentId,
+            title: record.parentTitle,
+            pickFiles: widget.pickFiles,
+            recorder: widget.recorder,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _branch({String? fromItemId, bool summarise = false}) async {
+    final title = _chat.value.title ?? 'this chat';
+    final result = await withBranchingOverlay(
+      context,
+      title,
+      _chat.branch(fromItemId: fromItemId, summarise: summarise),
+    );
+    if (!mounted) return;
+    switch (result) {
+      case Err(:final failure):
+        _toast(
+          failure.message ??
+              'Could not branch: ${ChatController.describe(failure)}',
+        );
+      case Ok(value: final outcome):
+        final record = BranchRecord(
+          parentId: _chat.conversationId!,
+          parentTitle: title,
+          count: outcome.count,
+          at: DateTime.now().millisecondsSinceEpoch,
+        );
+        widget.onBranched?.call(outcome.conversation.storedId, record);
+        if (summarise && !outcome.summarised) {
+          _toast("Branched, but couldn't summarise");
+        }
+        await Navigator.of(context).pushReplacement(
+          IrisPageRoute<void>(
+            builder: (_) => ChatScreen(
+              backend: widget.backend,
+              conversationId: outcome.conversation.storedId,
+              title: 'Branch of $title',
+              branch: record,
+              onBranched: widget.onBranched,
+              pickFiles: widget.pickFiles,
+              recorder: widget.recorder,
+            ),
+          ),
+        );
+    }
+  }
+
+  int? _dividerAfter(List<TranscriptItem> items, BranchRecord? record) {
+    if (record == null || record.count <= 0) {
+      return null;
+    }
+    var seen = 0;
+    for (final (i, item) in items.indexed) {
+      if (item is UserTurn || item is AssistantTurn) {
+        if (++seen == record.count) return i;
+      }
+    }
+    return null;
   }
 
   /// The command catalogue is read the first time the person types a slash.
@@ -342,6 +431,8 @@ class _ChatScreenState extends State<ChatScreen> {
         title: state.title ?? 'New conversation',
         turn: state.turn,
         connecting: state.phase == ChatPhase.loading,
+        branch: widget.branch,
+        onOpenParent: widget.branch == null ? null : _openParent,
       ),
       body: _body(context, state),
       footer: Column(
@@ -470,6 +561,7 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
         final hasEarlier = state.earlier != null;
+        final dividerAt = _dividerAfter(items, widget.branch);
         final liveState = agentStateFor(state.turn);
         // Reversed, so the newest entry sits at the bottom and new output
         // appears where the eye already is; the way to earlier messages is
@@ -502,16 +594,32 @@ class _ChatScreenState extends State<ChatScreen> {
             return ReadableColumn(
               child: SizedBox(
                 width: double.infinity,
-                child: TranscriptEntry(
-                  item,
-                  live: live,
-                  onRetry: _chat.isLive && !state.running
-                      ? () => unawaited(_chat.retry())
-                      : null,
-                  retrying: state.retrying,
-                  collapsing: state.collapsing.contains(item.id),
-                  onHold: (rect) => unawaited(_hold(state, item, rect)),
-                  key: ValueKey(item.id),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TranscriptEntry(
+                      item,
+                      live: live,
+                      onRetry: _chat.isLive && !state.running
+                          ? () => unawaited(_chat.retry())
+                          : null,
+                      retrying: state.retrying,
+                      collapsing: state.collapsing.contains(item.id),
+                      onHold: (rect) => unawaited(_hold(state, item, rect)),
+                      key: ValueKey(item.id),
+                    ),
+                    // Where the copy ended and this chat began.
+                    if (items.length - 1 - index == dividerAt)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 22),
+                        child: BranchedDivider(
+                          at: DateTime.fromMillisecondsSinceEpoch(
+                            widget.branch?.at ?? 0,
+                          ),
+                          known: (widget.branch?.at ?? 0) > 0,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             );
@@ -528,6 +636,8 @@ class _ChatHeader extends StatelessWidget {
     required this.title,
     required this.turn,
     required this.connecting,
+    this.branch,
+    this.onOpenParent,
   });
 
   final String title;
@@ -535,6 +645,10 @@ class _ChatHeader extends StatelessWidget {
 
   /// True while the conversation is being opened, before any turn exists.
   final bool connecting;
+
+  /// Where this chat was branched from, shown under the title.
+  final BranchRecord? branch;
+  final VoidCallback? onOpenParent;
 
   @override
   Widget build(BuildContext context) {
@@ -548,49 +662,59 @@ class _ChatHeader extends StatelessWidget {
           bottom: BorderSide(color: palette.line, width: IrisStroke.hairline),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IrisCircleButton(
-            icon: Icons.arrow_back_ios_new,
-            semanticLabel: 'Back',
-            onPressed: () => unawaited(Navigator.of(context).maybePop()),
+          Row(
+            children: [
+              IrisCircleButton(
+                icon: Icons.arrow_back_ios_new,
+                semanticLabel: 'Back',
+                onPressed: () => unawaited(Navigator.of(context).maybePop()),
+              ),
+              const SizedBox(width: IrisSpace.md - 2),
+              IrisOrb(state: state, size: 34),
+              const SizedBox(width: IrisSpace.sm + 2),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: type.body.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: palette.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    // The colour animates with the state, so a change of state is
+                    // seen as a change rather than a jump.
+                    AnimatedDefaultTextStyle(
+                      duration: context.reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 400),
+                      curve: IrisCurves.standard,
+                      style: type.caption.copyWith(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: palette.colorFor(state),
+                      ),
+                      child: Text(connecting ? 'Connecting' : state.label),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: IrisSpace.md - 2),
-          IrisOrb(state: state, size: 34),
-          const SizedBox(width: IrisSpace.sm + 2),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: type.body.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: palette.ink,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                // The colour animates with the state, so a change of state is
-                // seen as a change rather than a jump.
-                AnimatedDefaultTextStyle(
-                  duration: context.reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 400),
-                  curve: IrisCurves.standard,
-                  style: type.caption.copyWith(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: palette.colorFor(state),
-                  ),
-                  child: Text(connecting ? 'Connecting' : state.label),
-                ),
-              ],
+          if (branch case final record?)
+            BranchedHeader(
+              parentTitle: record.parentTitle,
+              onOpen: onOpenParent ?? () {},
             ),
-          ),
         ],
       ),
     );

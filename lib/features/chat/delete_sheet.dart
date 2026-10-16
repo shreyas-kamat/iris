@@ -33,7 +33,10 @@ Future<bool> showDeleteSheet(BuildContext context, String title) async {
                 borderRadius: BorderRadius.circular(16),
                 border: delete
                     ? null
-                    : Border.all(color: palette.lineStrong, width: IrisStroke.hairline),
+                    : Border.all(
+                        color: palette.lineStrong,
+                        width: IrisStroke.hairline,
+                      ),
               ),
               child: Text(
                 label,

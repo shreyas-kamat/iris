@@ -12,7 +12,7 @@ import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 
-enum ConversationAction { pin, rename, archive, delete }
+enum ConversationAction { pin, rename, branch, archive, delete }
 
 Future<ConversationAction?> showConversationActions(
   BuildContext context,
@@ -47,6 +47,17 @@ Future<ConversationAction?> showConversationActions(
               ),
               onTap: () =>
                   Navigator.of(sheetContext).pop(ConversationAction.rename),
+            ),
+            IrisListRow(
+              title: 'Branch',
+              subtitle: 'Copy it into a new chat.',
+              leading: Icon(
+                Icons.call_split,
+                size: IrisSize.icon,
+                color: palette.inkMuted,
+              ),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ConversationAction.branch),
             ),
             IrisListRow(
               title: 'Archive',

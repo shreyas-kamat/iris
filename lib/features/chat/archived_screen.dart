@@ -118,7 +118,12 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
     final gutter = context.window.gutter;
     return IrisScaffold(
       header: Padding(
-        padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, IrisSpace.sm),
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          IrisSpace.sm,
+          gutter,
+          IrisSpace.sm,
+        ),
         child: Row(
           children: [
             IrisCircleButton(
