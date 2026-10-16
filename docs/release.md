@@ -69,3 +69,5 @@ and no data collected).
 - Nothing else: no camera, location, contacts or notifications. QR pairing was dropped
   for 1.0 because no screen used it; if it returns, the camera permission and its usage string come
   back with it, along with the privacy policy and support wording.
+
+Phase 6 adds none: deleting, pinning, branching and the prompts use the existing network permission only.
