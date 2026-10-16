@@ -161,8 +161,15 @@ class IrisField extends StatefulWidget {
     this.autofocus = false,
     this.errorText,
     this.trailing,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
     super.key,
   });
+
+  /// Off for usernames, codes and anything else the keyboard must not
+  /// rewrite. A masked field is never corrected, whatever this says.
+  final bool autocorrect;
+  final bool enableSuggestions;
 
   /// A control at the end of the field, such as a show/hide toggle.
   final Widget? trailing;
@@ -342,8 +349,9 @@ class _IrisFieldState extends State<IrisField> {
                         cursorRadius: const Radius.circular(1),
                         // A password must never be learned, suggested or
                         // "corrected" by the keyboard.
-                        autocorrect: !widget.obscure,
-                        enableSuggestions: !widget.obscure,
+                        autocorrect: widget.autocorrect && !widget.obscure,
+                        enableSuggestions:
+                            widget.enableSuggestions && !widget.obscure,
                       ),
                     ),
                   ],

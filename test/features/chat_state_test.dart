@@ -272,10 +272,8 @@ void main() {
       final next = asked.apply(const RequestWithdrawn('run-1', 'srq-1'));
       expect(next.inputs, isEmpty);
       expect(next.turn, TurnPhase.thinking);
-      expect(
-        (next.items.last as Notice).text,
-        'Hermes stopped waiting for that.',
-      );
+      // The controller, which has the clock, adds the expired line.
+      expect(next.items.whereType<Notice>(), isEmpty);
     });
 
     test('answering removes it and the turn carries on', () {

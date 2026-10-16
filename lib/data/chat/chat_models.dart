@@ -439,6 +439,23 @@ final class SlashOutcome {
 /// What kind of value an input prompt wants.
 enum InputKind { sudo, secret, vaultUnlock, vaultCode }
 
+enum PromptOutcome { answered, skipped, expired }
+
+/// What is left of a prompt once it is over: a line in the transcript. It
+/// names what was asked and what happened, and never what was typed.
+final class PromptRecord extends TranscriptItem {
+  const PromptRecord({
+    required String id,
+    required this.title,
+    required this.outcome,
+    this.detail = '',
+  }) : super(id);
+
+  final String title;
+  final PromptOutcome outcome;
+  final String detail;
+}
+
 /// The agent needs a value typed in that must never be shown or kept: a sudo
 /// password, an API key. Answered once, then forgotten.
 @immutable

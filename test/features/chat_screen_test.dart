@@ -367,7 +367,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Hermes needs your sudo password'), findsOneWidget);
+      expect(find.text('Run this as root?'), findsOneWidget);
       await tester.enterText(
         find.descendant(
           of: find.byType(InputCard),
@@ -376,7 +376,7 @@ void main() {
         'pw',
       );
       await tester.pump();
-      await tester.tap(find.text('Submit'));
+      await tester.tap(find.text('Run'));
       await tester.pumpAndSettle();
       expect(backend.inputAnswers, [('srq-1', 'pw')]);
       expect(find.byType(InputCard), findsNothing);

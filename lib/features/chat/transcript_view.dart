@@ -11,6 +11,7 @@ import '../../demo/demo_mode.dart';
 import '../../design/components/dashed_border.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/markdown.dart';
+import '../../design/components/needs_you_card.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/send_glyph.dart';
 import '../../design/platform/platform_feel.dart';
@@ -77,6 +78,15 @@ class TranscriptEntry extends StatelessWidget {
       retrying: retrying,
     ),
     final Notice notice => _NoticeLine(notice),
+    final PromptRecord record => SettledLine(
+      title: record.title,
+      detail: record.detail,
+      outcome: switch (record.outcome) {
+        PromptOutcome.answered => SettledOutcome.answered,
+        PromptOutcome.skipped => SettledOutcome.skipped,
+        PromptOutcome.expired => SettledOutcome.expired,
+      },
+    ),
   };
 }
 

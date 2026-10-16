@@ -447,9 +447,6 @@ final class ChatState {
   );
 
   ChatState _withdrawn(String requestId) {
-    final hadInput =
-        inputs.any((input) => input.requestId == requestId) ||
-        logins.any((login) => login.requestId == requestId);
     final next = _decided(
       copyWith(
         approvals: [
@@ -474,11 +471,14 @@ final class ChatState {
         ],
       ),
     );
-    // The card vanishing on its own would be a mystery; say why.
-    return hadInput
-        ? next.withNotice('Hermes stopped waiting for that.')
-        : next;
+    // The card vanishing on its own would be a mystery; the controller, which
+    // has the clock and the request, leaves an expired line saying why.
+    return next;
   }
+
+  /// A settled prompt: one line where the card was.
+  ChatState withPromptRecord(PromptRecord record) =>
+      copyWith(items: [..._settled(items), record]);
 
   ChatState withInput(InputRequest request) => copyWith(
     inputs: [

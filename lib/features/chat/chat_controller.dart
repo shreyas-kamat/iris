@@ -17,6 +17,7 @@ import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/rpc/rpc_frame.dart';
 import 'chat_state.dart';
+import 'prompt_records.dart' as records;
 
 typedef ToastCallback =
     void Function(
@@ -64,6 +65,9 @@ final class ChatController extends ValueNotifier<ChatState> {
   bool _reloadWhenIdle = false;
   int _queueSerial = 0;
   bool _draining = false;
+
+  /// The time shown on settled prompt lines. A field so tests can fix it.
+  DateTime Function() clock = DateTime.now;
 
   /// `/queue text` and `/steer text`.
   static final _busyCommand = RegExp(r'^/(queue|steer)\s+(.+)$', dotAll: true);
@@ -609,9 +613,10 @@ final class ChatController extends ValueNotifier<ChatState> {
     });
   }
 
-  /// Answers a sudo or secret prompt; an empty [answer] skips it. The card
-  /// goes at once. The answer is passed straight to the backend and kept
-  /// nowhere, not even in the notice that records it was sent.
+  /// Answers a sudo, secret, unlock or code prompt; an empty [answer] skips
+  /// it. The card goes at once and a settled line takes its place, naming
+  /// what was asked and never what was typed. The answer goes straight to
+  /// the backend and is kept nowhere.
   Future<void> answerInput(InputRequest request, String answer) async {
     _update(value.withoutInput(request));
     final result = await _backend.answerInput(request, answer);
@@ -619,12 +624,13 @@ final class ChatController extends ValueNotifier<ChatState> {
     switch (result) {
       case Ok():
         _update(
-          value.withNotice(
-            answer.isEmpty
-                ? 'Skipped.'
-                : request.kind == InputKind.sudo
-                ? 'Sent your sudo password.'
-                : 'Sent.',
+          value.withPromptRecord(
+            records.recordForInput(
+              request,
+              answer.isEmpty ? PromptOutcome.skipped : PromptOutcome.answered,
+              clock(),
+              id: 'prompt-${value.items.length}',
+            ),
           ),
         );
       case Err(:final failure):
@@ -635,6 +641,46 @@ final class ChatController extends ValueNotifier<ChatState> {
         );
     }
   }
+
+  /// Saves a login the agent asked to save. Both values go straight into
+  /// the reply and are kept nowhere.
+  Future<void> answerLogin(
+    LoginRequest request, {
+    required String identifier,
+    required String password,
+  }) async {
+    _update(value.withoutLogin(request));
+    final result = await _backend.answerLogin(
+      request,
+      identifier: identifier,
+      password: password,
+    );
+    if (_disposed) return;
+    switch (result) {
+      case Ok():
+        _update(
+          value.withPromptRecord(
+            records.recordForLogin(
+              request,
+              identifier.isEmpty && password.isEmpty
+                  ? PromptOutcome.skipped
+                  : PromptOutcome.answered,
+              clock(),
+              id: 'prompt-${value.items.length}',
+            ),
+          ),
+        );
+      case Err(:final failure):
+        _update(
+          value
+              .withLogin(request)
+              .withError('Could not send that: ${describe(failure)}'),
+        );
+    }
+  }
+
+  Future<void> skipLogin(LoginRequest request) =>
+      answerLogin(request, identifier: '', password: '');
 
   /// Runs a slash command and does what it asks: show output, send a prompt,
   /// fill the composer, or follow an alias — at most three deep, so an alias
@@ -844,8 +890,42 @@ final class ChatController extends ValueNotifier<ChatState> {
   void _onEvent(ChatEvent event) {
     final id = event.sessionId;
     if (id.isEmpty || (id != _runtimeId && id != _storedId)) return;
+    final withdrawn = event is RequestWithdrawn ? event : null;
+    final inputBefore = withdrawn == null
+        ? null
+        : value.inputs
+              .where((i) => i.requestId == withdrawn.requestId)
+              .firstOrNull;
+    final loginBefore = withdrawn == null
+        ? null
+        : value.logins
+              .where((l) => l.requestId == withdrawn.requestId)
+              .firstOrNull;
     final wasRunning = value.running;
     _update(value.apply(event));
+    if (inputBefore != null) {
+      _update(
+        value.withPromptRecord(
+          records.recordForInput(
+            inputBefore,
+            PromptOutcome.expired,
+            clock(),
+            id: 'prompt-${value.items.length}',
+          ),
+        ),
+      );
+    } else if (loginBefore != null) {
+      _update(
+        value.withPromptRecord(
+          records.recordForLogin(
+            loginBefore,
+            PromptOutcome.expired,
+            clock(),
+            id: 'prompt-${value.items.length}',
+          ),
+        ),
+      );
+    }
     if (_reloadWhenIdle && !value.running) unawaited(_reloadNewest());
     if (wasRunning && !value.running) {
       _turnEnded(

@@ -30,6 +30,7 @@ import 'chat_state.dart';
 import 'composer.dart';
 import 'context_sheet.dart';
 import 'decision_cards.dart';
+import 'login_card.dart';
 import 'message_menu.dart';
 import 'model_sheet.dart';
 import 'queue_tray.dart';
@@ -556,6 +557,21 @@ class _ChatScreenState extends State<ChatScreen> {
         child: InputCard(
           request: request,
           onAnswer: (value) => _chat.answerInput(request, value),
+        ),
+      );
+    }
+    if (state.logins.isNotEmpty) {
+      final request = state.logins.first;
+      return _Decision(
+        key: ValueKey('login-${request.requestId}'),
+        child: LoginCard(
+          request: request,
+          onSave: (identifier, password) => _chat.answerLogin(
+            request,
+            identifier: identifier,
+            password: password,
+          ),
+          onSkip: () => _chat.skipLogin(request),
         ),
       );
     }

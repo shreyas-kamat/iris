@@ -364,11 +364,11 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Hermes needs your sudo password'), findsOneWidget);
+      expect(find.text('Run this as root?'), findsOneWidget);
       expect(find.text('apt install jq'), findsOneWidget);
       await tester.enterText(_field, 'hunter2');
       await tester.pump();
-      await tester.tap(find.text('Submit'));
+      await tester.tap(find.text('Run'));
       await tester.pump();
       expect(sent, 'hunter2');
       expect(tester.widget<EditableText>(_field).controller.text, isEmpty);
@@ -383,7 +383,7 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('Deny'));
       await tester.pump();
       expect(sent, '');
     });

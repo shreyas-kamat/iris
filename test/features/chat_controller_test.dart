@@ -543,8 +543,8 @@ void main() {
       expect(backend.inputAnswers, [('srq-1', 'hunter2')]);
       expect(controller.value.inputs, isEmpty);
       expect(
-        (controller.value.items.last as Notice).text,
-        'Sent your sudo password.',
+        controller.value.items.whereType<PromptRecord>().single.title,
+        'Ran with sudo',
       );
       expect(_mentions(controller.value, 'hunter2'), isFalse);
     });
@@ -556,7 +556,10 @@ void main() {
       await settle();
       await controller.answerInput(sudo, '');
       expect(backend.inputAnswers, [('srq-1', '')]);
-      expect((controller.value.items.last as Notice).text, 'Skipped.');
+      expect(
+        controller.value.items.whereType<PromptRecord>().single.outcome,
+        PromptOutcome.skipped,
+      );
     });
 
     test(
@@ -937,6 +940,119 @@ void main() {
       expect(controller.value.fast, isTrue);
     });
   });
+
+  group('prompts', () {
+    const unlock = InputRequest(
+      requestId: 'srq-1',
+      sessionId: 'run-1',
+      kind: InputKind.vaultUnlock,
+      displayName: '1Password',
+    );
+    const login = LoginRequest(
+      requestId: 'srq-2',
+      sessionId: 'run-1',
+      origin: 'https://github.com',
+      site: 'GitHub',
+    );
+
+    ChatController opened() =>
+        controllerFor()..clock = () => DateTime(2026, 10, 16, 14, 2);
+
+    String everything(ChatController c) => [
+      for (final item in c.value.items)
+        if (item is PromptRecord) '${item.title} ${item.detail}' else item.id,
+      '${c.value.inputs}',
+      '${c.value.logins}',
+    ].join(' ');
+
+    test(
+      'answering an unlock sends the password, leaves a settled line, and keeps no trace',
+      () async {
+        final controller = opened();
+        await controller.open();
+        backend.emit(InputAsked(unlock));
+        await settle();
+        await controller.answerInput(unlock, 'hunter2');
+        expect(backend.inputAnswers, [('srq-1', 'hunter2')]);
+        expect(controller.value.inputs, isEmpty);
+        final record = controller.value.items.whereType<PromptRecord>().single;
+        expect(record.title, 'Unlocked 1Password');
+        expect(record.outcome, PromptOutcome.answered);
+        expect(everything(controller), isNot(contains('hunter2')));
+      },
+    );
+
+    test('skipping records a skip and sends an empty value', () async {
+      final controller = opened();
+      await controller.open();
+      backend.emit(InputAsked(unlock));
+      await settle();
+      await controller.answerInput(unlock, '');
+      expect(backend.inputAnswers, [('srq-1', '')]);
+      expect(
+        controller.value.items.whereType<PromptRecord>().single.outcome,
+        PromptOutcome.skipped,
+      );
+    });
+
+    test('a send that fails brings the card back and records nothing', () async {
+      final controller = opened();
+      await controller.open();
+      backend.emit(InputAsked(unlock));
+      await settle();
+      backend.answerResult = const Err(IrisFailure(FailureKind.offline));
+      await controller.answerInput(unlock, 'hunter2');
+      expect(controller.value.inputs, hasLength(1));
+      expect(controller.value.items.whereType<PromptRecord>(), isEmpty);
+    });
+
+    test('a login is answered with both values, recorded, and kept nowhere', () async {
+      final controller = opened();
+      await controller.open();
+      backend.emit(LoginAsked(login));
+      await settle();
+      await controller.answerLogin(
+        login,
+        identifier: 'jamie@hermes.dev',
+        password: 'hunter2',
+      );
+      expect(backend.logins, [('srq-2', 'jamie@hermes.dev', 'hunter2')]);
+      expect(controller.value.logins, isEmpty);
+      expect(
+        controller.value.items.whereType<PromptRecord>().single.title,
+        'Saved GitHub login',
+      );
+      final text = everything(controller);
+      expect(text, isNot(contains('hunter2')));
+      expect(text, isNot(contains('jamie@hermes.dev')));
+    });
+
+    test('skipping a login sends an empty answer', () async {
+      final controller = opened();
+      await controller.open();
+      backend.emit(LoginAsked(login));
+      await settle();
+      await controller.skipLogin(login);
+      expect(backend.logins, [('srq-2', '', '')]);
+      expect(
+        controller.value.items.whereType<PromptRecord>().single.outcome,
+        PromptOutcome.skipped,
+      );
+    });
+
+    test('a withdrawn prompt leaves an expired line', () async {
+      final controller = opened();
+      await controller.open();
+      backend.emit(InputAsked(unlock));
+      await settle();
+      backend.emit(const RequestWithdrawn('run-1', 'srq-1'));
+      await settle();
+      expect(controller.value.inputs, isEmpty);
+      final record = controller.value.items.whereType<PromptRecord>().single;
+      expect(record.outcome, PromptOutcome.expired);
+      expect(record.detail, 'expired 14:02 · Hermes stopped waiting');
+    });
+  });
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.
@@ -946,5 +1062,6 @@ bool _mentions(ChatState state, String secret) => state.items.any(
     AssistantTurn(:final text) => text,
     Notice(:final text) => text,
     ToolCall(:final output) => output ?? '',
+    PromptRecord(:final title, :final detail) => '$title $detail',
   }.contains(secret),
 );

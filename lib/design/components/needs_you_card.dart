@@ -204,3 +204,95 @@ class SettledLine extends StatelessWidget {
     );
   }
 }
+
+/// Skip on the left, the main action on the right at twice the width, both
+/// 48 high (frame A7).
+class NeedsYouActions extends StatelessWidget {
+  const NeedsYouActions({
+    required this.skipLabel,
+    required this.primaryLabel,
+    this.onSkip,
+    this.onPrimary,
+    this.busy = false,
+    super.key,
+  });
+
+  final String skipLabel;
+  final String primaryLabel;
+  final VoidCallback? onSkip;
+
+  /// Null disables the main action.
+  final VoidCallback? onPrimary;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    final needs = palette.colorFor(AgentState.waiting);
+    return Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            button: true,
+            label: skipLabel,
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: busy ? null : onSkip,
+              child: Container(
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: palette.lineStrong,
+                    width: IrisStroke.hairline,
+                  ),
+                ),
+                child: Text(
+                  skipLabel,
+                  style: type.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: palette.inkMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: IrisSpace.sm),
+        Expanded(
+          flex: 2,
+          child: Semantics(
+            button: true,
+            enabled: onPrimary != null && !busy,
+            label: primaryLabel,
+            excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: busy ? null : onPrimary,
+              child: Container(
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: onPrimary == null ? palette.lineStrong : needs,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  primaryLabel,
+                  style: type.body.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: onPrimary == null
+                        ? palette.inkMuted
+                        : palette.accentInk,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
