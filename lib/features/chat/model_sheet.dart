@@ -154,6 +154,9 @@ class _ModelSheetState extends State<ModelSheet> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // The settings for this chat come first: a gateway can list
+            // hundreds of models, and anything below them goes unseen.
+            _controls(context, options),
             IrisField(controller: _filter, hint: 'Filter models'),
             const SizedBox(height: IrisSpace.md),
             if (groups.isEmpty)
@@ -179,7 +182,6 @@ class _ModelSheetState extends State<ModelSheet> {
                       Navigator.of(context).pop((model, provider.slug)),
                 ),
             ],
-            _controls(context, options),
           ],
         );
       },
@@ -210,7 +212,6 @@ class _ModelSheetState extends State<ModelSheet> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: IrisSpace.md),
             if (showEffort) ...[
               const IrisLabel('Reasoning effort', small: true),
               const SizedBox(height: IrisSpace.xs),
@@ -262,6 +263,7 @@ class _ModelSheetState extends State<ModelSheet> {
             ],
             if (state.running && _before != null && _before != state.effort)
               _MidTurnNote(from: _before!, to: state.effort),
+            const SizedBox(height: IrisSpace.md),
           ],
         );
       },

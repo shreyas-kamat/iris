@@ -71,6 +71,33 @@ void main() {
     expect(find.text('Fast mode'), findsOneWidget);
   });
 
+  testWidgets('the controls come before a long model list, not after it', (
+    tester,
+  ) async {
+    // A real gateway lists hundreds of models: controls below them all are
+    // never seen.
+    await pump(
+      tester,
+      ModelOptions(
+        model: 'opus',
+        provider: 'anthropic',
+        providers: [
+          ModelProvider(
+            slug: 'anthropic',
+            name: 'Anthropic',
+            models: ['opus', for (var i = 0; i < 80; i++) 'model-$i'],
+            isCurrent: true,
+            capabilities: const {'opus': ModelCaps(reasoning: true, fast: true)},
+          ),
+        ],
+      ),
+    );
+    final effort = tester.getTopLeft(find.text('REASONING EFFORT')).dy;
+    final filter = tester.getTopLeft(find.text('Filter models')).dy;
+    expect(effort, lessThan(filter));
+    expect(tester.getTopLeft(find.text('Fast mode')).dy, lessThan(filter));
+  });
+
   testWidgets('unsupported controls are removed, not disabled', (tester) async {
     await pump(tester, options(reasoning: true, fast: false));
     expect(find.text('REASONING EFFORT'), findsOneWidget);
