@@ -293,7 +293,9 @@ class Composer extends StatelessWidget {
                           ],
                           if (model case final model?
                               when recording == null) ...[
-                            _ModelChip(model: model, onTap: onModel),
+                            Flexible(
+                              child: _ModelChip(model: model, onTap: onModel),
+                            ),
                             const SizedBox(width: IrisSpace.xs),
                           ],
                           if (contextUsage case final usage?)
@@ -399,13 +401,15 @@ class _ModelChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                model,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: type.codeSmall.copyWith(
-                  fontSize: 12,
-                  color: palette.inkMuted,
+              Flexible(
+                child: Text(
+                  model,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: type.codeSmall.copyWith(
+                    fontSize: 12,
+                    color: palette.inkMuted,
+                  ),
                 ),
               ),
               if (onTap != null) ...[

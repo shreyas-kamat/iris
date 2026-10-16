@@ -538,4 +538,32 @@ void main() {
     expect(find.text('n.txt'), findsOneWidget);
     expect(find.byType(SelectableText), findsNothing);
   });
+
+  testWidgets('a long model name shrinks instead of pushing Send off a 320 dp, 200% screen', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final text = TextEditingController();
+    addTearDown(text.dispose);
+    await tester.pumpWidget(
+      themed(
+        MediaQuery(
+          data: const MediaQueryData(size: Size(320, 800), textScaler: TextScaler.linear(2), disableAnimations: true),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Composer(
+              controller: text,
+              running: false,
+              onSend: () {},
+              onStop: () {},
+              model: 'gpt-6.1-sol · medium',
+              onModel: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(tester.getRect(find.byType(Composer)).right, lessThanOrEqualTo(320));
+  });
 }
