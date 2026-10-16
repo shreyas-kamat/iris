@@ -624,6 +624,44 @@ void main() {
     },
   );
 
+  test(
+    'login and connection cards from before a reconnect go too',
+    () async {
+      final controller = controllerFor();
+      await controller.open();
+      backend
+        ..emit(
+          LoginAsked(
+            const LoginRequest(
+              requestId: 'srq-2',
+              sessionId: 'run-1',
+              origin: 'https://github.com',
+            ),
+          ),
+        )
+        ..emit(
+          ConnectionAsked(
+            ConnectionRequest(
+              opId: 'op-1',
+              sessionId: 'run-1',
+              deadline: DateTime(2030),
+              targets: const [],
+            ),
+          ),
+        );
+      await settle();
+      expect(controller.value.logins, isNotEmpty);
+      expect(controller.value.connections, isNotEmpty);
+      // Answered elsewhere while this phone was away: the resume has none.
+      backend.reconnect();
+      await settle();
+      await settle();
+      expect(controller.value.logins, isEmpty);
+      expect(controller.value.connections, isEmpty);
+      expect(controller.value.turn, isNot(TurnPhase.waiting));
+    },
+  );
+
   test('the context window from the resume shows at once', () async {
     backend.resumeResult = const Ok(
       ResumedConversation(

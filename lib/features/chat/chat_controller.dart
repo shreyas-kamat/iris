@@ -196,6 +196,8 @@ final class ChatController extends ValueNotifier<ChatState> {
           approvals: const [],
           questions: const [],
           inputs: const [],
+          logins: const [],
+          connections: const [],
           model: again.model,
           provider: again.provider,
           context: again.context,
