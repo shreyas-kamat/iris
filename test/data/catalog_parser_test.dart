@@ -180,4 +180,27 @@ void main() {
       expect(parse('plain text').text, 'plain text');
     });
   });
+
+  test('model capabilities are read per model, and absent means unknown', () {
+    final options = CatalogParser.modelOptions(Json.of({
+      'providers': [
+        {
+          'slug': 'anthropic',
+          'name': 'Anthropic',
+          'models': ['opus', 'haiku'],
+          'capabilities': {
+            'opus': {'reasoning': true, 'fast': true},
+            'haiku': {'reasoning': false, 'fast': false},
+          },
+        },
+        {'slug': 'local', 'models': ['llama']},
+      ],
+    }));
+    expect(options.capsFor('opus')?.reasoning, isTrue);
+    expect(options.capsFor('opus')?.fast, isTrue);
+    expect(options.capsFor('haiku')?.reasoning, isFalse);
+    expect(options.capsFor('llama'), isNull);
+    expect(options.capsFor('opus', provider: 'local'), isNull);
+  });
+
 }

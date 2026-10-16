@@ -11,6 +11,7 @@ import 'package:iris/data/chat/attachment.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/net/server_connection.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
@@ -707,4 +708,198 @@ void main() {
       expect(query?['profile'], 'work');
     });
   });
+
+  group('Phase 6 calls', () {
+    test('delete is a REST DELETE, scoped to the profile', () async {
+      Uri? seen;
+      String? method;
+      http.on('DELETE', '/api/sessions/abc', (request) {
+        seen = request.uri;
+        method = request.method;
+        return FakeReply.json({'deleted': 'abc'});
+      });
+      expect((await chat.delete('abc')).isOk, isTrue);
+      expect(method, 'DELETE');
+      expect(seen?.queryParameters, isEmpty, reason: 'the default profile is implicit');
+    });
+
+    test('a named profile is sent with the delete', () async {
+      Uri? seen;
+      http.on('DELETE', '/api/sessions/abc', (request) {
+        seen = request.uri;
+        return FakeReply.json({'deleted': 'abc'});
+      });
+      final named = DashboardChat(session, profile: 'ananta');
+      addTearDown(named.dispose);
+      await named.delete('abc');
+      expect(seen?.queryParameters['profile'], 'ananta');
+    });
+
+    test('undo returns how many messages were removed', () async {
+      final pending = chat.undo('run-1');
+      final sent = await answer({'removed': 2});
+      expect(sent['method'].string(), 'session.undo');
+      expect(sent['params']['session_id'].string(), 'run-1');
+      expect((await pending).valueOrNull, 2);
+    });
+
+    test('branchWhole copies a stored parent and returns the child ids', () async {
+      final pending = chat.branchWhole('parent-1');
+      final sent = await answer({
+        'session_id': 'run-9',
+        'stored_session_id': 'stored-9',
+      });
+      expect(sent['method'].string(), 'session.branch_stored');
+      expect(sent['params']['parent_session_id'].string(), 'parent-1');
+      final child = (await pending).valueOrNull!;
+      expect(child.runtimeId, 'run-9');
+      expect(child.storedId, 'stored-9');
+    });
+
+    test('branchFrom seeds a new session with the prefix', () async {
+      final pending = chat.branchFrom(
+        'parent-1',
+        const [SeedMessage('user', 'hi'), SeedMessage('assistant', 'hello')],
+        title: 'Branch of x',
+      );
+      final sent = await answer({'session_id': 'run-9', 'stored_session_id': 'stored-9'});
+      expect(sent['method'].string(), 'session.create');
+      expect(sent['params']['parent_session_id'].string(), 'parent-1');
+      expect(sent['params']['title'].string(), 'Branch of x');
+      expect(sent['params']['messages'].list.map((m) => m['role'].string()), ['user', 'assistant']);
+      expect((await pending).valueOrNull?.storedId, 'stored-9');
+    });
+
+    test('compress asks the session to summarise itself', () async {
+      final pending = chat.compress('run-1');
+      final sent = await answer({'status': 'ok'});
+      expect(sent['method'].string(), 'session.compress');
+      expect((await pending).isOk, isTrue);
+    });
+
+    test('submit reports what Hermes did with a busy message', () async {
+      final pending = chat.submit('run-1', 'later', queued: true);
+      final sent = await answer({'status': 'queued'});
+      expect(sent['params']['queued'].boolean(), isTrue);
+      expect((await pending).valueOrNull, SubmitOutcome.queued);
+    });
+
+    test('an ordinary submit does not send the queued flag', () async {
+      final pending = chat.submit('run-1', 'now');
+      final sent = await answer({'status': 'streaming'});
+      expect(sent['params']['queued'].exists, isFalse);
+      expect((await pending).valueOrNull, SubmitOutcome.started);
+    });
+
+    test('the busy mode is read with status and written by name', () async {
+      final read = chat.busyMode();
+      var sent = await answer({'value': 'queue'});
+      expect(sent['params']['key'].string(), 'busy');
+      expect(sent['params']['value'].string(), 'status');
+      expect((await read).valueOrNull, BusyMode.queue);
+
+      final write = chat.setBusyMode(BusyMode.steer);
+      sent = await answer({'value': 'steer'});
+      expect(sent['params']['value'].string(), 'steer');
+      expect((await write).isOk, isTrue);
+    });
+
+    test('reasoning and fast are session-scoped config', () async {
+      final effort = chat.setReasoning('run-1', ReasoningEffort.high);
+      var sent = await answer({'value': 'high'});
+      expect(sent['params']['key'].string(), 'reasoning');
+      expect(sent['params']['session_id'].string(), 'run-1');
+      expect(sent['params']['value'].string(), 'high');
+      await effort;
+
+      final fast = chat.setFast('run-1', fast: true);
+      sent = await answer({'value': 'fast'});
+      expect(sent['params']['key'].string(), 'fast');
+      expect(sent['params']['value'].string(), 'fast');
+      await fast;
+    });
+
+    test('a login is answered with a JSON value on the request frame', () async {
+      const login = LoginRequest(
+        requestId: 'srq-3',
+        sessionId: 'run-1',
+        origin: 'https://github.com',
+      );
+      final result = await chat.answerLogin(
+        login,
+        identifier: 'jamie@hermes.dev',
+        password: 'hunter2',
+      );
+      expect(result.isOk, isTrue);
+      final reply = socket.lastSent;
+      expect(reply['id'].string(), 'srq-3');
+      final value = Json.decode(reply['result']['value'].string());
+      expect(value['identifier'].string(), 'jamie@hermes.dev');
+      expect(value['password'].string(), 'hunter2');
+    });
+
+    test('skipping a login sends an empty value, not an empty login', () async {
+      const login = LoginRequest(
+        requestId: 'srq-3',
+        sessionId: 'run-1',
+        origin: 'https://github.com',
+      );
+      await chat.answerLogin(login, identifier: '', password: '');
+      expect(socket.lastSent['result']['value'].string(), '');
+    });
+
+    test('a connection answer names the owner session and each target', () async {
+      final request = ConnectionRequest.parse(
+        Json.of({'op_id': 'op1', 'timeout_seconds': 60}),
+        sessionId: 'run-1',
+      )!;
+      final pending = chat.answerConnection(
+        request,
+        const [
+          TargetAnswer.approved('GitHub', env: {'GITHUB_TOKEN': 'ghp_x'}),
+          TargetAnswer.skipped('Linear'),
+        ],
+        settle: true,
+      );
+      final sent = await answer({'status': 'ok', 'settled': true});
+      final params = sent['params'];
+      expect(sent['method'].string(), 'connection.respond');
+      expect(params['owner']['type'].string(), 'session');
+      expect(params['owner']['session_id'].string(), 'run-1');
+      expect(params['op_id'].string(), 'op1');
+      expect(params['result']['settled_by'].string(), 'continue');
+      expect(params['result']['targets'].list.map((t) => t['status'].string()), ['approved', 'skipped']);
+      expect(params['result']['targets'].list.first['env']['GITHUB_TOKEN'].string(), 'ghp_x');
+      expect((await pending).isOk, isTrue);
+    });
+
+    test('active sessions list the replying ones', () async {
+      final pending = chat.activeSessions();
+      await answer({
+        'sessions': [
+          {'id': 'r1', 'session_key': 's1', 'status': 'working'},
+          {'id': 'r2', 'session_key': 's2', 'status': 'idle'},
+          {'status': 'working'},
+        ],
+      });
+      final rows = (await pending).valueOrNull!;
+      expect(rows.map((r) => r.storedId), ['s1', 's2'], reason: 'a row without an id is dropped');
+      expect(rows.where((r) => r.replying).map((r) => r.storedId), ['s1']);
+    });
+
+    test('the dashboard events stream carries the new events', () async {
+      final events = <ChatEvent>[];
+      final sub = chat.events.listen(events.add);
+      addTearDown(sub.cancel);
+      socket.pushRequest('srq-5', 'vault.unlock_prompt', {
+        'session_id': 'run-1',
+        'display_name': '1Password',
+      });
+      socket.pushEvent('session.info', 'run-1', {'reasoning_effort': 'low'});
+      await Future<void>.delayed(Duration.zero);
+      expect(events.whereType<InputAsked>().single.request.kind, InputKind.vaultUnlock);
+      expect(events.whereType<SessionInfoChanged>().single.effort, ReasoningEffort.low);
+    });
+  });
+
 }

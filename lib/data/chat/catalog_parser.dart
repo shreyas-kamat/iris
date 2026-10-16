@@ -61,6 +61,13 @@ abstract final class CatalogParser {
       isCurrent: row['is_current'].boolean(),
       authenticated: row['authenticated'].boolOrNull ?? true,
       usage: UsageParser.providerUsage(row['usage']),
+      capabilities: {
+        for (final key in row['capabilities'].keys)
+          key: ModelCaps(
+            reasoning: row['capabilities'][key]['reasoning'].boolean(),
+            fast: row['capabilities'][key]['fast'].boolean(),
+          ),
+      },
     );
   }
 

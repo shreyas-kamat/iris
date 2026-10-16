@@ -10,6 +10,7 @@ import '../../core/failure.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/chat/connection_models.dart';
 
 enum ChatPhase {
   /// Reading the stored transcript.
@@ -43,6 +44,10 @@ final class ChatState {
     this.commands = const [],
     this.context,
     this.retrying = false,
+    this.logins = const [],
+    this.connections = const [],
+    this.effort,
+    this.fast,
   });
 
   final ChatPhase phase;
@@ -76,6 +81,16 @@ final class ChatState {
   /// A retry is on its way; the failed card shows it working.
   final bool retrying;
 
+  /// Login prompts waiting for the person.
+  final List<LoginRequest> logins;
+
+  /// Connection cards waiting for the person.
+  final List<ConnectionRequest> connections;
+
+  /// The reasoning effort and fast mode in force, once Hermes says.
+  final ReasoningEffort? effort;
+  final bool? fast;
+
   bool get running => turn != TurnPhase.idle;
 
   ChatState copyWith({
@@ -94,6 +109,10 @@ final class ChatState {
     List<SlashCommand>? commands,
     ContextUsage? context,
     bool? retrying,
+    List<LoginRequest>? logins,
+    List<ConnectionRequest>? connections,
+    ReasoningEffort? effort,
+    bool? fast,
   }) => ChatState(
     phase: phase ?? this.phase,
     items: items ?? this.items,
@@ -110,6 +129,10 @@ final class ChatState {
     commands: commands ?? this.commands,
     context: context ?? this.context,
     retrying: retrying ?? this.retrying,
+    logins: logins ?? this.logins,
+    connections: connections ?? this.connections,
+    effort: effort ?? this.effort,
+    fast: fast ?? this.fast,
   );
 
   /// The state after [event].
@@ -167,6 +190,13 @@ final class ChatState {
     ClarifyAsked(:final request) => withQuestion(request),
     InputAsked(:final request) => withInput(request),
     ContextChanged(:final usage) => copyWith(context: usage),
+    LoginAsked(:final request) => withLogin(request),
+    ConnectionAsked(:final request) => withConnection(request),
+    final ConnectionChanged changed => withConnectionChange(changed),
+    SessionInfoChanged(:final effort, :final fast) => copyWith(
+      effort: effort,
+      fast: fast,
+    ),
     RequestWithdrawn(:final requestId) => _withdrawn(requestId),
   };
 
@@ -187,6 +217,10 @@ final class ChatState {
     provider: provider,
     commands: commands,
     context: context,
+    logins: logins,
+    connections: connections,
+    effort: effort,
+    fast: fast,
   );
 
   /// An earlier page, above what is shown.
@@ -207,6 +241,10 @@ final class ChatState {
     provider: provider,
     commands: commands,
     context: context,
+    logins: logins,
+    connections: connections,
+    effort: effort,
+    fast: fast,
   );
 
   /// The person's message, shown at once.
@@ -308,7 +346,9 @@ final class ChatState {
   );
 
   ChatState _withdrawn(String requestId) {
-    final hadInput = inputs.any((input) => input.requestId == requestId);
+    final hadInput =
+        inputs.any((input) => input.requestId == requestId) ||
+        logins.any((login) => login.requestId == requestId);
     final next = _decided(
       copyWith(
         approvals: [
@@ -322,6 +362,14 @@ final class ChatState {
         inputs: [
           for (final input in inputs)
             if (input.requestId != requestId) input,
+        ],
+        logins: [
+          for (final login in logins)
+            if (login.requestId != requestId) login,
+        ],
+        connections: [
+          for (final open in connections)
+            if (open.opId != requestId) open,
         ],
       ),
     );
@@ -363,8 +411,63 @@ final class ChatState {
     );
   }
 
+  ChatState withLogin(LoginRequest request) => copyWith(
+    logins: [
+      for (final login in logins)
+        if (login.requestId != request.requestId) login,
+      request,
+    ],
+    turn: TurnPhase.waiting,
+  );
+
+  ChatState withoutLogin(LoginRequest request) => _decided(
+    copyWith(
+      logins: [
+        for (final login in logins)
+          if (login.requestId != request.requestId) login,
+      ],
+    ),
+  );
+
+  ChatState withConnection(ConnectionRequest request) => copyWith(
+    connections: [
+      for (final open in connections)
+        if (open.opId != request.opId) open,
+      request,
+    ],
+    turn: TurnPhase.waiting,
+  );
+
+  ChatState withoutConnection(String opId) => _decided(
+    copyWith(
+      connections: [
+        for (final open in connections)
+          if (open.opId != opId) open,
+      ],
+    ),
+  );
+
+  /// An update for an open card merges in; a settled one closes it. An update
+  /// for a card that is not open is ignored.
+  ChatState withConnectionChange(ConnectionChanged change) {
+    final open = connections.where((c) => c.opId == change.opId);
+    if (open.isEmpty) return this;
+    if (change.settled) return withoutConnection(change.opId);
+    final updated = open.first.withTargets(change.targets, settled: false);
+    return copyWith(
+      connections: [
+        for (final c in connections)
+          if (c.opId == change.opId) updated else c,
+      ],
+    );
+  }
+
   TurnPhase _waitingOr(TurnPhase phase) =>
-      approvals.isNotEmpty || questions.isNotEmpty || inputs.isNotEmpty
+      approvals.isNotEmpty ||
+          questions.isNotEmpty ||
+          inputs.isNotEmpty ||
+          logins.isNotEmpty ||
+          connections.isNotEmpty
       ? TurnPhase.waiting
       : phase;
 
@@ -373,7 +476,9 @@ final class ChatState {
       next.turn == TurnPhase.waiting &&
           next.approvals.isEmpty &&
           next.questions.isEmpty &&
-          next.inputs.isEmpty
+          next.inputs.isEmpty &&
+          next.logins.isEmpty &&
+          next.connections.isEmpty
       ? next.copyWith(turn: TurnPhase.thinking)
       : next;
 

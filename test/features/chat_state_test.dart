@@ -2,9 +2,11 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/core/json.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/features/chat/chat_state.dart';
 
 void main() {
@@ -287,4 +289,88 @@ void main() {
       expect(next.items.whereType<Notice>().single.retryable, isFalse);
     });
   });
+
+  group('Phase 6 state', () {
+    const login = LoginRequest(
+      requestId: 'srq-9',
+      sessionId: 'r',
+      origin: 'https://github.com',
+    );
+
+    test('a login prompt waits for the person, then the turn resumes', () {
+      final asked = ready.apply(LoginAsked(login));
+      expect(asked.logins.single.requestId, 'srq-9');
+      expect(asked.turn, TurnPhase.waiting);
+      final answered = asked.withoutLogin(login);
+      expect(answered.logins, isEmpty);
+      expect(answered.turn, TurnPhase.thinking);
+    });
+
+    test('a withdrawn login prompt goes without a trace of what was typed', () {
+      final state = ready
+          .apply(LoginAsked(login))
+          .apply(const RequestWithdrawn('r', 'srq-9'));
+      expect(state.logins, isEmpty);
+    });
+
+    test('a connection card opens, updates and settles', () {
+      final request = ConnectionRequest.parse(
+        Json.of({
+          'op_id': 'op1',
+          'timeout_seconds': 60,
+          'targets': [
+            {'name': 'Linear', 'kind': 'connector', 'action': 'authorize', 'state': 'pending'},
+          ],
+        }),
+        sessionId: 'r',
+      )!;
+      var state = ready.apply(ConnectionAsked(request));
+      expect(state.connections.single.opId, 'op1');
+      expect(state.turn, TurnPhase.waiting);
+      state = state.apply(
+        ConnectionChanged(
+          'r',
+          opId: 'op1',
+          targets: [request.targets.single.withState(TargetState.connected)],
+          settled: false,
+        ),
+      );
+      expect(state.connections.single.targets.single.state, TargetState.connected);
+      state = state.apply(
+        const ConnectionChanged('r', opId: 'op1', targets: [], settled: true),
+      );
+      expect(state.connections, isEmpty, reason: 'a settled card closes');
+      expect(state.turn, TurnPhase.thinking);
+    });
+
+    test('an update for a card that is not open is ignored', () {
+      final state = ready.apply(
+        const ConnectionChanged('r', opId: 'nope', targets: [], settled: false),
+      );
+      expect(state.connections, isEmpty);
+    });
+
+    test('session info sets the effort and fast mode, and keeps them when absent', () {
+      var state = ready.apply(
+        const SessionInfoChanged('r', effort: ReasoningEffort.high, fast: true),
+      );
+      expect(state.effort, ReasoningEffort.high);
+      expect(state.fast, isTrue);
+      state = state.apply(const SessionInfoChanged('r', fast: false));
+      expect(state.effort, ReasoningEffort.high);
+      expect(state.fast, isFalse);
+    });
+
+    test('vault prompts use the same input list as sudo and secret', () {
+      const unlock = InputRequest(
+        requestId: 'srq-1',
+        sessionId: 'r',
+        kind: InputKind.vaultUnlock,
+        displayName: '1Password',
+      );
+      final state = ready.apply(InputAsked(unlock));
+      expect(state.inputs.single.title, '1Password is locked');
+    });
+  });
+
 }

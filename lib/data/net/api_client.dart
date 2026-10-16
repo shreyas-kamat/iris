@@ -122,6 +122,21 @@ final class ApiClient {
     ),
   );
 
+  /// DELETEs [path] and returns its response as tolerant JSON.
+  Future<Result<Json>> delete(
+    String path, {
+    Map<String, Object?>? query,
+    CancelToken? cancelToken,
+  }) => _send(
+    path,
+    () => _dio.delete<String>(
+      path,
+      queryParameters: _clean(query),
+      cancelToken: cancelToken,
+      options: Options(responseType: ResponseType.plain),
+    ),
+  );
+
   /// GETs [path] as raw bytes, for file previews and image attachments.
   Future<Result<List<int>>> bytes(
     String path, {

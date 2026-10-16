@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/core/json.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/rpc/rpc_frame.dart';
 
 RpcEvent event(String type, {Map<String, Object?> payload = const {}}) =>
@@ -306,4 +307,153 @@ void main() {
     expect(ChatEvent.contextFromEvent(event('message.delta', payload: {'text': 'x'})), isNull);
     expect(ChatEvent.contextFromEvent(event('session.info', payload: {'model': 'm'})), isNull);
   });
+
+  group('Phase 6 server requests and events', () {
+    test('vault unlock and code become input prompts', () {
+      final unlock = ChatEvent.fromServerRequest(
+        request('srq-1', 'vault.unlock_prompt', {
+          'session_id': 'r1',
+          'backend': 'onepassword',
+          'display_name': '1Password',
+        }),
+      );
+      expect(
+        unlock,
+        isA<InputAsked>()
+            .having((e) => e.request.kind, 'kind', InputKind.vaultUnlock)
+            .having((e) => e.request.displayName, 'name', '1Password'),
+      );
+      final code = ChatEvent.fromServerRequest(
+        request('srq-2', 'vault.code', {
+          'session_id': 'r1',
+          'site': 'GitHub',
+          'hint': '6 digits from your authenticator app',
+        }),
+      );
+      expect(
+        code,
+        isA<InputAsked>()
+            .having((e) => e.request.kind, 'kind', InputKind.vaultCode)
+            .having((e) => e.request.site, 'site', 'GitHub')
+            .having((e) => e.request.hint, 'hint', contains('6 digits')),
+      );
+    });
+
+    test('save_login becomes a login prompt', () {
+      final parsed = ChatEvent.fromServerRequest(
+        request('srq-3', 'vault.save_login', {
+          'session_id': 'r1',
+          'origin': 'https://github.com',
+          'site': 'GitHub',
+        }),
+      );
+      expect(
+        parsed,
+        isA<LoginAsked>()
+            .having((e) => e.request.origin, 'origin', 'https://github.com')
+            .having((e) => e.request.siteName, 'siteName', 'GitHub'),
+      );
+    });
+
+    test('a login prompt without a session is dropped', () {
+      expect(
+        ChatEvent.fromServerRequest(
+          request('srq-3', 'vault.save_login', {'origin': 'https://x.test'}),
+        ),
+        isNull,
+      );
+    });
+
+    test('connection.request and connection.update become card events', () {
+      final asked = ChatEvent.fromEvent(
+        event('connection.request', payload: {
+          'op_id': 'op1',
+          'timeout_seconds': 60,
+          'targets': [
+            {'name': 'Linear', 'kind': 'connector', 'action': 'authorize', 'state': 'pending'},
+          ],
+        }),
+      );
+      expect(
+        asked,
+        isA<ConnectionAsked>().having((e) => e.request.opId, 'op', 'op1'),
+      );
+      final changed = ChatEvent.fromEvent(
+        event('connection.update', payload: {
+          'op_id': 'op1',
+          'settled': false,
+          'targets': [
+            {'name': 'Linear', 'kind': 'connector', 'action': 'authorize', 'state': 'connected'},
+          ],
+        }),
+      );
+      expect(
+        changed,
+        isA<ConnectionChanged>()
+            .having((e) => e.opId, 'op', 'op1')
+            .having((e) => e.targets.single.state, 'state', TargetState.connected),
+      );
+    });
+
+    test('session.info carries the effort and fast mode', () {
+      final info = ChatEvent.infoFromEvent(
+        event('session.info', payload: {'model': 'm', 'reasoning_effort': 'high', 'fast': true}),
+      );
+      expect(
+        info,
+        isA<SessionInfoChanged>()
+            .having((e) => e.effort, 'effort', ReasoningEffort.high)
+            .having((e) => e.fast, 'fast', isTrue),
+      );
+    });
+
+    test('effort may arrive as a dict, and fast as a service tier', () {
+      final info = ChatEvent.infoFromEvent(
+        event('session.info', payload: {
+          'reasoning': {'enabled': false},
+          'service_tier': 'priority',
+        }),
+      );
+      expect(
+        info,
+        isA<SessionInfoChanged>()
+            .having((e) => e.effort, 'effort', ReasoningEffort.none)
+            .having((e) => e.fast, 'fast', isTrue),
+      );
+    });
+
+    test('a session.info with neither field makes no info event', () {
+      expect(
+        ChatEvent.infoFromEvent(event('session.info', payload: {'model': 'm'})),
+        isNull,
+      );
+    });
+  });
+
+  group('Phase 6 value types', () {
+    test('busy modes round-trip and default to interrupt', () {
+      expect(BusyMode.fromWire('queue'), BusyMode.queue);
+      expect(BusyMode.fromWire(' STEER '), BusyMode.steer);
+      expect(BusyMode.fromWire(null), BusyMode.interrupt);
+      expect(BusyMode.fromWire('???'), BusyMode.interrupt);
+    });
+
+    test('efforts fold Hermes spellings onto the five Iris shows', () {
+      expect(ReasoningEffort.fromWire('minimal'), ReasoningEffort.low);
+      expect(ReasoningEffort.fromWire('xhigh'), ReasoningEffort.max);
+      expect(ReasoningEffort.fromWire('false'), ReasoningEffort.none);
+      expect(ReasoningEffort.fromWire('banana'), isNull);
+      expect(ReasoningEffort.high.wire, 'high');
+    });
+
+    test('a live status is replying while working or waiting', () {
+      const working = LiveStatus(runtimeId: 'r', storedId: 's', status: 'working');
+      const idle = LiveStatus(runtimeId: 'r', storedId: 's', status: 'idle');
+      const starting = LiveStatus(runtimeId: 'r', storedId: 's', status: 'starting');
+      expect(working.replying, isTrue);
+      expect(idle.replying, isFalse);
+      expect(starting.replying, isFalse, reason: 'starting is not a turn');
+    });
+  });
+
 }
