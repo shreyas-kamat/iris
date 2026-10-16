@@ -153,6 +153,14 @@ class _ProviderRowState extends State<_ProviderRow>
           _WindowLine(window: window, now: widget.now),
       ],
     ];
+    // Placed in whichever header layout the text size calls for.
+    final chevron = SpringBuilder(
+      value: _open ? .5 : 0,
+      spring: IrisSprings.snappy,
+      builder: (context, turns, child) =>
+          Transform.rotate(angle: turns * 2 * math.pi, child: child),
+      child: Icon(Icons.keyboard_arrow_down, size: 16, color: palette.inkMuted),
+    );
     return IrisPressable(
       onTap: _toggle,
       semanticLabel:
@@ -162,42 +170,52 @@ class _ProviderRowState extends State<_ProviderRow>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // A wrap, not a row: at a large text size the name and the figure
-            // each take a line rather than squeezing the name to one letter.
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              runSpacing: IrisSpace.xs,
-              children: [
-                Text(
-                  widget.row.name,
-                  style: type.body.copyWith(fontSize: 14, color: palette.ink),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (tightest != null)
-                      Flexible(
-                        child: _UsedCaption(window: tightest, now: widget.now),
-                      ),
-                    const SizedBox(width: IrisSpace.xs),
-                    SpringBuilder(
-                      value: _open ? .5 : 0,
-                      spring: IrisSprings.snappy,
-                      builder: (context, turns, child) => Transform.rotate(
-                        angle: turns * 2 * math.pi,
-                        child: child,
-                      ),
-                      child: Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 16,
-                        color: palette.inkMuted,
+            // At a large text size the name and the figure each take a line
+            // rather than squeezing the name to one letter.
+            if (MediaQuery.textScalerOf(context).scale(14) > 21)
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: IrisSpace.xs,
+                children: [
+                  Text(
+                    widget.row.name,
+                    style: type.body.copyWith(fontSize: 14, color: palette.ink),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (tightest != null)
+                        Flexible(
+                          child: _UsedCaption(
+                            window: tightest,
+                            now: widget.now,
+                          ),
+                        ),
+                      const SizedBox(width: IrisSpace.xs),
+                      chevron,
+                    ],
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.row.name,
+                      style: type.body.copyWith(
+                        fontSize: 14,
+                        color: palette.ink,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  if (tightest != null)
+                    _UsedCaption(window: tightest, now: widget.now),
+                  const SizedBox(width: IrisSpace.xs),
+                  chevron,
+                ],
+              ),
             if (tightest != null) ...[
               const SizedBox(height: IrisSpace.sm),
               IrisGauge(
