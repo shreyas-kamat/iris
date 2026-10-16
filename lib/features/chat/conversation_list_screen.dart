@@ -350,6 +350,8 @@ class _ConversationListScreenState
         showIrisToast(
           context,
           message: 'Archived',
+          // Longer than other toasts: Undo is worth reaching for.
+          visibleFor: const Duration(seconds: 5),
           actionLabel: 'Undo',
           onAction: () => unawaited(_undoArchive(chat, id)),
         );

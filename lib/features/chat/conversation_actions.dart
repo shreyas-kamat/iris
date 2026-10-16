@@ -118,16 +118,28 @@ class _RenameSheetState extends State<_RenameSheet> {
     super.dispose();
   }
 
-  void _save() {
+  @override
+  void initState() {
+    super.initState();
+    _text.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _canSave {
     final title = _text.text.trim();
-    Navigator.of(
-      context,
-    ).pop(title.isEmpty || title == widget.current ? null : title);
+    return title.isNotEmpty && title != widget.current;
+  }
+
+  void _save() {
+    if (_canSave) Navigator.of(context).pop(_text.text.trim());
   }
 
   @override
   Widget build(BuildContext context) => IrisSheet(
-    title: 'Rename',
+    title: 'Rename chat',
     actions: IrisSheetActions(
       secondary: IrisButton(
         label: 'Cancel',
@@ -136,7 +148,7 @@ class _RenameSheetState extends State<_RenameSheet> {
       primary: IrisButton(
         label: 'Save',
         tone: IrisButtonTone.primary,
-        onPressed: _save,
+        onPressed: _canSave ? _save : null,
       ),
     ),
     child: IrisField(
@@ -144,6 +156,17 @@ class _RenameSheetState extends State<_RenameSheet> {
       hint: 'Title',
       autofocus: true,
       onSubmitted: (_) => _save(),
+      trailing: _text.text.isEmpty
+          ? null
+          : IrisPressable(
+              onTap: _text.clear,
+              semanticLabel: 'Clear',
+              child: Icon(
+                Icons.close,
+                size: 18,
+                color: context.palette.inkMuted,
+              ),
+            ),
     ),
   );
 }

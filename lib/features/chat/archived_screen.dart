@@ -10,6 +10,7 @@ import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
+import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
@@ -17,6 +18,7 @@ import '../../design/platform/iris_scaffold.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
+import '../../design/tokens/palette.dart';
 import 'chat_controller.dart';
 import 'chat_screen.dart';
 import 'conversation_row.dart';
@@ -146,7 +148,21 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
             ),
             child: Text(
               'Archived',
-              style: context.type.serif.copyWith(fontSize: 34, height: 1),
+              style: context.type.serif.copyWith(fontSize: 38, height: 1),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              gutter + IrisSpace.xs,
+              0,
+              gutter,
+              IrisSpace.md,
+            ),
+            child: Text(
+              'Tap the box to bring a chat back to home. Long-press for Delete.',
+              style: context.type.codeSmall.copyWith(
+                color: context.palette.inkMuted,
+              ),
             ),
           ),
           Expanded(child: _body(context, gutter)),
@@ -183,34 +199,54 @@ class _ArchivedScreenState extends State<ArchivedScreen> {
     }
     if (rows.every((row) => _gone.contains(row.id))) {
       return const IrisEmptyState(
-        title: 'Nothing archived',
-        message:
-            'Chats you archive from home wait here until you bring them back.',
+        icon: IrisOrb(state: AgentState.rest, size: 80, glow: false),
+        title: 'Nothing archived.',
+        message: 'Archived chats wait here until you bring them back.',
       );
     }
     final hasMore = rows.length < _total;
     return ListView(
       padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, IrisSpace.xl),
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(IrisSpace.xs, 0, 0, IrisSpace.sm),
+          child: IrisLabel('${rows.length - _gone.length} chats'),
+        ),
         for (final row in rows)
           Leaving(
             key: ValueKey(row.id),
             gone: _gone.contains(row.id),
-            child: ConversationRow(
-              title: row.title,
-              onTap: () => unawaited(_open(row)),
-              onLongPress: () => unawaited(_delete(row)),
-              // Named with the chat's title: a list of identical
-              // "Unarchive" buttons says nothing to a screen reader.
-              trailing: Semantics(
-                container: true,
-                label: 'Unarchive ${row.title}',
-                button: true,
-                excludeSemantics: true,
-                child: IrisButton(
-                  label: 'Unarchive',
-                  tone: IrisButtonTone.ghost,
-                  onPressed: () => unawaited(_unarchive(row)),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: IrisSpace.sm),
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 60),
+                decoration: BoxDecoration(
+                  color: context.palette.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: context.palette.line,
+                    width: IrisStroke.hairline,
+                  ),
+                ),
+                child: ConversationRow(
+                  title: row.title,
+                  onTap: () => unawaited(_open(row)),
+                  onLongPress: () => unawaited(_delete(row)),
+                  // Named with the chat's title: a list of identical
+                  // "Unarchive" buttons says nothing to a screen reader.
+                  trailing: IrisPressable(
+                    onTap: () => unawaited(_unarchive(row)),
+                    semanticLabel: 'Unarchive ${row.title}',
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Icon(
+                        Icons.unarchive_outlined,
+                        size: 20,
+                        color: context.palette.accent,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

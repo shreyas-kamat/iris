@@ -61,6 +61,24 @@ void main() {
   Future<void> settle(WidgetTester tester) =>
       tester.pump(const Duration(milliseconds: 50));
 
+  testWidgets('the archive toast stays five seconds', (tester) async {
+    await tester.pumpWidget(
+      home(const [ConversationSummary(id: 'stored-1', title: 'Weekly planning')]),
+    );
+    await settle(tester);
+    await tester.longPress(find.text('Weekly planning'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    // "Undo" is the toast's own action; the word "Archived" is also a list row.
+    await tester.pump(const Duration(milliseconds: 4200));
+    expect(find.text('Undo'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1000));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Undo'), findsNothing);
+  });
+
   testWidgets('the header names the server and the link', (tester) async {
     await tester.pumpWidget(home(const []));
     await settle(tester);
