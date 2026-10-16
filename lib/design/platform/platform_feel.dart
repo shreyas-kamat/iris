@@ -116,6 +116,13 @@ final class IrisPageRoute<T> extends PageRoute<T> {
   @override
   Duration get reverseTransitionDuration => const Duration(milliseconds: 380);
 
+  /// Only another page pushes this one aside. A sheet, dialog or any other
+  /// route opened over it leaves it where it is; otherwise the page drifts
+  /// left under the scrim and the screen behind shows through.
+  @override
+  bool canTransitionTo(TransitionRoute<dynamic> nextRoute) =>
+      nextRoute is IrisPageRoute;
+
   @override
   Widget buildPage(
     BuildContext context,
