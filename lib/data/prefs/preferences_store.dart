@@ -28,6 +28,18 @@ abstract final class PreferenceKeys {
   /// Per server: a JSON list of provider slugs, `@profile` meaning the
   /// active profile's own provider.
   static const usageProviders = 'usage.providers';
+
+  /// Per `<server>/<profile>`: a JSON list of pinned stored ids, newest first.
+  static const pins = 'pins';
+
+  /// Per `<server>/<profile>`: `branch.<childId>` → where a branch came from.
+  static String branch(String childId) => 'branch.$childId';
+
+  /// Per server: a JSON list of recent search queries, newest first.
+  static const searchRecent = 'search.recent';
+
+  /// Per server: hosts whose Markdown images load without a tap.
+  static const imageHosts = 'images.hosts';
 }
 
 abstract interface class PreferencesStore {
