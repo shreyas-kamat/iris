@@ -12,7 +12,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/palette.dart';
 
-/// "Branched from ‹parent›", tappable. 44 high, inset to clear the back
+/// "Branched from ‹parent›", tappable. At least 44 high, inset to clear the back
 /// button and orb.
 class BranchedHeader extends StatelessWidget {
   const BranchedHeader({
@@ -33,9 +33,9 @@ class BranchedHeader extends StatelessWidget {
       ensureTapTarget: false,
       semanticLabel: 'Branched from $parentTitle. Open it',
       child: Container(
-        height: 44,
+        constraints: const BoxConstraints(minHeight: 44),
         margin: const EdgeInsets.fromLTRB(64, 0, IrisSpace.lg, IrisSpace.xs),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: palette.surface,
           borderRadius: BorderRadius.circular(12),
