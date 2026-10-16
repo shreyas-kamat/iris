@@ -349,9 +349,6 @@ final class ModelOptions {
   final String? provider;
   final List<ModelProvider> providers;
 
-  /// Providers worth offering: signed in, or the one in use, with at least
-  /// one model. Hermes 0.18.2 reports the configured provider in use as
-  /// unauthenticated, yet it is the one running the conversation.
   /// What [model] can do on [provider], or null when the gateway did not say.
   ModelCaps? capsFor(String model, {String? provider}) {
     for (final candidate in providers) {
@@ -362,6 +359,9 @@ final class ModelOptions {
     return null;
   }
 
+  /// Providers worth offering: signed in, or the one in use, with at least
+  /// one model. Hermes 0.18.2 reports the configured provider in use as
+  /// unauthenticated, yet it is the one running the conversation.
   List<ModelProvider> get usable => [
     for (final provider in providers)
       if ((provider.authenticated || provider.isCurrent) &&

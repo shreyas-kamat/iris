@@ -627,8 +627,6 @@ final class ChatState {
     ];
   }
 
-  /// [items] with the live assistant turn finished: kept if it says
-  /// anything, dropped if it never did.
   /// Steers waiting for a step are picked up by the tool that just started:
   /// its position among this turn's tools is the step.
   static List<TranscriptItem> _pickedUp(List<TranscriptItem> items) {
@@ -646,6 +644,8 @@ final class ChatState {
     ];
   }
 
+  /// [items] with the live assistant turn finished: kept if it says
+  /// anything, dropped if it never did.
   static List<TranscriptItem> _settled(List<TranscriptItem> items) {
     final last = items.isEmpty ? null : items.last;
     if (last is! AssistantTurn || !last.streaming) return items;
