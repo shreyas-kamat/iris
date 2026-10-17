@@ -22,7 +22,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 12 | Cross-profile search | S2 | Opus | done | 286a35e |
 | 13 | Demo data | S3 | Sonnet | done | 54c5a0f |
 | 14 | Goldens, changelog, README | S3 | Sonnet | done | 16547bf |
-| 15 | Live write test | S3 | Sonnet | todo | |
+| 15 | Live write test | S3 | Sonnet | done | ec25e9d |
 | 16 | Device pass | S3 | Sonnet | todo | |
 | 17 | Final review | S4 | Opus | todo | |
 
@@ -154,3 +154,15 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: (1) `_sharedOverrides` already overrides `profilesProvider`, so the plan's Profiles capture overrode it twice and failed; `_sharedOverrides` now takes an optional `profiles`. (2) The Tasks capture could not find the Running chip after a 400 ms pump (the polled board had not arrived); the `after` steps use the file's `settle` instead. (3) Import order and one redundant-argument lint fixed. (4) README: three bullets (Scheduled and Tasks, Chat menu, an extended Profiles bullet) instead of four; search-across-profiles went into the Profiles bullet.
 - Decisions for later tasks: none.
 - Next: Task 15, Step 1 (needs the user's yes first: it writes to the real server)
+
+### Task 15 — doing — 2026-10-18
+- User said yes to the live writes in this chat. Next: Step 1.
+
+### Task 15 — Live write test — done — 2026-10-18 — Sonnet 5.5
+- Commits: ec25e9d test(phase7): a live write test on a throwaway profile
+- Verified: first live run FAILED at the SOUL read (below); after the fix, `flutter test --tags live --run-skipped test/live/phase7_write_live_test.dart` passed in 12 s (profile create, setSoul, rename, job create/pause/resume/trigger/delete, task create and move to To do, profile delete). Afterwards a list of the server's profiles showed only default, ananta, asturii, indra, sully: no leftover `iris-p7*` profile. `flutter analyze` no issues; `flutter test test/features test/data` passed.
+- Deviations / real bug found: **the live server ignores `soul` in `POST /api/profiles`** (the new profile came back with the server's stock SOUL), so a SOUL typed in the New profile form was silently lost. The form now calls `setSoul` after a successful create when a SOUL was typed (a failed write toasts "Profile created, but its SOUL was not saved" and still closes, since a retry would be refused as a duplicate). Two new tests in `profiles_test.dart` (the first failed before the fix). The live test mirrors that: create, then setSoul. The test was run twice: the first run's cleanup deleted its profile.
+- Left on the server: one Kanban task, **`Iris probe 1792277106613`** (id `t_bf4b31ef`, now in Ready; the server moved it on from To do). No delete route is in scope; clear it by hand in the desktop app.
+- Not verified (the test does not check them): `clone_from`, `clone_all` and `clone_from_default` were not exercised (the test makes a blank profile), and no Kanban session-link key was found (the task had no session). The Phase 7 clone options stay unconfirmed on the real server.
+- Decisions for later tasks: none.
+- Next: Task 16, Step 1 (ask the user: they run the checklist, or I drive adb)
