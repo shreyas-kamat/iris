@@ -131,6 +131,29 @@ void main() {
       expect(draft.soul, 'You keep notes.');
     });
 
+    testWidgets('the SOUL of a new profile is also written after it is created '
+        '(the live server ignores it on create)', (tester) async {
+      await tester.pumpWidget(app(const ProfileFormScreen()));
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Name'), 'notes');
+      await tester.enterText(field('SOUL · optional'), 'You keep notes.');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(IrisButton, 'Create'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, ['create notes', 'setSoul notes']);
+      expect(repo.writtenSouls['notes'], 'You keep notes.');
+    });
+
+    testWidgets('no SOUL typed, no SOUL write', (tester) async {
+      await tester.pumpWidget(app(const ProfileFormScreen()));
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Name'), 'notes');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(IrisButton, 'Create'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, ['create notes']);
+    });
+
     testWidgets('a full copy of another profile', (tester) async {
       await tester.pumpWidget(app(const ProfileFormScreen()));
       await tester.pumpAndSettle();

@@ -123,6 +123,21 @@ class _ProfileFormScreenState extends ConsumerState<ProfileFormScreen> {
           soul: _soul.text,
         ),
       );
+      // The server may ignore the SOUL sent with a create (the live one does),
+      // so it is written after the profile exists.
+      if (result.isOk && _soul.text.trim().isNotEmpty) {
+        final written = await repository.setSoul(name, _soul.text);
+        if (written case Err(:final failure) when mounted) {
+          // The profile exists now, so a retry would be refused: say so and go on.
+          showIrisToast(
+            context,
+            message:
+                'Profile created, but its SOUL was not saved: '
+                '${describeWrite(failure)}',
+            top: true,
+          );
+        }
+      }
     } else {
       result = const Ok(null);
       if (_nameChanged) {
