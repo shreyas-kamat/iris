@@ -11,7 +11,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 1 | Data layer: models and three repositories | S1 | Sonnet | done | 07bd709 |
 | 2 | Providers, polling and test fakes | S1 | Sonnet | done | 47d850a |
 | 3 | `IrisSegmented` | S1 | Sonnet | done | 27b4f24 |
-| 4 | Job form | S1 | Sonnet | todo | |
+| 4 | Job form | S1 | Sonnet | done | 251b2e3 |
 | 5 | Scheduled tab, job detail, delete | S1 | Sonnet | todo | |
 | 6 | Move sheet and New task form | S1 | Sonnet | todo | |
 | 7 | Board, task cards, task detail | S1 | Sonnet | todo | |
@@ -62,3 +62,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: none.
 - Decisions for later tasks: none.
 - Next: Task 4, Step 1
+
+### Task 4 — Job form — done — 2026-10-17 — Sonnet 5.5
+- Commits: 251b2e3 feat(phase7): the new and edit job form
+- Verified: `flutter test test/features/job_form_test.dart` failed to compile before the screen; with it, 8 of 9 passed, then 9 passed after the fix below. `flutter analyze` no issues; `flutter test test/design` plus the form tests 263 passed.
+- Deviations: the plan's `late final String _initial = _signature();` is lazy, so the form's dirty check compared the text with itself and "Discard changes?" never showed. It is now assigned in `initState`. Also removed the unused `chat_models.dart` import, split the `options == null || !mounted` guard (a `use_build_context_synchronously` lint), and dropped a redundant default argument in the test.
+- Decisions for later tasks: `IrisField` now takes `focusNode`. The plan's note about popping the only route did not bite (`themed()` handled it), so no host helper was added.
+- Next: Task 5, Step 1
