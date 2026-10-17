@@ -13,7 +13,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 3 | `IrisSegmented` | S1 | Sonnet | done | 27b4f24 |
 | 4 | Job form | S1 | Sonnet | done | 251b2e3 |
 | 5 | Scheduled tab, job detail, delete | S1 | Sonnet | done | 3c74ba8 |
-| 6 | Move sheet and New task form | S1 | Sonnet | todo | |
+| 6 | Move sheet and New task form | S1 | Sonnet | done | 4a4636d |
 | 7 | Board, task cards, task detail | S1 | Sonnet | todo | |
 | 8 | Home tab host | S1 | Sonnet | todo | |
 | 9 | ⋯ menu and Session info | S1 | Sonnet | todo | |
@@ -76,3 +76,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: the plan's test fixture had two jobs ('a' and 'e') on the default schedule `0 7 * * *`, so `find.text('0 7 * * *')` found two; 'e' now has `every 5m`. The detail tests use a tall test surface (800x2400) because the detail list builds lazily and the Delete button and Past runs sat off screen. `IrisLabel` uppercases its text, so the "Past runs" and "Last error" finders use `bySemanticsLabel` (the plan's fallback); the "Last error" absence check would otherwise have passed vacuously. Two lint ignores/removals: `avoid_positional_boolean_parameters` on `toggleJob`'s `enabled`, an unused `sheet.dart` import. `dart format` was run on the new test file.
 - Decisions for later tasks: `toggleJob`, `withOverride`, `statusOf`, `statusLine`, `durationText` exist as the plan says. `showDeleteSheet` takes an optional `message`. The `IrisPressable.semanticLabel`, `IrisOrb.glow`, and `clockProvider` the plan hedged on all exist.
 - Next: Task 6, Step 1
+
+### Task 6 — Move sheet and New task form — done — 2026-10-17 — Sonnet 5.5
+- Commits: 4a4636d feat(phase7): the Move sheet and the New task form
+- Verified: `move_sheet_test` failed to compile first; with both files, 12 of 13 tests passed, then 13 passed after the fix below. `flutter analyze` no issues.
+- Deviations: the assignee sheet was empty in the test because `profilesProvider` was only read when the sheet opened (never watched, so not loaded). The form now `ref.watch(profilesProvider)` in `build` so the list is ready before the sheet asks for it.
+- Decisions for later tasks: `showMoveSheet(context, task:, columns:)` returns the column id or null; `TaskFormScreen(initialColumn:)` pops `true` on create and invalidates `kanbanBoardProvider`.
+- Next: Task 7, Step 1
