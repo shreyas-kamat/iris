@@ -21,7 +21,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 11 | Profiles | S1 | Sonnet | done | d586906 |
 | 12 | Cross-profile search | S2 | Opus | done | 286a35e |
 | 13 | Demo data | S3 | Sonnet | done | 54c5a0f |
-| 14 | Goldens, changelog, README | S3 | Sonnet | todo | |
+| 14 | Goldens, changelog, README | S3 | Sonnet | done | 16547bf |
 | 15 | Live write test | S3 | Sonnet | todo | |
 | 16 | Device pass | S3 | Sonnet | todo | |
 | 17 | Final review | S4 | Opus | todo | |
@@ -144,3 +144,13 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: (1) The plan's demo schedule check refused `every 2h` (its own test creates one); the `every` rule now also accepts a short unit (`every 2h`, `every 5m`), while `every blursday` is still refused. (2) The plan's flow test looked for `needs input`/`capability`; chips are painted uppercase (as in Task 7), so it finds `NEEDS INPUT`/`CAPABILITY`. (3) The existing "no server switcher" demo test tapped the hero's `demo.iris` text; with tabs the hero is not built (Task 8), so it taps the compact link by its `Connection…` semantics label. (4) The demo home now shows the Sessions/Scheduled/Tasks control, so `screen_demo_home_dark.png` and `_light.png` changed; I looked at the image (only the new control; the hero's gone as Task 8 intended) and regenerated them in this commit. (5) Removed an unused `result.dart` import and a needless `!` in the plan's test. (6) `dart format` touched unrelated files once; I restored them.
 - Decisions for later tasks: the demo has 3 profiles (default, homelab, research); the demo world's profiles are now mutable per visit. Task 14 should expect the demo home goldens to be already updated.
 - Next: Task 14, Step 1
+
+### Task 14 — doing — 2026-10-18
+- Started on Sonnet 5.5. Next: Step 1.
+
+### Task 14 — Goldens, changelog, README — done — 2026-10-18 — Sonnet 5.5
+- Commits: 16547bf test(phase7): goldens for the new screens, and the changelog
+- Verified: first generation: 4 of 38 tests failed (below), then `flutter test test/design/screens_golden_test.dart --update-goldens` 38 passed; `flutter test test/design` 262 passed; `flutter analyze` no issues; whole suite 1163 passed, 7 skipped. `git status` showed only the 8 new PNGs as new, no existing `screen_*.png` modified (the demo-home ones were already updated in Task 13). I looked at the dark Scheduled, Tasks, chat-menu and Profiles images and the light Tasks image: the control sits under the header, schedule chips are mono, the switch is on the right, the failed job's line is in the failed colour, the Running cards show the orb and clock, nothing overflows. I did not open the design HTML side by side, so frame-for-frame fidelity to A2/B1/C1/D1 is an eyeball check only.
+- Deviations: (1) `_sharedOverrides` already overrides `profilesProvider`, so the plan's Profiles capture overrode it twice and failed; `_sharedOverrides` now takes an optional `profiles`. (2) The Tasks capture could not find the Running chip after a 400 ms pump (the polled board had not arrived); the `after` steps use the file's `settle` instead. (3) Import order and one redundant-argument lint fixed. (4) README: three bullets (Scheduled and Tasks, Chat menu, an extended Profiles bullet) instead of four; search-across-profiles went into the Profiles bullet.
+- Decisions for later tasks: none.
+- Next: Task 15, Step 1 (needs the user's yes first: it writes to the real server)
