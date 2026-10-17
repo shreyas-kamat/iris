@@ -18,7 +18,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 8 | Home tab host | S1 | Sonnet | done | 665b3a9 |
 | 9 | ⋯ menu and Session info | S1 | Sonnet | done | 6cc2dca |
 | 10 | Export as Markdown | S1 | Sonnet | done | 9a686b3 |
-| 11 | Profiles | S1 | Sonnet | todo | |
+| 11 | Profiles | S1 | Sonnet | done | d586906 |
 | 12 | Cross-profile search | S2 | Opus | todo | |
 | 13 | Demo data | S3 | Sonnet | todo | |
 | 14 | Goldens, changelog, README | S3 | Sonnet | todo | |
@@ -111,3 +111,15 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: (1) `flutter pub add share_plus` wrote `^13.3.1`; the other dependencies are pinned exactly, so it is pinned `13.3.1`. (2) `flutter pub get` regenerated the macOS and Windows plugin registrants (tracked, adding only `share_plus`); they are committed here so the tree stays clean. (3) The "stops when an earlier page fails" test: the failed page leaves a plain "Could not load earlier messages" notice in the transcript, so the test compares only the `UserTurn` ids (the exporter drops plain notices, so the notice never reaches the Markdown). (4) `RegExp(r'[^a-z0-9]+')` became a non-raw string (a lint).
 - Decisions for later tasks: a branched chat opened from `_branch`/`_openParent` keeps `shareMarkdown` but not the menu hooks (as the plan says).
 - Next: Task 11, Step 1
+
+### Task 11 — Profiles — done — 2026-10-17 — Sonnet 5.5
+- Commits: d586906 feat(phase7): create, rename, edit and delete profiles
+- Verified: `profiles_test` failed to compile first; after the screens 13 of 15 passed, then 15 passed after the fix below; the two new settings tests failed first (no row), then `profiles_test` + `settings_screen_test` 25 passed; whole suite then regenerated goldens (below) and `flutter test test/design` 254 passed; `flutter analyze` no issues. Last whole-suite run before the golden update: 1125 passed, 7 skipped, 2 settings goldens failing (the new row), now updated.
+- Deviations: (1) Step 0 (the probe note): the note's "clone_* accepted" answer was weaker than it read: the invalid-name error comes before any field check, so an ignored field gives the same answer, and `clone_from_default` was never probed. Nothing was hidden; the probe note now says so and Task 15 must verify the options for real. (2) A real a11y gap: the "Switch to <name>" circle's semantics merged into the row's button, so a screen reader could not reach it on its own; it is now `Semantics(container: true, ...)`. (3) The Profiles row changes the Settings screen, so `screen_settings_dark.png` and `screen_settings_light.png` changed; I checked the image (only the new row) and regenerated them in this commit. (4) Removed an unused `primitives.dart` import.
+- Decisions for later tasks: Task 12 reads `profilesProvider`; a deleted current profile already falls back to `default` in `ProfileFormScreen._delete`.
+- Next: Task 12, Step 1 (segment S2, needs Opus)
+
+### Segment S1 complete — 2026-10-17 — Sonnet 5.5
+- Tasks 0–11 are done and committed. Next segment: S2, task 12 (cross-profile search), model **Opus**.
+- Open items for later: Task 15 must verify `clone_from`, `clone_all`, `clone_from_default` against the real server (see the probe note); the kanban board was empty, so a task's detail keys and any session-link key are unconfirmed.
+- Next: Task 12, Step 1 (start a new chat on Opus)

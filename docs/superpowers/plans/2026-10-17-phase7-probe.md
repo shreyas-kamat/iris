@@ -44,5 +44,5 @@ output_tokens, preview, parent_session_id, archived. Profiles seen in an unscope
 | Does a task carry a session link, and under which key? | unknown: the board has no tasks | Task 7 builds no Open session button until a real task shows a key. Revisit in Task 15 if it creates a task. |
 | Kanban PATCH (move) present? | yes (404 names the task) | Move rows stay enabled. |
 | Profile create/rename/soul/delete present? | yes for all four | No profile control is hidden. |
-| Were `clone_from`, `clone_all`, `no_skills` accepted? | yes, all three (each answered with the name error only) | All Start from options stay. |
+| Were `clone_from`, `clone_all`, `no_skills` accepted? | not proven: each answered with the name error, which comes before any field check, so an ignored field would look the same. `clone_from_default` was not probed. | All Start from options stay for now. Task 15's live write test must create a throwaway profile with each option and check it was really copied (skills or memory present), then delete it. |
 | Does an unscoped search return hits from every profile (do hits carry a `profile`)? | hits carry `profile` and `is_default_profile`; only `default` was seen, so merging is unconfirmed | Task 12 uses one search per profile, as planned. |
