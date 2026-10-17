@@ -10,7 +10,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 0 | Probe the user's server | S1 | Sonnet | done | b18907b |
 | 1 | Data layer: models and three repositories | S1 | Sonnet | done | 07bd709 |
 | 2 | Providers, polling and test fakes | S1 | Sonnet | done | 47d850a |
-| 3 | `IrisSegmented` | S1 | Sonnet | todo | |
+| 3 | `IrisSegmented` | S1 | Sonnet | done | 27b4f24 |
 | 4 | Job form | S1 | Sonnet | todo | |
 | 5 | Scheduled tab, job detail, delete | S1 | Sonnet | todo | |
 | 6 | Move sheet and New task form | S1 | Sonnet | todo | |
@@ -55,3 +55,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: added `// ignore: avoid_positional_boolean_parameters` on `CronEnabledOverrides.set` (the plan's tests call it positionally); removed the unused `flutter/widgets.dart` import from the test, as the plan allowed.
 - Decisions for later tasks: none.
 - Next: Task 3, Step 1
+
+### Task 3 — `IrisSegmented` — done — 2026-10-17 — Sonnet 5.5
+- Commits: 27b4f24 feat(phase7): IrisSegmented, and the effort track uses it
+- Verified: `flutter test test/design/segmented_test.dart` failed to compile before the component, 7 passed after; `flutter analyze` no issues; `flutter test test/features/model_controls_test.dart test/design` 262 passed (no golden changed).
+- Deviations: none.
+- Decisions for later tasks: none.
+- Next: Task 4, Step 1
