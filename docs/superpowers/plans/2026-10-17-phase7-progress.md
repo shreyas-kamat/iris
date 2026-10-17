@@ -15,7 +15,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 5 | Scheduled tab, job detail, delete | S1 | Sonnet | done | 3c74ba8 |
 | 6 | Move sheet and New task form | S1 | Sonnet | done | 4a4636d |
 | 7 | Board, task cards, task detail | S1 | Sonnet | done | 4572ff3 |
-| 8 | Home tab host | S1 | Sonnet | todo | |
+| 8 | Home tab host | S1 | Sonnet | done | 665b3a9 |
 | 9 | ⋯ menu and Session info | S1 | Sonnet | todo | |
 | 10 | Export as Markdown | S1 | Sonnet | todo | |
 | 11 | Profiles | S1 | Sonnet | todo | |
@@ -90,3 +90,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: (1) Real bug found by the 320 pt test: on a system-set column the header "Running · set by Hermes" label plus the New task button overflowed by 11 pt; the label is now in an `Expanded` so it wraps. (2) The task card's semantic label now includes the block kind ("needs input"), because the card's label hid the chip from screen readers. (3) Tests: the detail tests use a tall surface (the list builds lazily); chips are painted uppercase, so they are found as `NEEDS INPUT`/`DEPENDENCY`; the Move sheet's "Done" is found inside `IrisSheet` (the subtask row also says Done); the "Open session" test tears the first screen down before building the second (the cached detail was reused). (4) The refused-move test now also checks the rollback (the header chip still says Review, not Done). (5) Removed the unused `task_card.dart` import and an unused `type` local, as the plan allowed.
 - Decisions for later tasks: `kanbanTaskDetailProvider` is in `automation_providers.dart`. No Open session button appears unless the task carries `session_id`/`stored_session_id` (the probe could not confirm a key). `TasksTab` and `ScheduledTab` are ready for Task 8's host.
 - Next: Task 8, Step 1
+
+### Task 8 — Home tab host — done — 2026-10-17 — Sonnet 5.5
+- Commits: 665b3a9 feat(phase7): home gets Scheduled and Tasks tabs when the server has them
+- Verified: `home_tabs_test` first run: 2 passed, 4 failed (no control yet); after the host, `home_tabs_test`, `conversation_list_screen_test`, `pinned_live_test`, `delete_flow_test` 57 passed. Whole suite `flutter test`: 1074 passed, 7 skipped. `flutter analyze` no issues.
+- Deviations: none in behaviour. The `NotificationListener` block was moved into a local `sessions` by script and `dart format` re-indented it, so the diff of `conversation_list_screen.dart` is larger than the logic change.
+- Decisions for later tasks: with tabs, the hero is not built and `_HomeBar` gets a fixed `collapse` of 1 (compact link shown). A server with no extra tab takes the unchanged old path.
+- Next: Task 9, Step 1
