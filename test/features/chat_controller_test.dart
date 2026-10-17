@@ -1250,6 +1250,65 @@ void main() {
       expect(controller.value.items.whereType<PromptRecord>(), isEmpty);
     });
   });
+
+  group('compress and rename (the ⋯ menu)', () {
+    test('compress calls the backend for a live chat', () async {
+      final controller = controllerFor();
+      await controller.open();
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      await controller.compress();
+      expect(backend.compressions, ['run-1']);
+      expect(toasts.last, 'Compressed');
+    });
+
+    test('compress with no runtime says there is nothing to compress', () async {
+      final controller = controllerFor(id: null);
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      await controller.compress();
+      expect(toasts.single, 'Nothing to compress yet');
+      expect(backend.compressions, isEmpty);
+    });
+
+    test('a refused compress is reported', () async {
+      backend.compressResult = const Err(
+        IrisFailure(FailureKind.server, message: 'busy'),
+      );
+      final controller = controllerFor();
+      await controller.open();
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      await controller.compress();
+      expect(toasts.last, startsWith('Could not compress'));
+    });
+
+    test('rename shows the new title and tells the backend', () async {
+      final controller = controllerFor();
+      await controller.open();
+      await controller.rename('Better title');
+      expect(controller.value.title, 'Better title');
+      expect(backend.renames, [('stored-1', 'Better title')]);
+    });
+
+    test('a refused rename puts the old title back and says why', () async {
+      backend.renameResult = const Err(
+        IrisFailure(FailureKind.rejected, message: 'no'),
+      );
+      final controller = controllerFor();
+      await controller.open();
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      final before = controller.value.title;
+      await controller.rename('Better title');
+      expect(controller.value.title, before);
+      expect(toasts.last, startsWith('Could not rename'));
+    });
+  });
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

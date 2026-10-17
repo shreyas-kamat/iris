@@ -27,15 +27,18 @@ import '../../design/tokens/palette.dart';
 import 'attachment_picker.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
+import 'chat_menu_sheet.dart';
 import 'chat_state.dart';
 import 'composer.dart';
 import 'connection_card.dart';
 import 'context_sheet.dart';
+import 'conversation_actions.dart';
 import 'decision_cards.dart';
 import 'login_card.dart';
 import 'message_menu.dart';
 import 'model_sheet.dart';
 import 'queue_tray.dart';
+import 'session_info_sheet.dart';
 import 'transcript_view.dart';
 import 'voice_recorder.dart';
 
@@ -56,6 +59,26 @@ const _suggestions = [
   'What can you do on this server?',
 ];
 
+/// What the host can do to this conversation beyond what the chat itself
+/// owns. A host that passes none gets a menu without Pin, Archive and Delete.
+class ChatMenuHooks {
+  const ChatMenuHooks({
+    required this.isPinned,
+    required this.onTogglePin,
+    required this.onArchive,
+    required this.onDelete,
+  });
+
+  final bool Function() isPinned;
+  final VoidCallback onTogglePin;
+
+  /// Archives the conversation; true when it was archived.
+  final Future<bool> Function() onArchive;
+
+  /// Deletes it, after its own confirm; true when it was deleted.
+  final Future<bool> Function() onDelete;
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     required this.backend,
@@ -67,6 +90,7 @@ class ChatScreen extends StatefulWidget {
     this.recorder,
     this.branch,
     this.onBranched,
+    this.menu,
     super.key,
   });
 
@@ -84,6 +108,9 @@ class ChatScreen extends StatefulWidget {
   /// Called when a branch is made from here, with the new chat's stored id
   /// and where it came from, so the caller can remember it.
   final void Function(String childStoredId, BranchRecord record)? onBranched;
+
+  /// Pin, Archive and Delete from the ⋯ menu; those rows are left out when null.
+  final ChatMenuHooks? menu;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -252,6 +279,79 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
     }
+  }
+
+  Future<void> _openMenu(ChatState state) async {
+    final menu = widget.menu;
+    final id = _chat.conversationId;
+    final title = state.title ?? 'this chat';
+    final action = await showChatMenu(
+      context,
+      title: title,
+      pinned: menu?.isPinned() ?? false,
+      replying: state.running,
+      live: _chat.isLive,
+      canPin: menu != null && id != null,
+      canArchive: menu != null && id != null && !widget.archived,
+      canDelete: menu != null && id != null,
+      canUndo: state.lastExchangeStartId != null,
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case ChatMenuAction.rename:
+        final next = await showRenameSheet(context, title);
+        if (next != null && mounted) await _chat.rename(next);
+      case ChatMenuAction.pin:
+        menu?.onTogglePin();
+      case ChatMenuAction.branch:
+        await _branch();
+      case ChatMenuAction.archive:
+        if (menu != null && await menu.onArchive() && mounted) {
+          Navigator.of(context).pop();
+        }
+      case ChatMenuAction.compress:
+        await _chat.compress();
+      case ChatMenuAction.undo:
+        await _chat.undo();
+      case ChatMenuAction.export:
+        await _export(state);
+      case ChatMenuAction.info:
+        await _showInfo(state);
+      case ChatMenuAction.delete:
+        if (menu != null && await menu.onDelete() && mounted) {
+          Navigator.of(context).pop();
+        }
+    }
+  }
+
+  Future<void> _showInfo(ChatState state) async {
+    final id = _chat.conversationId;
+    final summary = id == null
+        ? null
+        : (await widget.backend.conversation(id)).valueOrNull;
+    if (!mounted) return;
+    final used = state.context;
+    await showSessionInfo(
+      context,
+      SessionInfo(
+        title: state.title ?? 'New conversation',
+        profile: summary?.profile ?? 'default',
+        model: state.model,
+        lastActive: summary?.startedAt,
+        // 0 is what an unread count looks like: leave the row out instead.
+        messages: summary != null && summary.messageCount > 0
+            ? summary.messageCount
+            : null,
+        contextPercent: used?.percent,
+        contextUsed: used?.used,
+        contextMax: used?.max,
+        sessionId: id,
+      ),
+    );
+  }
+
+  Future<void> _export(ChatState state) async {
+    _toast('Export is coming in this phase');
   }
 
   int? _dividerAfter(List<TranscriptItem> items, BranchRecord? record) {
@@ -447,6 +547,7 @@ class _ChatScreenState extends State<ChatScreen> {
         connecting: state.phase == ChatPhase.loading,
         branch: widget.branch,
         onOpenParent: widget.branch == null ? null : _openParent,
+        onMenu: () => unawaited(_openMenu(state)),
       ),
       body: _body(context, state),
       footer: Column(
@@ -752,6 +853,7 @@ class _ChatHeader extends StatelessWidget {
     required this.connecting,
     this.branch,
     this.onOpenParent,
+    this.onMenu,
   });
 
   final String title;
@@ -763,6 +865,7 @@ class _ChatHeader extends StatelessWidget {
   /// Where this chat was branched from, shown under the title.
   final BranchRecord? branch;
   final VoidCallback? onOpenParent;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -822,6 +925,14 @@ class _ChatHeader extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onMenu != null) ...[
+                const SizedBox(width: IrisSpace.sm),
+                IrisCircleButton(
+                  icon: Icons.more_horiz,
+                  semanticLabel: 'More',
+                  onPressed: onMenu,
+                ),
+              ],
             ],
           ),
           if (branch case final record?)

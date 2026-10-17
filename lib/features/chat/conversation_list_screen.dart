@@ -223,6 +223,7 @@ class _ConversationListScreenState
                   : ref.read(branchRecordProvider(conversation.id))),
           onBranched: (childId, record) =>
               ref.read(branchRecordsProvider).save(childId, record),
+          menu: conversation == null ? null : _menuHooks(chat, conversation),
         ),
       ),
     );
@@ -238,6 +239,47 @@ class _ConversationListScreenState
         ..invalidate(usageOptionsProvider);
     });
   }
+
+  /// What the chat's ⋯ menu asks home to do: pin, archive and delete are the
+  /// list's business, so the chat calls back instead of knowing how.
+  ChatMenuHooks _menuHooks(
+    ChatBackend chat,
+    ConversationSummary conversation,
+  ) => ChatMenuHooks(
+    isPinned: () => ref.read(pinsProvider).contains(conversation.id),
+    onTogglePin: () => ref.read(pinsProvider.notifier).toggle(conversation.id),
+    onArchive: () async {
+      final result = await chat.setArchived(conversation.id, archived: true);
+      if (result is Err) return false;
+      ref.read(pinsProvider.notifier).unpin(conversation.id);
+      return true;
+    },
+    onDelete: () async {
+      final title = _titles[conversation.id] ?? conversation.title;
+      if (!mounted || !await showDeleteSheet(context, title)) return false;
+      if (!mounted) return false;
+      final replying = ref.read(liveChatsProvider).value ?? const {};
+      if (replying.containsKey(conversation.id)) {
+        showIrisToast(
+          context,
+          message: 'Stop the reply before deleting this chat.',
+        );
+        return false;
+      }
+      final result = await chat.delete(conversation.id);
+      if (!mounted) return false;
+      if (result case Err(:final failure)) {
+        showIrisToast(
+          context,
+          message: 'Could not delete: ${ChatController.describe(failure)}',
+        );
+        return false;
+      }
+      ref.read(pinsProvider.notifier).unpin(conversation.id);
+      ref.read(branchRecordsProvider).forget(conversation.id);
+      return true;
+    },
+  );
 
   Future<void> _actions(
     ChatBackend chat,

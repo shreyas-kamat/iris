@@ -457,6 +457,46 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
+  /// Summarises the conversation to free context. Needs a live, idle chat.
+  Future<void> compress() async {
+    final runtimeId = _runtimeId;
+    void say(String message) => onToast?.call(message);
+    if (runtimeId == null) {
+      say('Nothing to compress yet');
+      return;
+    }
+    if (value.running) {
+      say('Stop the reply first to compress.');
+      return;
+    }
+    switch (await _backend.compress(runtimeId)) {
+      case Err(:final failure):
+        if (_disposed) return;
+        say(
+          (failure.rpcError?.isMethodNotFound ?? false)
+              ? "Compress isn't supported on this server."
+              : 'Could not compress: ${describe(failure)}',
+        );
+      case Ok():
+        if (!_disposed) say('Compressed');
+    }
+  }
+
+  /// Renames the conversation. The title changes at once and changes back,
+  /// with a toast, if Hermes refuses.
+  Future<void> rename(String title) async {
+    final id = _storedId;
+    if (id == null) return;
+    final previous = value.title;
+    _update(value.copyWith(title: title));
+    final result = await _backend.rename(id, title);
+    if (_disposed) return;
+    if (result case Err(:final failure)) {
+      _update(value.copyWith(title: previous, clearTitle: previous == null));
+      onToast?.call('Could not rename: ${describe(failure)}');
+    }
+  }
+
   /// False when the prompt did not go, after saying why in the transcript.
   Future<bool> _submit(String runtimeId, String text) async {
     final sent = await _backend.submit(runtimeId, text);
