@@ -117,4 +117,15 @@ void main() {
     ).client.patch('/api/sessions/a', body: {'title': 'New'});
     expect(result.valueOrNull?['ok'].boolean(), isTrue);
   });
+
+  test('put sends a JSON body with the PUT verb', () async {
+    http.on('PUT', '/api/cron/jobs/j1', (_) => FakeReply.json({'id': 'j1'}));
+    final result = await connect(
+      'https://h.example',
+    ).client.put('/api/cron/jobs/j1', body: {'enabled': false});
+    expect(result.isOk, isTrue);
+    final request = http.requests.single;
+    expect(request.method, 'PUT');
+    expect(request.data, {'enabled': false});
+  });
 }
