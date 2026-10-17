@@ -23,6 +23,12 @@ All notable changes to Iris are recorded here. The format follows
 - Password-manager prompts (unlock, one-time code, save login) and a connection card for connectors and
   MCP servers.
 - Recent searches, and search results grouped by chat with a match count.
+- Home gets Scheduled and Tasks tabs on servers that have them: list, pause and resume, run now, create, edit and
+  delete cron jobs, with each job's past runs; and the Kanban board by column, with task detail, moving a task and
+  creating one.
+- A ⋯ menu in the chat header: rename, pin, branch, archive, compress, undo, export as Markdown, session info, delete.
+- Create, rename, edit the SOUL of, and delete profiles (Settings → Profiles).
+- Search across every profile from home, with results grouped by profile.
 - "Always load images from this host" in the image card's long-press menu.
 
 ### Changed
