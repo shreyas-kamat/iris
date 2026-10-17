@@ -99,12 +99,19 @@ class _ConversationListScreenState
   void initState() {
     super.initState();
     _search.addListener(_onQuery);
-    _searchFocus.addListener(() {
-      if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
-      // Recent searches show while the empty field has focus.
-      if (mounted) setState(() {});
-    });
+    _searchFocus.addListener(_onSearchFocus);
     _scroll.addListener(_onScroll);
+  }
+
+  /// Recent searches show while the empty field has focus. Closing search
+  /// puts the scope back, so the next search starts narrow.
+  void _onSearchFocus() {
+    if (!mounted) return;
+    if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
+    if (!_searchFocus.hasFocus && _search.text.trim().isEmpty) {
+      ref.read(searchScopeProvider.notifier).select(SearchScope.here);
+    }
+    setState(() {});
   }
 
   void _onScroll() {
@@ -448,6 +455,40 @@ class _ConversationListScreenState
     if (!listed) ref.invalidate(conversationsProvider);
   }
 
+  /// Set while a tapped hit is switching profile, so a second tap cannot
+  /// start another switch underneath it.
+  bool _switchingProfile = false;
+
+  /// Opens a search hit. A hit under another profile switches to that profile
+  /// first, and opens through the backend that profile's switch builds: the old
+  /// backend belongs to the profile being left.
+  Future<void> _openHit(
+    ChatBackend current,
+    SearchHit hit,
+    ConversationSummary conversation,
+  ) async {
+    if (_switchingProfile) return;
+    final target = hit.profile;
+    if (target == null || target == ref.read(activeProfileProvider)) {
+      await _open(current, conversation: conversation);
+      return;
+    }
+    _switchingProfile = true;
+    final ChatBackend? next;
+    try {
+      ref.read(activeProfileProvider.notifier).select(target);
+      next = await ref.read(activeChatProvider.future);
+    } finally {
+      _switchingProfile = false;
+    }
+    // The profile may have moved on while the backend was built (it was
+    // deleted, or switched again): that backend is already being let go.
+    if (!mounted || next == null) return;
+    if (ref.read(activeProfileProvider) != target) return;
+    _search.clear();
+    await _open(next, conversation: conversation);
+  }
+
   Future<void> _openArchived(ChatBackend chat) async {
     await Navigator.of(context).push(
       IrisPageRoute<void>(
@@ -482,12 +523,23 @@ class _ConversationListScreenState
     // A search that found something is worth finding again; one that found
     // nothing is not.
     final settled = _serverQuery;
+    final scope = ref.watch(searchScopeProvider);
+    final profiles =
+        ref.watch(profilesProvider).value ?? const <AgentProfile>[];
+    final across = scope == SearchScope.all && profiles.length > 1;
     if (settled.isNotEmpty) {
       ref.listen(conversationSearchProvider(settled), (_, next) {
         if (next case AsyncData(:final value) when value.isNotEmpty) {
           ref.read(recentSearchesProvider.notifier).add(settled);
         }
       });
+      if (across) {
+        ref.listen(crossProfileSearchProvider(settled), (_, next) {
+          if (next case AsyncData(:final value) when value.isNotEmpty) {
+            ref.read(recentSearchesProvider.notifier).add(settled);
+          }
+        });
+      }
     }
     // A refreshed first page starts the list over.
     ref.listen(conversationsProvider, (_, next) {
@@ -507,8 +559,6 @@ class _ConversationListScreenState
     final pinnedIds = ref.watch(pinsProvider);
     final replying =
         ref.watch(liveChatsProvider).value ?? const <String, LiveStatus>{};
-    final profiles =
-        ref.watch(profilesProvider).value ?? const <AgentProfile>[];
     final profile = ref.watch(activeProfileProvider);
     final tabs = ref.watch(homeTabsProvider);
     final tab = ref.watch(visibleHomeTabProvider);
@@ -578,7 +628,13 @@ class _ConversationListScreenState
         searchFocus: _searchFocus,
         serverHits: _serverQuery.isEmpty
             ? null
-            : ref.watch(conversationSearchProvider(_serverQuery)),
+            : (across
+                  ? ref.watch(crossProfileSearchProvider(_serverQuery))
+                  : ref.watch(conversationSearchProvider(_serverQuery))),
+        scope: scope,
+        onScope: ref.read(searchScopeProvider.notifier).select,
+        profileNames: [for (final p in profiles) p.name],
+        currentProfile: profile,
         recent: ref.watch(recentSearchesProvider),
         onRecent: (query) => _search.text = query,
         onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
@@ -592,6 +648,10 @@ class _ConversationListScreenState
             ? null
             : (conversation) =>
                   unawaited(_open(chat, conversation: conversation)),
+        onOpenHit: chat == null
+            ? null
+            : (hit, conversation) =>
+                  unawaited(_openHit(chat, hit, conversation)),
         onMore: chat == null
             ? null
             : (offset) => unawaited(_loadMore(chat, offset)),
@@ -1136,6 +1196,11 @@ class _ConversationList extends StatelessWidget {
     required this.search,
     required this.searchFocus,
     required this.serverHits,
+    required this.scope,
+    required this.onScope,
+    required this.profileNames,
+    required this.currentProfile,
+    required this.onOpenHit,
     required this.recent,
     required this.onRecent,
     required this.onClearRecent,
@@ -1173,6 +1238,21 @@ class _ConversationList extends StatelessWidget {
 
   /// The server's answer to the settled query; null when none is active.
   final AsyncValue<List<SearchHit>>? serverHits;
+
+  /// What the search covers: this profile, or every profile.
+  final SearchScope scope;
+  final ValueChanged<SearchScope> onScope;
+
+  /// Every profile on the server, by name; the scope is a choice only when
+  /// there is more than one.
+  final List<String> profileNames;
+
+  /// The profile the list belongs to.
+  final String currentProfile;
+
+  /// Opens a search hit, switching profile first when it is under another.
+  final void Function(SearchHit hit, ConversationSummary conversation)?
+  onOpenHit;
 
   /// The last searches on this server, newest first.
   final List<String> recent;
@@ -1303,6 +1383,11 @@ class _ConversationList extends StatelessWidget {
           searching: serverHits?.isLoading ?? false,
         ),
       ),
+      if (profileNames.length > 1 && (searchFocus.hasFocus || searching))
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.sm),
+          child: SearchScopeBar(scope: scope, onChanged: onScope),
+        ),
       if (searching)
         ..._searchItems(context, gutter, list, open)
       else if (recent.isNotEmpty || searchFocus.hasFocus)
@@ -1457,45 +1542,7 @@ class _ConversationList extends StatelessWidget {
                 ),
               ),
           ]
-        : <Widget>[
-            for (final (index, found) in shown.indexed)
-              Builder(
-                key: ValueKey('hit-${found.storedId}'),
-                builder: (context) {
-                  final title = titles[found.storedId] ?? found.title;
-                  return Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      gutter,
-                      0,
-                      gutter,
-                      IrisSpace.xs,
-                    ),
-                    child: SearchHitRow(
-                      query: search.text,
-                      now: now,
-                      best: index == 0,
-                      pinned: pins.contains(found.storedId),
-                      hit: SearchHit(
-                        storedId: found.storedId,
-                        title: title,
-                        snippet: found.snippet,
-                        lastActive: found.lastActive,
-                        messageCount: found.messageCount,
-                        matches: found.matches,
-                      ),
-                      onTap: open == null
-                          ? null
-                          : () => open(
-                              ConversationSummary(
-                                id: found.storedId,
-                                title: title,
-                              ),
-                            ),
-                    ),
-                  );
-                },
-              ),
-          ];
+        : _hitRows(context, gutter, shown);
     final settled = hits != null || failed;
     final matches = shown.fold<int>(0, (sum, hit) => sum + hit.matches);
     return [
@@ -1537,6 +1584,23 @@ class _ConversationList extends StatelessWidget {
           children: rows,
         ),
       ),
+      if (hits != null && profileNames.length > 1)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            IrisSpace.sm,
+            gutter,
+            IrisSpace.sm,
+          ),
+          child: Text(
+            scope == SearchScope.all
+                ? 'Searched ${profileNames.join(', ')}.'
+                : 'Searching $currentProfile only. Switch to All profiles to '
+                      'include '
+                      '${profileNames.where((n) => n != currentProfile).join(', ')}.',
+            style: type.caption.copyWith(color: palette.inkFaint),
+          ),
+        ),
       if (rows.isEmpty && (settled || local.isEmpty))
         Padding(
           padding: const EdgeInsets.symmetric(vertical: IrisSpace.xl),
@@ -1563,6 +1627,76 @@ class _ConversationList extends StatelessWidget {
           ),
         ),
     ];
+  }
+
+  /// One row per hit, with a profile heading before each profile's first hit
+  /// when the search covers every profile.
+  List<Widget> _hitRows(
+    BuildContext context,
+    double gutter,
+    List<SearchHit> shown,
+  ) {
+    final palette = context.palette;
+    final rows = <Widget>[];
+    String? lastProfile;
+    for (final (index, found) in shown.indexed) {
+      if (scope == SearchScope.all &&
+          found.profile != null &&
+          found.profile != lastProfile) {
+        rows.add(
+          Padding(
+            key: ValueKey('heading-${found.profile}'),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              IrisSpace.md,
+              gutter,
+              IrisSpace.xs,
+            ),
+            // Its own node, so a screen reader hears it as a heading rather
+            // than run into the hit before it.
+            child: Semantics(
+              container: true,
+              header: true,
+              child: IrisLabel(found.profile!, color: palette.inkFaint),
+            ),
+          ),
+        );
+      }
+      lastProfile = found.profile;
+      final title = titles[found.storedId] ?? found.title;
+      rows.add(
+        Padding(
+          key: ValueKey('hit-${found.profile}-${found.storedId}'),
+          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+          child: SearchHitRow(
+            query: search.text,
+            now: now,
+            best: index == 0,
+            pinned: pins.contains(found.storedId),
+            hit: SearchHit(
+              storedId: found.storedId,
+              title: title,
+              snippet: found.snippet,
+              lastActive: found.lastActive,
+              messageCount: found.messageCount,
+              matches: found.matches,
+              profile: found.profile,
+            ),
+            onTap: onOpenHit == null
+                ? null
+                : () => onOpenHit!(
+                    found,
+                    ConversationSummary(
+                      id: found.storedId,
+                      title: title,
+                      profile: found.profile,
+                    ),
+                  ),
+          ),
+        ),
+      );
+    }
+    return rows;
   }
 
   /// Floating bar height plus the fade above it, so the last row clears it.

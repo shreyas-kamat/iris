@@ -612,6 +612,7 @@ final class SearchHit {
     this.archived = false,
     this.messageCount = 0,
     this.matches = 1,
+    this.profile,
   });
 
   final String storedId;
@@ -625,6 +626,20 @@ final class SearchHit {
   final DateTime? lastActive;
   final bool archived;
   final int messageCount;
+
+  /// The profile the conversation belongs to, when the search covered several.
+  final String? profile;
+
+  SearchHit withProfile(String profile) => SearchHit(
+    storedId: storedId,
+    title: title,
+    snippet: snippet,
+    lastActive: lastActive,
+    archived: archived,
+    messageCount: messageCount,
+    matches: matches,
+    profile: profile,
+  );
 }
 
 /// What became of a steer.

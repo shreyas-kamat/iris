@@ -23,6 +23,7 @@ import 'chat_event.dart';
 import 'chat_models.dart';
 import 'connection_models.dart';
 import 'history_parser.dart';
+import 'search_merge.dart';
 import 'usage_parser.dart';
 
 /// Where a page of stored history starts, in the server's own terms.
@@ -217,6 +218,13 @@ abstract interface class ChatBackend {
 
   /// This profile's conversations matching [query], one hit per conversation.
   Future<Result<List<SearchHit>>> search(String query);
+
+  /// A search across [profiles], hits labelled by profile and merged. Fails
+  /// only when every profile's search fails.
+  Future<Result<List<SearchHit>>> searchAcross(
+    String query,
+    List<String> profiles,
+  );
 
   /// What was said in [wav] (16 kHz mono WAV), by Hermes' speech-to-text.
   /// Empty when it heard nothing worth sending.
@@ -941,6 +949,29 @@ final class DashboardChat implements ChatBackend {
         // reads the gateway's launch profile, whatever is on screen.
         query: {'q': query, 'limit': searchLimit, 'profile': profile},
       )).map(UsageParser.searchHits);
+
+  @override
+  Future<Result<List<SearchHit>>> searchAcross(
+    String query,
+    List<String> profiles,
+  ) async {
+    final results = await Future.wait([
+      for (final name in profiles)
+        _session.connection.client
+            .get(
+              '/api/sessions/search',
+              query: {'q': query, 'limit': searchLimit, 'profile': name},
+            )
+            .then((result) => (name, result.map(UsageParser.searchHits))),
+    ]);
+    final byProfile = <String, List<SearchHit>>{
+      for (final (name, result) in results) name: ?result.valueOrNull,
+    };
+    if (byProfile.isEmpty && results.isNotEmpty) {
+      return Err(results.first.$2.failureOrNull!);
+    }
+    return Ok(mergeProfileHits(byProfile));
+  }
 
   Future<void> dispose() async {
     await _eventSubscription.cancel();
