@@ -125,7 +125,12 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     ref.watch(profilesProvider);
     return IrisScaffold(
       header: Padding(
-        padding: EdgeInsets.fromLTRB(gutter, IrisSpace.sm, gutter, IrisSpace.sm),
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          IrisSpace.sm,
+          gutter,
+          IrisSpace.sm,
+        ),
         child: Row(
           children: [
             IrisButton(
@@ -150,7 +155,12 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
         ),
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(gutter, IrisSpace.lg, gutter, IrisSpace.xxl),
+        padding: EdgeInsets.fromLTRB(
+          gutter,
+          IrisSpace.lg,
+          gutter,
+          IrisSpace.xxl,
+        ),
         children: [
           IrisField(
             label: 'Title',

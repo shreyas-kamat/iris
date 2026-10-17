@@ -43,9 +43,9 @@ Future<String?> showMoveSheet(
                         : null,
                     onTap: locked
                         ? null
-                        : () => Navigator.of(sheetContext).pop(
-                            current ? null : id,
-                          ),
+                        : () => Navigator.of(
+                            sheetContext,
+                          ).pop(current ? null : id),
                   ),
                 );
               },

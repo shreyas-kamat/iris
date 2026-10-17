@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/failure.dart';
 import '../core/result.dart';
 import '../data/automation/cron_models.dart';
 import '../data/automation/cron_repository.dart';
@@ -204,3 +205,16 @@ class TaskMoveOverrides extends Notifier<Map<String, String>> {
 
   void clear(String id) => state = {...state}..remove(id);
 }
+
+/// One task with its comments, runs and links.
+final kanbanTaskDetailProvider = FutureProvider.autoDispose
+    .family<KanbanTaskDetail, String>((ref, id) async {
+      final repository = await ref.watch(kanbanRepositoryProvider.future);
+      if (repository == null) {
+        throw const IrisFailure(FailureKind.notFound);
+      }
+      return switch (await repository.task(id)) {
+        Ok(:final value) => value,
+        Err(:final failure) => throw failure,
+      };
+    });
