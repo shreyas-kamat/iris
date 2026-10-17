@@ -16,7 +16,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 6 | Move sheet and New task form | S1 | Sonnet | done | 4a4636d |
 | 7 | Board, task cards, task detail | S1 | Sonnet | done | 4572ff3 |
 | 8 | Home tab host | S1 | Sonnet | done | 665b3a9 |
-| 9 | ⋯ menu and Session info | S1 | Sonnet | todo | |
+| 9 | ⋯ menu and Session info | S1 | Sonnet | done | 6cc2dca |
 | 10 | Export as Markdown | S1 | Sonnet | todo | |
 | 11 | Profiles | S1 | Sonnet | todo | |
 | 12 | Cross-profile search | S2 | Opus | todo | |
@@ -97,3 +97,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: none in behaviour. The `NotificationListener` block was moved into a local `sessions` by script and `dart format` re-indented it, so the diff of `conversation_list_screen.dart` is larger than the logic change.
 - Decisions for later tasks: with tabs, the hero is not built and `_HomeBar` gets a fixed `collapse` of 1 (compact link shown). A server with no extra tab takes the unchanged old path.
 - Next: Task 9, Step 1
+
+### Task 9 — ⋯ menu and Session info — done — 2026-10-17 — Sonnet 5.5
+- Commits: 6cc2dca feat(phase7): the chat menu and session info (export lands next)
+- Verified: controller tests failed to compile first (`compress`/`rename` undefined), then 81 passed; menu and session-info tests failed to compile first, then 14 passed; `chat_menu_flow_test` 5 passed. Whole suite: 1098 passed, 7 skipped. `flutter analyze` no issues.
+- Deviations: (1) Real bug in the plan's `rename`: with no previous title (null) a refused rename left the new title on screen. `ChatState.copyWith` gained `clearTitle` so the rollback can restore null. (2) The ⋯ button changes every chat header, so 16 existing goldens changed (14 `screen_chat_*`, 2 `screen_demo_chat_*`); I looked at the diff image (only the new circular button at the header's right and a small title shift) and regenerated them with `--update-goldens` on those two test files; they are in this commit. (3) Session info leaves the Messages row out when the conversation reports 0 (the summary default), rather than showing "0". (4) `_menuHooks` in home matches the long-press delete: no delete while the chat is replying, `Could not delete` toast. (5) The Delete flow test uses a tall surface (the last row is below a 600 pt viewport; the real sheet scrolls). (6) Reformatted new files with `dart format` but restored an accidental reformat of existing code in `chat_controller_test.dart` (the block is appended unformatted-as-plan).
+- Decisions for later tasks: Export is a toast stub (`_export` in `chat_screen.dart`: "Export is coming in this phase"); Task 10 replaces it. The `connect_screen_test` failed twice in one full-suite run under load and passed alone and in the next full run (flaky, unrelated).
+- Next: Task 10, Step 1
