@@ -35,6 +35,7 @@ import '../chat/chat_controller.dart';
 import '../chat/links.dart';
 import '../chat/profile_picker.dart';
 import '../home/link_status_screen.dart';
+import '../profiles/profiles_screen.dart';
 import '../servers/server_switcher.dart';
 import 'usage_settings_screen.dart';
 
@@ -126,6 +127,20 @@ class SettingsScreen extends ConsumerWidget {
                       ? () => unawaited(showProfilePicker(context, ref))
                       : null,
                 ),
+                if (profiles.isNotEmpty &&
+                    capabilities.has(ServerCapability.profiles))
+                  IrisSettingsRow(
+                    label: 'Profiles',
+                    sub: 'Create, rename, edit and delete',
+                    value: '${profiles.length}',
+                    onTap: () => unawaited(
+                      Navigator.of(context).push(
+                        IrisPageRoute<void>(
+                          builder: (_) => const ProfilesScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
                 IrisSettingsRow(
                   label: 'Default model',
                   value: activeProfile?.model ?? '—',

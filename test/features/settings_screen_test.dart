@@ -206,4 +206,27 @@ void main() {
     expect(find.text('Queue'), findsOneWidget);
     expect(find.textContaining('Could not change'), findsOneWidget);
   });
+
+  testWidgets('Profiles shows the count and opens the list', (tester) async {
+    await tester.pumpWidget(
+      settings(
+        profiles: const [
+          AgentProfile(name: 'default', isDefault: true, model: 'opus-4.5'),
+          AgentProfile(name: 'ananta', model: 'gpt-6-luna'),
+        ],
+      ),
+    );
+    await settle(tester);
+    await tester.ensureVisible(find.text('Profiles'));
+    expect(find.text('2'), findsOneWidget);
+    await tester.tap(find.text('Profiles'));
+    await tester.pumpAndSettle();
+    expect(find.text('New profile'), findsOneWidget);
+  });
+
+  testWidgets('no Profiles row when the server has no profiles', (tester) async {
+    await tester.pumpWidget(settings());
+    await settle(tester);
+    expect(find.text('Profiles'), findsNothing);
+  });
 }
