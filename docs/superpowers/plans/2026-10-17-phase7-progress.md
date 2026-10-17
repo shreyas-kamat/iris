@@ -12,7 +12,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 2 | Providers, polling and test fakes | S1 | Sonnet | done | 47d850a |
 | 3 | `IrisSegmented` | S1 | Sonnet | done | 27b4f24 |
 | 4 | Job form | S1 | Sonnet | done | 251b2e3 |
-| 5 | Scheduled tab, job detail, delete | S1 | Sonnet | todo | |
+| 5 | Scheduled tab, job detail, delete | S1 | Sonnet | done | 3c74ba8 |
 | 6 | Move sheet and New task form | S1 | Sonnet | todo | |
 | 7 | Board, task cards, task detail | S1 | Sonnet | todo | |
 | 8 | Home tab host | S1 | Sonnet | todo | |
@@ -69,3 +69,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: the plan's `late final String _initial = _signature();` is lazy, so the form's dirty check compared the text with itself and "Discard changes?" never showed. It is now assigned in `initState`. Also removed the unused `chat_models.dart` import, split the `options == null || !mounted` guard (a `use_build_context_synchronously` lint), and dropped a redundant default argument in the test.
 - Decisions for later tasks: `IrisField` now takes `focusNode`. The plan's note about popping the only route did not bite (`themed()` handled it), so no host helper was added.
 - Next: Task 5, Step 1
+
+### Task 5 — Scheduled tab, job detail, delete — done — 2026-10-17 — Sonnet 5.5
+- Commits: 3c74ba8 feat(phase7): the Scheduled tab, job detail and delete
+- Verified: `schedule_text_test` failed to compile first, then 12 passed; `scheduled_test` failed to compile first, then 13 passed after the fixes below; `delete_flow_test` still passes with the new `message` parameter; `flutter analyze` no issues.
+- Deviations: the plan's test fixture had two jobs ('a' and 'e') on the default schedule `0 7 * * *`, so `find.text('0 7 * * *')` found two; 'e' now has `every 5m`. The detail tests use a tall test surface (800x2400) because the detail list builds lazily and the Delete button and Past runs sat off screen. `IrisLabel` uppercases its text, so the "Past runs" and "Last error" finders use `bySemanticsLabel` (the plan's fallback); the "Last error" absence check would otherwise have passed vacuously. Two lint ignores/removals: `avoid_positional_boolean_parameters` on `toggleJob`'s `enabled`, an unused `sheet.dart` import. `dart format` was run on the new test file.
+- Decisions for later tasks: `toggleJob`, `withOverride`, `statusOf`, `statusLine`, `durationText` exist as the plan says. `showDeleteSheet` takes an optional `message`. The `IrisPressable.semanticLabel`, `IrisOrb.glow`, and `clockProvider` the plan hedged on all exist.
+- Next: Task 6, Step 1
