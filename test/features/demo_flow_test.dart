@@ -119,7 +119,7 @@ void main() {
     tester,
   ) async {
     final handle = await enterDemo(tester);
-    await tester.tap(find.textContaining('demo.iris'));
+    await tester.tap(find.bySemanticsLabel(RegExp('^Connection')));
     await settle(tester);
     expect(find.byType(LinkStatusScreen), findsOneWidget);
     await tester.tap(find.text('Demo').last);
@@ -152,6 +152,50 @@ void main() {
     await settle(tester);
     expect(find.text('Unlocked 1Password'), findsOneWidget);
     expect(find.text('1Password is locked'), findsNothing);
+    handle.dispose();
+  });
+
+  testWidgets('the demo has Scheduled and Tasks tabs with data', (
+    tester,
+  ) async {
+    final handle = await enterDemo(tester);
+    expect(find.text('Scheduled'), findsOneWidget);
+    expect(find.text('Tasks'), findsOneWidget);
+
+    await tester.tap(find.text('Scheduled'));
+    await settle(tester);
+    expect(find.text('Morning inbox digest'), findsOneWidget);
+    expect(find.text('Nightly backup to cold storage'), findsOneWidget);
+
+    await tester.tap(find.text('Tasks'));
+    await settle(tester);
+    await tester.tap(find.text('Blocked').first);
+    await settle(tester);
+    expect(find.text('NEEDS INPUT'), findsOneWidget);
+    expect(find.text('CAPABILITY'), findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets('the demo lets you create a profile and see it listed', (
+    tester,
+  ) async {
+    final handle = await enterDemo(tester);
+    await tester.tap(find.bySemanticsLabel('Settings'));
+    await settle(tester);
+    await tester.ensureVisible(find.text('Profiles'));
+    await tester.tap(find.text('Profiles'));
+    await settle(tester);
+    expect(find.text('research'), findsWidgets);
+    await tester.tap(find.text('New profile'));
+    await settle(tester);
+    await tester.enterText(
+      find.byWidgetPredicate((w) => w is IrisField && w.label == 'Name'),
+      'notes',
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(IrisButton, 'Create'));
+    await settle(tester);
+    expect(find.text('notes'), findsWidgets);
     handle.dispose();
   });
 }

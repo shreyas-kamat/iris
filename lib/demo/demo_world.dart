@@ -91,7 +91,47 @@ final class DemoWorld {
 
   Stream<ChatEvent> get events => _events.stream;
 
-  List<AgentProfile> get profiles => demoProfiles;
+  final List<AgentProfile> _profiles = [...demoProfiles];
+  final Map<String, String> _souls = {
+    'default': '# Default\n\nYou are Iris’s demo agent.',
+  };
+
+  List<AgentProfile> get profiles => List.unmodifiable(_profiles);
+
+  String soulOf(String name) => _souls[name] ?? '';
+
+  void setSoul(String name, String soul) => _souls[name] = soul;
+
+  /// A profile made in the demo. [copyFrom] gives it that profile's model.
+  void addProfile(String name, {String? copyFrom, String? soul}) {
+    final source = _profiles.where((p) => p.name == copyFrom).firstOrNull;
+    _profiles.add(
+      AgentProfile(
+        name: name,
+        model: source?.model,
+        provider: source?.provider,
+      ),
+    );
+    if (soul != null && soul.isNotEmpty) _souls[name] = soul;
+  }
+
+  void renameProfile(String name, String next) {
+    final at = _profiles.indexWhere((p) => p.name == name);
+    if (at < 0) return;
+    final old = _profiles[at];
+    _profiles[at] = AgentProfile(
+      name: next,
+      isDefault: old.isDefault,
+      model: old.model,
+      provider: old.provider,
+    );
+    if (_souls.containsKey(name)) _souls[next] = _souls.remove(name)!;
+  }
+
+  void removeProfile(String name) {
+    _profiles.removeWhere((p) => p.name == name && !p.isDefault);
+    _souls.remove(name);
+  }
 
   _Conversation? _find(String storedId) {
     for (final conversation in _conversations) {

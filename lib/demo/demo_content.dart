@@ -23,6 +23,7 @@ const demoProfiles = [
     provider: 'anthropic',
   ),
   AgentProfile(name: 'homelab', model: 'gpt-6.1', provider: 'openai-codex'),
+  AgentProfile(name: 'research', model: 'gpt-5.2', provider: 'openai-codex'),
 ];
 
 const demoCommands = [

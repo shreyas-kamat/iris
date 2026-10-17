@@ -63,10 +63,11 @@ final visibleHomeTabProvider = Provider<HomeTab>((ref) {
   return tabs.contains(picked) ? picked : HomeTab.sessions;
 });
 
-/// Cron jobs for the active profile. Null until the link is live, and in the
-/// demo until Task 13 gives it a repository.
+/// Cron jobs for the active profile. Null until the link is live.
 final cronRepositoryProvider = FutureProvider<CronRepository?>((ref) async {
-  if (ref.watch(demoModeProvider)) return null;
+  if (ref.watch(demoModeProvider)) {
+    return ref.watch(demoAutomationProvider).cron;
+  }
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
   return DashboardCronRepository(
@@ -76,7 +77,9 @@ final cronRepositoryProvider = FutureProvider<CronRepository?>((ref) async {
 });
 
 final kanbanRepositoryProvider = FutureProvider<KanbanRepository?>((ref) async {
-  if (ref.watch(demoModeProvider)) return null;
+  if (ref.watch(demoModeProvider)) {
+    return ref.watch(demoAutomationProvider).kanban;
+  }
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
   return DashboardKanbanRepository(session.connection.client);
@@ -85,7 +88,9 @@ final kanbanRepositoryProvider = FutureProvider<KanbanRepository?>((ref) async {
 final profileRepositoryProvider = FutureProvider<ProfileRepository?>((
   ref,
 ) async {
-  if (ref.watch(demoModeProvider)) return null;
+  if (ref.watch(demoModeProvider)) {
+    return ref.watch(demoAutomationProvider).profiles;
+  }
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
   return DashboardProfileRepository(session.connection.client);
@@ -167,13 +172,12 @@ final cronRunsProvider = FutureProvider.autoDispose
 
 /// Where a job's reply can be sent. A server that cannot say has none, and the
 /// form hides the row.
-final deliveryTargetsProvider = FutureProvider.autoDispose<List<DeliveryTarget>>((
-  ref,
-) async {
-  final repository = await ref.watch(cronRepositoryProvider.future);
-  if (repository == null) return const [];
-  return (await repository.deliveryTargets()).or(const []);
-});
+final deliveryTargetsProvider =
+    FutureProvider.autoDispose<List<DeliveryTarget>>((ref) async {
+      final repository = await ref.watch(cronRepositoryProvider.future);
+      if (repository == null) return const [];
+      return (await repository.deliveryTargets()).or(const []);
+    });
 
 /// A pause or resume that is on screen before the server has answered.
 final cronEnabledOverridesProvider =
