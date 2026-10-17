@@ -163,6 +163,7 @@ class IrisField extends StatefulWidget {
     this.trailing,
     this.autocorrect = true,
     this.enableSuggestions = true,
+    this.focusNode,
     super.key,
   });
 
@@ -170,6 +171,10 @@ class IrisField extends StatefulWidget {
   /// rewrite. A masked field is never corrected, whatever this says.
   final bool autocorrect;
   final bool enableSuggestions;
+
+  /// Owned by the caller when given, so a screen can move focus to the field
+  /// (for example back to the one a server error names).
+  final FocusNode? focusNode;
 
   /// A control at the end of the field, such as a show/hide toggle.
   final Widget? trailing;
@@ -198,7 +203,8 @@ class IrisField extends StatefulWidget {
 }
 
 class _IrisFieldState extends State<IrisField> {
-  late final FocusNode _focus = FocusNode()..addListener(_onFocusChange);
+  FocusNode? _ownedFocus;
+  FocusNode get _focus => widget.focusNode ?? (_ownedFocus ??= FocusNode());
 
   /// Only created when the caller did not supply one, and only disposed if we
   /// created it — disposing a controller the caller owns would break the next
@@ -213,6 +219,7 @@ class _IrisFieldState extends State<IrisField> {
   @override
   void initState() {
     super.initState();
+    _focus.addListener(_onFocusChange);
     // The hint's visibility depends on the text, so the field rebuilds on every
     // keystroke. Cheap here, and it keeps the hint from lingering under typed
     // characters.
@@ -228,9 +235,8 @@ class _IrisFieldState extends State<IrisField> {
   @override
   void dispose() {
     _controller.removeListener(_onTextChange);
-    _focus
-      ..removeListener(_onFocusChange)
-      ..dispose();
+    _focus.removeListener(_onFocusChange);
+    _ownedFocus?.dispose();
     _ownedController?.dispose();
     super.dispose();
   }
