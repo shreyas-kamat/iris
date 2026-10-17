@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/automation_providers.dart';
 import '../../app/device_state.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
@@ -29,6 +30,7 @@ import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/segmented.dart';
 import '../../design/components/sheet.dart';
 import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
@@ -40,7 +42,9 @@ import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import '../home/link_status_screen.dart';
 import '../home/usage_strip.dart';
+import '../scheduled/scheduled_tab.dart';
 import '../settings/settings_screen.dart';
+import '../tasks/tasks_tab.dart';
 import 'archived_screen.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
@@ -83,6 +87,10 @@ class _ConversationListScreenState
   /// hero once it is scrolled far enough away.
   double _heroHeight = 140;
 
+  /// Whether the segmented control is drawn this build. With tabs, the control
+  /// takes the greeting's place, so there is no hero to snap.
+  bool _hasTabs = false;
+
   /// The query the server is asked, settled 200 ms after the last keystroke.
   String _serverQuery = '';
   Timer? _debounce;
@@ -110,6 +118,7 @@ class _ConversationListScreenState
   /// Settles a half-collapsed hero to open or closed, so the bar is never
   /// left between its two forms.
   bool _snap(ScrollEndNotification notification) {
+    if (_hasTabs) return false;
     // Only the list itself: text fields hold scrollables of their own.
     if (notification.depth != 0 || _searchFocus.hasFocus) return false;
     final metrics = notification.metrics;
@@ -459,6 +468,10 @@ class _ConversationListScreenState
     final profiles =
         ref.watch(profilesProvider).value ?? const <AgentProfile>[];
     final profile = ref.watch(activeProfileProvider);
+    final tabs = ref.watch(homeTabsProvider);
+    final tab = ref.watch(visibleHomeTabProvider);
+    final hasTabs = tabs.isNotEmpty;
+    _hasTabs = hasTabs;
     final (linkState, headline, _) = describeLink(link);
     final headlineText = replying.isEmpty
         ? headline
@@ -483,10 +496,78 @@ class _ConversationListScreenState
       });
     }
 
+    final sessions = NotificationListener<ScrollEndNotification>(
+      onNotification: _snap,
+      child: _ConversationList(
+        pins: pinnedIds,
+        live: replying,
+        lifted: _lifted,
+        fetchedPins: _fetchedPins,
+        top: [
+          // Fades as it scrolls under the bar, where the compact link
+          // takes over.
+          if (!hasTabs)
+            ValueListenableBuilder<double>(
+              valueListenable: _collapse,
+              builder: (context, t, child) =>
+                  Opacity(opacity: (1 - t * 1.4).clamp(0.0, 1.0), child: child),
+              child: KeyedSubtree(
+                key: _heroKey,
+                child: _Hero(
+                  orbState: orbState,
+                  linkState: linkState,
+                  headline: headlineText,
+                  host: server == null ? '' : _hostOf(server.baseUrl),
+                  total: conversations.value == null
+                      ? null
+                      : conversations.value!.total - _gone.length,
+                  now: now,
+                  onGateway: openGateway,
+                ),
+              ),
+            ),
+          const UsageStrip(),
+        ],
+        conversations: conversations,
+        more: _more,
+        loadingMore: _loadingMore,
+        scroll: _scroll,
+        search: _search,
+        searchFocus: _searchFocus,
+        serverHits: _serverQuery.isEmpty
+            ? null
+            : ref.watch(conversationSearchProvider(_serverQuery)),
+        recent: ref.watch(recentSearchesProvider),
+        onRecent: (query) => _search.text = query,
+        onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
+        titles: _titles,
+        gone: _gone,
+        onActions: chat == null
+            ? null
+            : (conversation) => unawaited(_actions(chat, conversation)),
+        onArchived: chat == null ? null : () => unawaited(_openArchived(chat)),
+        onOpen: chat == null
+            ? null
+            : (conversation) =>
+                  unawaited(_open(chat, conversation: conversation)),
+        onMore: chat == null
+            ? null
+            : (offset) => unawaited(_loadMore(chat, offset)),
+        onRetry: () => ref.invalidate(conversationsProvider),
+        onRefresh: () async {
+          ref
+            ..invalidate(conversationsProvider)
+            ..invalidate(usageOptionsProvider);
+          await ref.read(conversationsProvider.future);
+        },
+        now: now,
+      ),
+    );
+
     return IrisScaffold(
       header: _HomeBar(
         demo: ref.watch(demoModeProvider),
-        collapse: _collapse,
+        collapse: hasTabs ? const AlwaysStoppedAnimation<double>(1) : _collapse,
         profile: profile,
         // The pill only opens something when there is a choice to make.
         onProfile: profiles.length > 1
@@ -501,87 +582,47 @@ class _ConversationListScreenState
         headline: headline,
         onGateway: openGateway,
       ),
-      body: Stack(
+      body: Column(
         children: [
-          NotificationListener<ScrollEndNotification>(
-            onNotification: _snap,
-            child: _ConversationList(
-              pins: pinnedIds,
-              live: replying,
-              lifted: _lifted,
-              fetchedPins: _fetchedPins,
-              top: [
-                // Fades as it scrolls under the bar, where the compact link
-                // takes over.
-                ValueListenableBuilder<double>(
-                  valueListenable: _collapse,
-                  builder: (context, t, child) => Opacity(
-                    opacity: (1 - t * 1.4).clamp(0.0, 1.0),
-                    child: child,
-                  ),
-                  child: KeyedSubtree(
-                    key: _heroKey,
-                    child: _Hero(
-                      orbState: orbState,
-                      linkState: linkState,
-                      headline: headlineText,
-                      host: server == null ? '' : _hostOf(server.baseUrl),
-                      total: conversations.value == null
-                          ? null
-                          : conversations.value!.total - _gone.length,
-                      now: now,
-                      onGateway: openGateway,
-                    ),
+          if (hasTabs)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.window.gutter,
+                0,
+                context.window.gutter,
+                IrisSpace.sm,
+              ),
+              child: IrisSegmented<HomeTab>(
+                values: tabs,
+                selected: tab,
+                labelOf: (value) => value.label,
+                onChanged: (value) {
+                  unawaited(IrisHaptics.selection());
+                  _searchFocus.unfocus();
+                  ref.read(homeTabProvider.notifier).select(value);
+                },
+              ),
+            ),
+          Expanded(
+            child: Stack(
+              children: [
+                switch (tab) {
+                  HomeTab.sessions => sessions,
+                  HomeTab.scheduled => const ScheduledTab(),
+                  HomeTab.tasks => const TasksTab(),
+                },
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _NewChatBar(
+                    enabled: chat != null && live,
+                    onTap: chat == null || !live
+                        ? null
+                        : () => unawaited(_open(chat)),
                   ),
                 ),
-                const UsageStrip(),
               ],
-              conversations: conversations,
-              more: _more,
-              loadingMore: _loadingMore,
-              scroll: _scroll,
-              search: _search,
-              searchFocus: _searchFocus,
-              serverHits: _serverQuery.isEmpty
-                  ? null
-                  : ref.watch(conversationSearchProvider(_serverQuery)),
-              recent: ref.watch(recentSearchesProvider),
-              onRecent: (query) => _search.text = query,
-              onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
-              titles: _titles,
-              gone: _gone,
-              onActions: chat == null
-                  ? null
-                  : (conversation) => unawaited(_actions(chat, conversation)),
-              onArchived: chat == null
-                  ? null
-                  : () => unawaited(_openArchived(chat)),
-              onOpen: chat == null
-                  ? null
-                  : (conversation) =>
-                        unawaited(_open(chat, conversation: conversation)),
-              onMore: chat == null
-                  ? null
-                  : (offset) => unawaited(_loadMore(chat, offset)),
-              onRetry: () => ref.invalidate(conversationsProvider),
-              onRefresh: () async {
-                ref
-                  ..invalidate(conversationsProvider)
-                  ..invalidate(usageOptionsProvider);
-                await ref.read(conversationsProvider.future);
-              },
-              now: now,
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _NewChatBar(
-              enabled: chat != null && live,
-              onTap: chat == null || !live
-                  ? null
-                  : () => unawaited(_open(chat)),
             ),
           ),
         ],
