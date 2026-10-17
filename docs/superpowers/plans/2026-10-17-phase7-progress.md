@@ -9,7 +9,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 |---|---|---|---|---|---|
 | 0 | Probe the user's server | S1 | Sonnet | done | b18907b |
 | 1 | Data layer: models and three repositories | S1 | Sonnet | done | 07bd709 |
-| 2 | Providers, polling and test fakes | S1 | Sonnet | todo | |
+| 2 | Providers, polling and test fakes | S1 | Sonnet | done | 47d850a |
 | 3 | `IrisSegmented` | S1 | Sonnet | todo | |
 | 4 | Job form | S1 | Sonnet | todo | |
 | 5 | Scheduled tab, job detail, delete | S1 | Sonnet | todo | |
@@ -48,3 +48,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: wrote the tests and code together, so there was no separate see-it-fail run (new files, the tests could not compile before). Added `import '../../core/failure.dart'` to the cron repository, as the plan said. Fixed two `use_null_aware_elements` lints in `kanban_models.dart` (`?name.stringOrNull`, and `?row['id'].stringOrNull: KanbanLink(...)` for the link map), an import-order lint, and an unused import in the cron test.
 - Decisions for later tasks: `KanbanTask.sessionId` reads `session_id`/`stored_session_id` only; the probe found no task to confirm a key. `lib/data/models/cron_job.dart` is deleted.
 - Next: Task 2, Step 1
+
+### Task 2 — Providers, polling and test fakes — done — 2026-10-17 — Sonnet 5.5
+- Commits: 47d850a feat(phase7): providers, polling and test fakes for the new tabs
+- Verified: tests first: `flutter test test/app/automation_providers_test.dart` failed to compile (`deliveryTargetsProvider` undefined); after the providers, 10 passed. `flutter analyze` no issues.
+- Deviations: added `// ignore: avoid_positional_boolean_parameters` on `CronEnabledOverrides.set` (the plan's tests call it positionally); removed the unused `flutter/widgets.dart` import from the test, as the plan allowed.
+- Decisions for later tasks: none.
+- Next: Task 3, Step 1
