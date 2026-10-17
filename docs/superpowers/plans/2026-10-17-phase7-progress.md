@@ -19,7 +19,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 9 | ⋯ menu and Session info | S1 | Sonnet | done | 6cc2dca |
 | 10 | Export as Markdown | S1 | Sonnet | done | 9a686b3 |
 | 11 | Profiles | S1 | Sonnet | done | d586906 |
-| 12 | Cross-profile search | S2 | Opus | todo | |
+| 12 | Cross-profile search | S2 | Opus | done | 286a35e |
 | 13 | Demo data | S3 | Sonnet | todo | |
 | 14 | Goldens, changelog, README | S3 | Sonnet | todo | |
 | 15 | Live write test | S3 | Sonnet | todo | |
@@ -123,3 +123,14 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Tasks 0–11 are done and committed. Next segment: S2, task 12 (cross-profile search), model **Opus**.
 - Open items for later: Task 15 must verify `clone_from`, `clone_all`, `clone_from_default` against the real server (see the probe note); the kanban board was empty, so a task's detail keys and any session-link key are unconfirmed.
 - Next: Task 12, Step 1 (start a new chat on Opus)
+
+### Task 12 — Cross-profile search — done — 2026-10-17 — Opus 5.5
+- Commits: 286a35e feat(phase7): search across profiles from home
+- Verified: `search_merge_test` failed to compile first, then 4 passed; `chat_backend_test` + `search_merge_test` 65 passed (3 new `searchAcross` tests); `cross_profile_search_test` failed first (6 of 7: no scope bar), then 8 passed after the fixes below; with `conversation_list_screen_test` and `home_tabs_test` 58 passed; whole suite 1142 passed, 7 skipped (after the golden update below); `flutter analyze` no issues.
+- Deviations: (1) The plan's test had `home(profiles: const [two.first])`, which does not compile (not a constant); `const` dropped. (2) Real a11y gap: the profile heading's label merged into the neighbouring semantics node, so `bySemanticsLabel('default')` found nothing and a screen reader would hear it run into the next row; the heading is now `Semantics(container: true, header: true, ...)`. (3) Added a guard the plan did not have, for Review Focus 6: while a tapped hit is switching profile, another hit tap is ignored (`_switchingProfile`), and if the active profile is no longer the target when the new backend resolves, nothing opens. New test "a second hit tapped while a profile switch builds is ignored" (tall surface: the second hit sat under the floating new-chat bar at 600 pt, so the first version of the test tapped nothing); it fails without the guard (ends on `default`) and passes with it. (4) The scope bar and the "Searching default only…" note change the home-search goldens: `screen_home_usage_search_dark.png` and `_light.png`; I checked the images (only the new bar and note) and regenerated them in this commit. (5) `use_null_aware_elements` lint: `name: ?result.valueOrNull` in `searchAcross`; dates in the new tests moved off day 1 (a redundant-argument lint). (6) The focus listener became `_onSearchFocus` with a `mounted` check at the top (it reads `ref`).
+- Decisions for later tasks: `DemoChatBackend.searchAcross` merges `_world.search(name, query)` per profile, so Task 13's demo data needs hits in more than one profile for the demo to show the grouping. `SearchHit.profile` is only set by `searchAcross`; single-profile hits stay null.
+- Next: Task 13, Step 1 (segment S3, Sonnet)
+
+### Segment S2 complete — 2026-10-17 — Opus 5.5
+- Task 12 is done and committed. Next segment: S3, tasks 13–16, model **Sonnet** (the current model, Opus, is higher; the run book says stop and ask once).
+- Next: Task 13, Step 1
