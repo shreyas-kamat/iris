@@ -17,7 +17,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 7 | Board, task cards, task detail | S1 | Sonnet | done | 4572ff3 |
 | 8 | Home tab host | S1 | Sonnet | done | 665b3a9 |
 | 9 | ⋯ menu and Session info | S1 | Sonnet | done | 6cc2dca |
-| 10 | Export as Markdown | S1 | Sonnet | todo | |
+| 10 | Export as Markdown | S1 | Sonnet | done | 9a686b3 |
 | 11 | Profiles | S1 | Sonnet | todo | |
 | 12 | Cross-profile search | S2 | Opus | todo | |
 | 13 | Demo data | S3 | Sonnet | todo | |
@@ -104,3 +104,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: (1) Real bug in the plan's `rename`: with no previous title (null) a refused rename left the new title on screen. `ChatState.copyWith` gained `clearTitle` so the rollback can restore null. (2) The ⋯ button changes every chat header, so 16 existing goldens changed (14 `screen_chat_*`, 2 `screen_demo_chat_*`); I looked at the diff image (only the new circular button at the header's right and a small title shift) and regenerated them with `--update-goldens` on those two test files; they are in this commit. (3) Session info leaves the Messages row out when the conversation reports 0 (the summary default), rather than showing "0". (4) `_menuHooks` in home matches the long-press delete: no delete while the chat is replying, `Could not delete` toast. (5) The Delete flow test uses a tall surface (the last row is below a 600 pt viewport; the real sheet scrolls). (6) Reformatted new files with `dart format` but restored an accidental reformat of existing code in `chat_controller_test.dart` (the block is appended unformatted-as-plan).
 - Decisions for later tasks: Export is a toast stub (`_export` in `chat_screen.dart`: "Export is coming in this phase"); Task 10 replaces it. The `connect_screen_test` failed twice in one full-suite run under load and passed alone and in the next full run (flaky, unrelated).
 - Next: Task 10, Step 1
+
+### Task 10 — Export as Markdown — done — 2026-10-17 — Sonnet 5.5
+- Commits: 9a686b3 feat(phase7): export a conversation as Markdown
+- Verified: `chat_export_test` failed to compile first, then 9 passed; `fullTranscript` tests failed to compile first, then (after one test fix below) the controller file passed 83; `chat_menu_flow_test` + `chat_export_test` 15 passed; whole suite 1110 passed, 7 skipped; `flutter analyze` no issues. The `share_plus` call (`SharePlus.instance.share(ShareParams(...))`) compiled as written against 13.3.1.
+- Deviations: (1) `flutter pub add share_plus` wrote `^13.3.1`; the other dependencies are pinned exactly, so it is pinned `13.3.1`. (2) `flutter pub get` regenerated the macOS and Windows plugin registrants (tracked, adding only `share_plus`); they are committed here so the tree stays clean. (3) The "stops when an earlier page fails" test: the failed page leaves a plain "Could not load earlier messages" notice in the transcript, so the test compares only the `UserTurn` ids (the exporter drops plain notices, so the notice never reaches the Markdown). (4) `RegExp(r'[^a-z0-9]+')` became a non-raw string (a lint).
+- Decisions for later tasks: a branched chat opened from `_branch`/`_openParent` keeps `shareMarkdown` but not the menu hooks (as the plan says).
+- Next: Task 11, Step 1
