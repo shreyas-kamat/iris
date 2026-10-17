@@ -7,7 +7,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 
 | Task | Title | Segment | Model | Status | Last commit |
 |---|---|---|---|---|---|
-| 0 | Probe the user's server | S1 | Sonnet | todo | |
+| 0 | Probe the user's server | S1 | Sonnet | done | b18907b |
 | 1 | Data layer: models and three repositories | S1 | Sonnet | todo | |
 | 2 | Providers, polling and test fakes | S1 | Sonnet | todo | |
 | 3 | `IrisSegmented` | S1 | Sonnet | todo | |
@@ -34,3 +34,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 ### Setup — 2026-10-17
 - Spec `d5836f9`, plan `0b32963`, run book and this log added on `feat/phase7-tabs` (cut from `main` at `07e8985`).
 - Open items: none. Next: Task 0, Step 1.
+
+### Task 0 — Probe the user's server — done — 2026-10-17 — Sonnet 5.5
+- Commits: b18907b test(phase7): probe which routes the user's server has
+- Verified: `flutter test test/data/api_client_test.dart` 10 passed (put test failed first, as expected); `flutter analyze` on the touched files clean; live probe passed and printed the results in [the probe note](2026-10-17-phase7-probe.md).
+- Deviations: removed the unused `dart:convert` and `rpc_frame.dart` imports from the probe, as the plan allowed for the first; the second was unused too.
+- Decisions for later tasks: every route exists (cron, kanban board/PATCH, profiles, soul). The kanban board was empty, so task detail keys and any session-link key are unknown: parse tolerantly and build no Open session button (Task 7) unless Task 15 finds a key. Hits carry `profile`; unscoped search showed only `default`, so Task 12 stays one search per profile.
+- Next: Task 1, Step 1
