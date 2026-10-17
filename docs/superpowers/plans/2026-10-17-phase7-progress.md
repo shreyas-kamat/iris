@@ -14,7 +14,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 4 | Job form | S1 | Sonnet | done | 251b2e3 |
 | 5 | Scheduled tab, job detail, delete | S1 | Sonnet | done | 3c74ba8 |
 | 6 | Move sheet and New task form | S1 | Sonnet | done | 4a4636d |
-| 7 | Board, task cards, task detail | S1 | Sonnet | todo | |
+| 7 | Board, task cards, task detail | S1 | Sonnet | done | 4572ff3 |
 | 8 | Home tab host | S1 | Sonnet | todo | |
 | 9 | ⋯ menu and Session info | S1 | Sonnet | todo | |
 | 10 | Export as Markdown | S1 | Sonnet | todo | |
@@ -83,3 +83,10 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Deviations: the assignee sheet was empty in the test because `profilesProvider` was only read when the sheet opened (never watched, so not loaded). The form now `ref.watch(profilesProvider)` in `build` so the list is ready before the sheet asks for it.
 - Decisions for later tasks: `showMoveSheet(context, task:, columns:)` returns the column id or null; `TaskFormScreen(initialColumn:)` pops `true` on create and invalidates `kanbanBoardProvider`.
 - Next: Task 7, Step 1
+
+### Task 7 — Board, task cards, task detail — done — 2026-10-17 — Sonnet 5.5
+- Commits: 4572ff3 feat(phase7): the Tasks board, cards and task detail
+- Verified: `tasks_test` failed to compile first; after the screens, 5 of 14 failed, then 14 passed after the fixes below. With `move_sheet_test` and `task_form_test` together, 27 passed. `flutter analyze` no issues.
+- Deviations: (1) Real bug found by the 320 pt test: on a system-set column the header "Running · set by Hermes" label plus the New task button overflowed by 11 pt; the label is now in an `Expanded` so it wraps. (2) The task card's semantic label now includes the block kind ("needs input"), because the card's label hid the chip from screen readers. (3) Tests: the detail tests use a tall surface (the list builds lazily); chips are painted uppercase, so they are found as `NEEDS INPUT`/`DEPENDENCY`; the Move sheet's "Done" is found inside `IrisSheet` (the subtask row also says Done); the "Open session" test tears the first screen down before building the second (the cached detail was reused). (4) The refused-move test now also checks the rollback (the header chip still says Review, not Done). (5) Removed the unused `task_card.dart` import and an unused `type` local, as the plan allowed.
+- Decisions for later tasks: `kanbanTaskDetailProvider` is in `automation_providers.dart`. No Open session button appears unless the task carries `session_id`/`stored_session_id` (the probe could not confirm a key). `TasksTab` and `ScheduledTab` are ready for Task 8's host.
+- Next: Task 8, Step 1
