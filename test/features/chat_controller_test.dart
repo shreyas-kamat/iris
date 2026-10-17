@@ -1309,6 +1309,32 @@ void main() {
       expect(toasts.last, startsWith('Could not rename'));
     });
   });
+
+  test('fullTranscript reads every earlier page, oldest first', () async {
+    backend
+      ..historyResult = const Ok([UserTurn(id: '3', text: 'newest')])
+      ..historyEarlier = const HistoryCursor(offset: 0, fromNewest: false)
+      ..earlierResult = const Ok(
+        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+      );
+    final controller = controllerFor();
+    await controller.open();
+    final all = await controller.fullTranscript();
+    expect(all.map((item) => item.id), ['1', '3']);
+  });
+
+  test('fullTranscript stops when an earlier page fails', () async {
+    backend
+      ..historyResult = const Ok([UserTurn(id: '3', text: 'newest')])
+      ..historyEarlier = const HistoryCursor(offset: 0, fromNewest: false)
+      ..earlierResult = const Err(IrisFailure(FailureKind.server));
+    final controller = controllerFor();
+    await controller.open();
+    final all = await controller.fullTranscript();
+    // The failed page leaves a plain notice in the transcript; the export
+    // drops plain notices, so only the messages are compared.
+    expect(all.whereType<UserTurn>().map((item) => item.id), ['3']);
+  });
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

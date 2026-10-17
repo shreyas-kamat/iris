@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/core/result.dart';
+import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/features/chat/chat_export.dart';
 import 'package:iris/features/chat/chat_screen.dart';
 
 import '../support/fake_chat_backend.dart';
@@ -14,12 +17,14 @@ void main() {
     FakeChatBackend backend, {
     String conversationId = 'stored-1',
     ChatMenuHooks? menu,
+    ShareMarkdown? share,
   }) => themed(
     ChatScreen(
       backend: backend,
       conversationId: conversationId,
       title: 'Heartbeat gaps',
       menu: menu,
+      shareMarkdown: share,
     ),
   );
 
@@ -100,5 +105,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Profile'), findsOneWidget);
     expect(find.text('stored-1'), findsOneWidget);
+  });
+
+  testWidgets('Export shares the whole transcript as Markdown', (tester) async {
+    backend.historyResult = const Ok([
+      UserTurn(id: '1', text: 'hi'),
+      AssistantTurn(id: '2', text: 'hello'),
+    ]);
+    String? name;
+    String? body;
+    await tester.pumpWidget(
+      chatScreen(
+        backend,
+        share: ({required fileName, required title, required markdown}) async {
+          name = fileName;
+          body = markdown;
+        },
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Export as Markdown'));
+    await tester.pumpAndSettle();
+    expect(name, 'heartbeat-gaps.md');
+    expect(body, contains('## You'));
+    expect(body, contains('hi'));
+    expect(body, contains('hello'));
   });
 }

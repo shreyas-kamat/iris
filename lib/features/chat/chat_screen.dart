@@ -27,6 +27,7 @@ import '../../design/tokens/palette.dart';
 import 'attachment_picker.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
+import 'chat_export.dart';
 import 'chat_menu_sheet.dart';
 import 'chat_state.dart';
 import 'composer.dart';
@@ -91,6 +92,7 @@ class ChatScreen extends StatefulWidget {
     this.branch,
     this.onBranched,
     this.menu,
+    this.shareMarkdown,
     super.key,
   });
 
@@ -111,6 +113,10 @@ class ChatScreen extends StatefulWidget {
 
   /// Pin, Archive and Delete from the ⋯ menu; those rows are left out when null.
   final ChatMenuHooks? menu;
+
+  /// Shares the exported transcript. Tests pass a fake; null opens the system
+  /// share sheet.
+  final ShareMarkdown? shareMarkdown;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -234,6 +240,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onBranched: widget.onBranched,
             pickFiles: widget.pickFiles,
             recorder: widget.recorder,
+            shareMarkdown: widget.shareMarkdown,
           ),
         ),
       ),
@@ -275,6 +282,7 @@ class _ChatScreenState extends State<ChatScreen> {
               onBranched: widget.onBranched,
               pickFiles: widget.pickFiles,
               recorder: widget.recorder,
+              shareMarkdown: widget.shareMarkdown,
             ),
           ),
         );
@@ -351,7 +359,19 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _export(ChatState state) async {
-    _toast('Export is coming in this phase');
+    final title = state.title ?? 'Chat';
+    _toast('Preparing…');
+    final items = await _chat.fullTranscript();
+    if (!mounted) return;
+    try {
+      await (widget.shareMarkdown ?? shareMarkdownFile)(
+        fileName: exportFileName(title),
+        title: title,
+        markdown: transcriptMarkdown(title, items),
+      );
+    } on Object {
+      if (mounted) _toast("Couldn't share this chat");
+    }
   }
 
   int? _dividerAfter(List<TranscriptItem> items, BranchRecord? record) {

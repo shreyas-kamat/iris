@@ -231,6 +231,17 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
+  /// Every message of the conversation, oldest first: reads the pages not yet
+  /// loaded. Stops at the first page that fails to load.
+  Future<List<TranscriptItem>> fullTranscript() async {
+    for (var i = 0; i < 200 && !_disposed && value.earlier != null; i++) {
+      final before = value.earlier;
+      await loadEarlier();
+      if (identical(value.earlier, before)) break;
+    }
+    return value.items;
+  }
+
   /// Reads the slash-command catalogue once, the first time it is wanted —
   /// when the person types a slash — rather than with every conversation.
   Future<void> loadCommands() async {
