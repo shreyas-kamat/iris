@@ -20,7 +20,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 10 | Export as Markdown | S1 | Sonnet | done | 9a686b3 |
 | 11 | Profiles | S1 | Sonnet | done | d586906 |
 | 12 | Cross-profile search | S2 | Opus | done | 286a35e |
-| 13 | Demo data | S3 | Sonnet | todo | |
+| 13 | Demo data | S3 | Sonnet | done | 54c5a0f |
 | 14 | Goldens, changelog, README | S3 | Sonnet | todo | |
 | 15 | Live write test | S3 | Sonnet | todo | |
 | 16 | Device pass | S3 | Sonnet | todo | |
@@ -134,3 +134,13 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 ### Segment S2 complete — 2026-10-17 — Opus 5.5
 - Task 12 is done and committed. Next segment: S3, tasks 13–16, model **Sonnet** (the current model, Opus, is higher; the run book says stop and ask once).
 - Next: Task 13, Step 1
+
+### Task 13 — doing — 2026-10-18 — Sonnet 5.5
+- Started on Sonnet 5.5 (S3's model; branch and log agree with git). Next: Step 1.
+
+### Task 13 — Demo data — done — 2026-10-18 — Sonnet 5.5
+- Commits: 54c5a0f feat(phase7): the demo shows jobs, tasks and profiles
+- Verified: `demo_automation_test` failed to compile first (no `DemoAutomation`); after the code, 1 of 10 failed (below), then `flutter test test/demo` 39 passed; `demo_flow_test` 8 passed after the fixes below; `flutter analyze` no issues; `test/demo test/features/demo_flow_test.dart test/app` and the demo golden file 85 passed. Whole suite before the golden update: 2 demo-home goldens failing (plus one knock-on `welcome, light` that passes alone).
+- Deviations: (1) The plan's demo schedule check refused `every 2h` (its own test creates one); the `every` rule now also accepts a short unit (`every 2h`, `every 5m`), while `every blursday` is still refused. (2) The plan's flow test looked for `needs input`/`capability`; chips are painted uppercase (as in Task 7), so it finds `NEEDS INPUT`/`CAPABILITY`. (3) The existing "no server switcher" demo test tapped the hero's `demo.iris` text; with tabs the hero is not built (Task 8), so it taps the compact link by its `Connection…` semantics label. (4) The demo home now shows the Sessions/Scheduled/Tasks control, so `screen_demo_home_dark.png` and `_light.png` changed; I looked at the image (only the new control; the hero's gone as Task 8 intended) and regenerated them in this commit. (5) Removed an unused `result.dart` import and a needless `!` in the plan's test. (6) `dart format` touched unrelated files once; I restored them.
+- Decisions for later tasks: the demo has 3 profiles (default, homelab, research); the demo world's profiles are now mutable per visit. Task 14 should expect the demo home goldens to be already updated.
+- Next: Task 14, Step 1
