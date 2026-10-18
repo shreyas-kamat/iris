@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme_controller.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
+import '../../design/components/iris_voice_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
@@ -30,6 +31,7 @@ class DesignGallery extends ConsumerWidget {
   /// lazily instead of constructing every showcase on first frame.
   static const List<(String, Widget)> _sections = [
     ('Iris orb', _OrbShowcase()),
+    ('Voice orb', _VoiceOrbShowcase()),
     ('Type', _TypeShowcase()),
     ('Palette', _PaletteShowcase()),
     ('Ramp', _RampShowcase()),
@@ -266,6 +268,36 @@ class _OrbShowcase extends StatelessWidget {
             ),
         ],
       ),
+    ],
+  );
+}
+
+/// O1: the voice orb in every mode, at the size a call opens on, and at the
+/// composer's size.
+class _VoiceOrbShowcase extends StatelessWidget {
+  const _VoiceOrbShowcase();
+
+  static String _name(VoiceOrbMode mode) => switch (mode) {
+    VoiceOrbMode.needs => 'Needs you',
+    _ => '${mode.name[0].toUpperCase()}${mode.name.substring(1)}',
+  };
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: IrisSpace.xl,
+    runSpacing: IrisSpace.lg,
+    children: [
+      for (final mode in VoiceOrbMode.values)
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IrisVoiceOrb(mode: mode, size: 96),
+            const SizedBox(height: IrisSpace.sm),
+            IrisLabel(_name(mode), small: true),
+            const SizedBox(height: IrisSpace.xs),
+            IrisVoiceOrb(mode: mode, size: 46),
+          ],
+        ),
     ],
   );
 }
