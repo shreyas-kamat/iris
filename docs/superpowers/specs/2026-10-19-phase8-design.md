@@ -227,8 +227,9 @@ appears in the voice screen; tapping always works and answers through the existi
   `stt.streaming`; GPT-Live shows the input transcript. Iris's words: chained shows the reply sentence by sentence,
   in ink once its audio starts and muted before; GPT-Live shows the output transcript.
 - The voice turns are ordinary turns in the chat. On ending, the chat shows them after a mono "voice · N min" divider and
-  a "call ended m:ss" note (C2). These come from call spans stored on the device (`voice_calls` table: session id,
-  started, ended, first and last message ids).
+  a "call ended m:ss" note (C2). These come from call spans stored on the device as a profile-scoped preference per
+  conversation, the way branch records are (`device_state.dart`): started, ended, and the transcript index the call
+  began at.
 
 ### Data layer
 
@@ -241,7 +242,7 @@ New under `lib/data/voice/`, each returning `Result`, with profile scoping as `C
 | `TranscribeStream` | The live STT socket, when `stt.streaming` |
 | `AudioSockets` | Mints a ticket per socket and adds the Access headers (shared with `DashboardSession`'s dialling) |
 | `VoiceSettings` | Device prefs: conversation default, speaker by default, captions by default |
-| `voice_calls` | Drift table for call spans (a schema version bump with a migration test) |
+| `VoiceCallSpans` | Call spans in preferences, beside `BranchRecords` (no schema change) |
 
 The voice write changes exactly one key: `tts.<provider>.voice` (or `voice_id` for ElevenLabs, xAI, Mistral, MiniMax),
 or `voice.gpt_live.voice`. If the read, the `PUT` or the read-back fails, the picker keeps the old voice and says why.
