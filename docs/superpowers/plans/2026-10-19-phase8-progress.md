@@ -8,7 +8,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | Task | Title | Segment | Model | Status | Last commit |
 |---|---|---|---|---|---|
 | 0 | Extend the probe | S1 | Sonnet | done | d716116 |
-| 1 | Voice capabilities, catalogue, backend, `VoiceSubmit` | S1 | Sonnet | todo | |
+| 1 | Voice capabilities, catalogue, backend, `VoiceSubmit` | S1 | Sonnet | done | e44d562 |
 | 2 | Providers, device prefs and call spans | S1 | Sonnet | todo | |
 | 3 | `IrisVoiceOrb` | S1 | Sonnet | todo | |
 | 4 | Composer: orb, voice button, permission sheets | S1 | Sonnet | todo | |
@@ -72,3 +72,11 @@ the next model.
 - Deviations: added a one-shot speak probe (not in Step 1) to tell a speak-stream `fallback` from a broken TTS; the user fixed the server's STT and TTS between runs.
 - Decisions for later tasks: `include_defaults=false` works but has no `voice` key, so the voice write must create the block; leases exist; `voice_turn` is accepted; speak-stream rate 24000; transcribe-stream is unavailable with `stt.streaming` off (error frame "no live STT for the configured provider").
 - Next: Task 1, Step 1
+
+### Task 1 — Voice capabilities, catalogue, backend, VoiceSubmit — done — 2026-10-19 — Sonnet 5.5
+- Commits: e44d562 feat(phase8): voice capabilities, catalogue and the voice backend
+- Verified: `flutter test test/data/voice_capabilities_test.dart test/data/voice_backend_test.dart test/data/chat_backend_test.dart` → all passed (96); `flutter test test/data test/demo test/app` → `All tests passed!` (419); `flutter analyze` → `No issues found!`
+- Packages: none
+- Deviations: (1) `VoiceSubmit` lives in `lib/data/chat/chat_models.dart`, not a voice file, so chat does not import voice code. (2) The `submit sends voice fields only when set` test is in `chat_backend_test.dart`, where the chat harness is. (3) `DashboardVoice` sends `profile` explicitly on every route, the default profile included (the plan's tests expect `profile=default`), and also on the config `PUT` so a named profile's document is never written to default. (4) `capabilities()` treats only a 404 on live status as chained; another failure there is an `Err`. (5) Added an `IoAudioSocket` loopback test and `FakeVoiceBackend`.
+- Decisions for later tasks: `AudioConnector` is `(Uri, Map<String,String>) -> Future<AudioSocket>`; `IoAudioSocket.connect(uri, headers, {client})` is the default. `FakeAudioSocket` has `serverSends(Map)`, `serverSendsBytes`, `sentJson`, `sentBytes`, `closed`; `FakeVoiceBackend` has settable `*Result` fields, `calls`, `sockets` (queue) and `opened`. The lease name is `iris-voice`; a lease body with `ok: false` is an `Err`. The speak stream's rate on this server is 24000 (Task 0 note). `ChatBackend.submit` sends `voice_turn`/`interrupted`/`surface`/`voice_context` only when set; the retry-without-`voice_turn` rule is Task 7's.
+- Next: Task 2, Step 1
