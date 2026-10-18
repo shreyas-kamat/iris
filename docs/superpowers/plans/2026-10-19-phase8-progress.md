@@ -12,7 +12,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 2 | Providers, device prefs and call spans | S1 | Sonnet | done | bcfa563 |
 | 3 | `IrisVoiceOrb` | S1 | Sonnet | done | 98b5793 |
 | 4 | Composer: orb, voice button, permission sheets | S1 | Sonnet | done | 1ce5787 |
-| 5 | `SpeakStream` and `TranscribeStream` | S1 | Sonnet | todo | |
+| 5 | `SpeakStream` and `TranscribeStream` | S1 | Sonnet | done | e54dd65 |
 | 6 | Audio seams, levels, detectors | S2 | Opus | todo | |
 | 7 | `VoiceCall` and the chained engine | S2 | Opus | todo | |
 | 8 | Preflight | S2 | Opus | todo | |
@@ -104,3 +104,16 @@ the next model.
 - Deviations: (1) The first-run tags and `ensureMicAccess` find the provider container with `maybeProviderContainer(context)` (`lib/app/scope.dart`) and do nothing, answering `granted`, when there is no `ProviderScope` (the existing chat-screen tests have none; the recorder still refuses in its own way). (2) The Send button now always shows in the action slot when the voice button does not, so an empty field without voice mode has a dimmed Send beside the mic (as the plan's "mic still present to its left" implies). (3) 8 chat goldens regenerated here because the composer changed; Task 16 still adds the dedicated ones. (4) `onVoice` on the chat screen only asks for the microphone for now; Task 11 opens the call screen there. (5) The conversation list builds the chat inside a `Consumer` so the voice button appears when the capability read lands.
 - Decisions for later tasks: `Composer` gained `voiceMode`, `onVoice`, `maxRecording`; `ChatScreen` gained `VoiceHost? voice` (`lib/features/voice/voice_host.dart`); `ensureMicAccess(context)` returns `MicAccess.granted|denied`; `micPermissionProvider` / `MicPermission` / `FakeMicPermission` (in `test/support/fake_voice.dart`); `PreferenceKeys.voiceMicAsked`. The recording bar's orb is `IrisVoiceOrb` (46) with mode listening below level .3, hearing at or above. Only `conversation_list_screen` passes a `VoiceHost`; the archived, job and task chat screens have no voice.
 - Next: Task 5, Step 1
+
+### Task 5 — SpeakStream and TranscribeStream — done — 2026-10-19 — Sonnet 5.5
+- Commits: e54dd65 feat(phase8): speak-stream and transcribe-stream protocols
+- Verified: `flutter test test/data/speak_stream_test.dart test/data/transcribe_stream_test.dart` → `All tests passed!` (32); `flutter analyze` → `No issues found!`; full `flutter test` (not live) → `All tests passed!` (1286 passed, 9 skipped).
+- Packages: none
+- Deviations: (1) A speak-stream `error` frame is treated as `SpeakFallback` (not in the plan) so a failed synthesis still gets the reply spoken by one-shot. (2) A `start` frame with no usable `sample_rate` is ignored rather than crashing. (3) `finish()` takes a `timeout` (default 60 s) and answers `FailureKind.timeout`. (4) Extra tests: whitespace deltas are kept, `done` is sent once, nothing is delivered after the end, frames wait for a listener.
+- Decisions for later tasks: `SpeakStream(socket)`: `add(text)`, `done()`, `stop()` (sends stop, closes, `frames` ends with no event), `frames` single-subscription and buffered; the last frame is always `SpeakEnd` or `SpeakFallback` unless `stop()` was called. `TranscribeStream(socket, sampleRate:)` sends `{sample_rate}` on construction; `partials` is a broadcast stream; `finish({timeout})` returns `Err` for an error frame (`server`, with the server's message), a drop (`offline`), a timeout, or a cancel (`cancelled`). On this server `stt.streaming` is off, so the stream answers `error "no live STT for the configured provider"`: a caller must only open it when `VoiceCapabilities.liveTranscription` is true.
+- Next: Task 6, Step 1
+
+### Segment S1 complete — 2026-10-19
+- Tasks 0–5 are done and logged (last commit e54dd65). Branch `feat/phase8-voice`.
+- Next segment: S2 (tasks 6–10), needs **Opus**; first task: Task 6, Audio seams, levels, detectors.
+- Open items for S2/S5: iOS needs `PERMISSION_MICROPHONE=1` in the Podfile when the iOS build is first made (Task 4 note). The server's speak-stream gives 24000 Hz mono, so `AudioOut` must play at the rate in the `start` frame.
