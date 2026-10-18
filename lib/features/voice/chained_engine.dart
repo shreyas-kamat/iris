@@ -22,6 +22,7 @@ import 'audio/audio_out.dart';
 import 'audio/mic_capture.dart';
 import 'barge_in.dart';
 import 'levels.dart';
+import 'preflight.dart';
 import 'speech_detector.dart';
 import 'spoken.dart';
 import 'thinking_sound.dart';
@@ -85,7 +86,9 @@ final class ChainedEngine implements CallEngine {
     required VoiceCapabilities capabilities,
     required MicCapture mic,
     required AudioOut out,
-  }) : _chat = chat,
+    String server = defaultServerName,
+  }) : _server = server,
+       _chat = chat,
        _backend = backend,
        _voice = voice,
        _caps = capabilities,
@@ -113,6 +116,7 @@ final class ChainedEngine implements CallEngine {
   static const _recentWindow = Duration(seconds: 1);
 
   final CallHost _host;
+  final String _server;
   final ChatController _chat;
   final ChatBackend _backend;
   final VoiceBackend _voice;
@@ -177,11 +181,19 @@ final class ChainedEngine implements CallEngine {
   Duration _playbackStart = Duration.zero;
   final _recent = ListQueue<(Duration, double, Uint8List)>();
 
-  /// The checks are Task 8's.
+  /// The leases were taken, and are given back at the end.
+  bool _leased = false;
+
   @override
-  Future<Result<void>> preflight(
-    void Function(PreflightStep step) onStep,
-  ) async => const Ok(null);
+  Future<Result<void>> preflight(void Function(PreflightStep step) onStep) {
+    _leased = true;
+    return chainedPreflight(
+      chat: _chat,
+      voice: _voice,
+      server: _server,
+      onStep: onStep,
+    );
+  }
 
   @override
   Future<void> start() async {
@@ -916,6 +928,11 @@ final class ChainedEngine implements CallEngine {
     if (_phase == _Phase.ended) return;
     _gen++;
     _phase = _Phase.ended;
+    if (_leased) {
+      _leased = false;
+      unawaited(_voice.lease(speech: false, active: false));
+      unawaited(_voice.lease(speech: true, active: false));
+    }
     _turnActive = false;
     unawaited(_events?.cancel());
     unawaited(_outLevel?.cancel());

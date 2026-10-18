@@ -29,6 +29,9 @@ final class FakeAudioSocket implements AudioSocket {
 
   bool closed = false;
 
+  /// Called with each JSON frame the client sends, so a test can answer it.
+  void Function(Map<String, Object?> json)? onJson;
+
   @override
   Stream<AudioFrame> get frames => _incoming.stream;
 
@@ -36,6 +39,21 @@ final class FakeAudioSocket implements AudioSocket {
   void sendJson(Map<String, Object?> json) {
     if (closed) throw StateError('socket closed');
     sentJson.add(json);
+    onJson?.call(json);
+  }
+
+  /// A speak stream that answers `done` as a working server does: a start
+  /// frame and some audio.
+  static FakeAudioSocket speaking() {
+    final socket = FakeAudioSocket();
+    socket.onJson = (json) {
+      if (json['done'] == true) {
+        socket
+          ..serverSends({'type': 'start', 'sample_rate': 24000, 'channels': 1})
+          ..serverSendsBytes(Uint8List.fromList(List.filled(480, 1)));
+      }
+    };
+    return socket;
   }
 
   @override
@@ -111,9 +129,13 @@ final class FakeVoiceBackend implements VoiceBackend {
     return capabilitiesResult;
   }
 
+  /// Held by a test to keep a transcription in flight.
+  Completer<void>? transcribeGate;
+
   @override
   Future<Result<String>> transcribe(Uint8List wav) async {
     calls.add('transcribe');
+    await transcribeGate?.future;
     transcribed.add(wav.length);
     wavs.add(wav);
     if (transcribeQueue.isNotEmpty) return transcribeQueue.removeAt(0);

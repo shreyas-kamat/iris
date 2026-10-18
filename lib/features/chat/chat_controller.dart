@@ -155,18 +155,40 @@ final class ChatController extends ValueNotifier<ChatState> {
         // why sending may not work.
         _update(value.withError(describe(failure)));
       case Ok(value: final resumed):
-        _runtimeId = resumed.runtimeId;
-        var next = value.copyWith(
-          turn: resumed.running ? TurnPhase.thinking : null,
-          model: resumed.model,
-          provider: resumed.provider,
-          context: resumed.context,
-        );
-        for (final event in resumed.pending) {
-          next = next.apply(event);
-        }
-        _update(next);
-        unawaited(_loadBusyMode());
+        _attach(resumed);
+    }
+  }
+
+  void _attach(ResumedConversation resumed) {
+    _runtimeId = resumed.runtimeId;
+    var next = value.copyWith(
+      turn: resumed.running ? TurnPhase.thinking : null,
+      model: resumed.model,
+      provider: resumed.provider,
+      context: resumed.context,
+    );
+    for (final event in resumed.pending) {
+      next = next.apply(event);
+    }
+    _update(next);
+    unawaited(_loadBusyMode());
+  }
+
+  /// Attaches for a call: already live, resumed now, or created for a new
+  /// chat. False when it could not be, after saying why in the transcript.
+  Future<bool> ensureLive() async {
+    if (_runtimeId != null) return true;
+    final storedId = _storedId;
+    if (storedId == null) return await _create() != null;
+    final resumed = await _backend.resume(storedId);
+    if (_disposed) return false;
+    switch (resumed) {
+      case Err(:final failure):
+        _update(value.withError(describe(failure)));
+        return false;
+      case Ok(value: final again):
+        _attach(again);
+        return true;
     }
   }
 

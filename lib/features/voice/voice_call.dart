@@ -16,6 +16,7 @@ import 'audio/audio_out.dart';
 import 'audio/audio_route.dart';
 import 'audio/mic_capture.dart';
 import 'chained_engine.dart';
+import 'preflight.dart';
 
 enum CallMode {
   connecting,
@@ -199,6 +200,7 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     required MicCapture mic,
     required AudioOut out,
     required AudioRoute route,
+    String server = defaultServerName,
     DateTime Function() clock = DateTime.now,
   }) : _backend = backend,
        _route = route,
@@ -223,6 +225,7 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
       capabilities: capabilities,
       mic: mic,
       out: out,
+      server: server,
     );
     _speaker = settings.speaker;
   }

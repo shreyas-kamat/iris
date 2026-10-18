@@ -63,10 +63,21 @@ final class _Rig {
 
   CallMode get mode => call.value.mode;
 
+  /// Opens the chat and starts the call; the preflight passes, and what it
+  /// asked of the voice backend is forgotten so tests see only the call.
   Future<void> begin() async {
     await chat.open();
+    voice.sockets.add(FakeAudioSocket.speaking());
     await call.begin();
     await pumpEventQueue();
+    forgetPreflight();
+  }
+
+  void forgetPreflight() {
+    voice.calls.clear();
+    voice.opened.clear();
+    voice.wavs.clear();
+    voice.transcribed.clear();
   }
 
   /// [ms] of microphone audio at [rms], in 100 ms chunks.
@@ -651,6 +662,7 @@ void main() {
         final rig = _Rig();
         unawaited(rig.begin());
         async.flushMicrotasks();
+        rig.forgetPreflight();
         expect(rig.mode, CallMode.listening);
         rig.chatBackend.linkDown();
         async.elapse(const Duration(seconds: 29));
@@ -716,6 +728,7 @@ void main() {
     test('two starts leave one capture', () async {
       final rig = _Rig();
       await rig.chat.open();
+      rig.voice.sockets.add(FakeAudioSocket.speaking());
       await Future.wait([rig.call.begin(), rig.call.begin()]);
       await pumpEventQueue();
       expect(rig.mic.starts, 1);
@@ -751,6 +764,7 @@ void main() {
         final rig = _Rig(tuning: const VoiceTuning());
         unawaited(rig.begin());
         async.flushMicrotasks();
+        rig.forgetPreflight();
         rig.voice.transcribeResult = const Ok('deploy');
         rig.talk(1000);
         rig.quiet(3000);
