@@ -25,8 +25,8 @@ No keys, transcripts or audio are recorded here.
 
 - `include_defaults=false` supported: **yes**. The voice write must tolerate the `voice` block being absent in it (create it).
 - Leases exist: **yes** (both).
-- Speak-stream sample rate: **not observed**. The server answered `fallback` and sent no audio, so use one-shot speak
-  (`POST /api/audio/speak`) on this server; the `start` rate stays unverified.
+- Speak-stream sample rate: **not observed**. The server answered `fallback` and sent no audio, and one-shot speak also
+  fails (Edge 403), so the `start` rate stays unverified until the server's TTS works.
 - `voice_turn` accepted: **yes**. Task 7 sends it as planned.
 - Live transcribe-stream: unavailable, as expected with `stt.streaming` off.
 
