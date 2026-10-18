@@ -24,7 +24,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 14 | Goldens, changelog, README | S3 | Sonnet | done | 16547bf |
 | 15 | Live write test | S3 | Sonnet | done | ec25e9d |
 | 16 | Device pass | S3 | Sonnet | done | c7045da |
-| 17 | Final review | S4 | Opus | todo | |
+| 17 | Final review | S4 | Opus | done | 2550a4a |
 
 Segments: S1 tasks 0–11 Sonnet · S2 task 12 Opus · S3 tasks 13–16 Sonnet · S4 task 17 Opus.
 Stop at every segment boundary and ask the user to continue in a new chat on the next model.
@@ -182,3 +182,19 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Tasks 13–16 are done and committed. Next segment: S4, task 17 (final review of the whole branch), model **Opus**.
 - Open items for later: the clone options (`clone_from`, `clone_all`, `clone_from_default`) and a Kanban session-link key are unverified on the real server; the real-server device checks, TalkBack and reduced motion were not covered (see the device file); one leftover task `Iris probe 1792277106613` (t_bf4b31ef) is on the server and needs deleting by hand.
 - Next: Task 17, Step 1 (start a new chat on Opus)
+
+### Task 17 — doing — 2026-10-18
+- Started on Opus 5.5 (S4's model; branch and log agree with git). Next: Step 1.
+
+### Task 17 — doing — 2026-10-18
+- Step 1 done: read the spec and `git diff origin/main...HEAD` (local `main` is stale; `origin/main` = `07e8985`, the branch point). Checked the Hermes upstream source for the profile create and cron PUT handlers.
+- Found so far (to fix as separate commits, each with a test): (1) All-profiles search repeats a profile heading when hits from two profiles interleave by time, with a duplicate `heading-<profile>` key in one Column; (2) editing a job and choosing Deliver to "Nowhere" sends no `deliver`, so the server keeps the old target (upstream maps a null `deliver` to `local`); (3) a profile rename that succeeds followed by a failed SOUL write leaves the form on the old name, so Save renames again and gets a 404; (4) the Scheduled and Tasks error states show a raw failure kind (`network`); (5) the column chip has a fixed 32 pt height, tight at 200% text (device observation).
+- Next: Step 2 after the baseline `flutter analyze` / `flutter test` finishes.
+
+### Task 17 — Final review — done — 2026-10-18 — Opus 5.5
+- Commits: a64d245 fix(phase7): one heading per profile when all-profile hits interleave; 6a1f938 fix(phase7): editing a job really clears its model and delivery target; 2550a4a fix(phase7): a profile renamed before a failed SOUL write is not renamed again
+- Verified: baseline before the fixes `flutter analyze` no issues, `flutter test` 1165 passed, 8 skipped. Each fix's new test failed first (duplicate-key assertion; wire body `{schedule, prompt, name: ''}` with no model or deliver; a second `rename research papers`), then passed. After the fixes: `flutter analyze` no issues; `flutter test` 1169 passed, 8 skipped; `git status` shows no stray files (the `test/design/failures/` images are git-ignored leftovers); no commit on the branch touches `android/gradle.properties`.
+- Review Focus (Step 2), each by its test: 1 `home_tabs_test` "a server with neither capability looks as it always did"; 2 `automation_providers_test` "keeps the last good list when a poll fails"; 3 `cron_repository_test` / `scheduled_test` no name and unparseable date; 4 `kanban_repository_test` unknown column, `tasks_test` unknown chips; 5 `scheduled_test` refused pause, `tasks_test` refused move; 6 `profiles_test` delete falls back to default, `cross_profile_search_test` second tap during a switch. The by-hand demo checks of Step 2 (airplane mode, removing a capability) were not repeated on the emulator; Task 16's device pass and these tests cover them.
+- Deviations: (1) reviewed `origin/main...HEAD`, because local `main` is behind `origin/main` (= `07e8985`, the branch point). (2) Fix 2 is wider than first found: `ApiClient` drops null body fields, so the `model: null` meant to reset "Profile default" never reached the server either; cleared fields are now `''`, which upstream Hermes (`_cron_optional_text`) reads as unset and a cleared `deliver` as `local`. (3) `dart format` reformatted untouched parts of `test/data/cron_repository_test.dart` in 6a1f938 (whitespace only). (4) Not fixed, by judgement: the tabs' error states show `message ?? kind.name`, as the existing session list does; the 32 pt column chip is tight but does not clip at 200% (device pass).
+- Settled from the upstream Hermes source (read 2026-10-18), not from the user's 0.18.2 server: the profile create handler reads `clone_from`, `clone_all` and `clone_from_default` as Iris sends them.
+- Next: push the branch, open the PR, merge (the user asked for all three in this chat).
