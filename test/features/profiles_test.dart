@@ -227,6 +227,30 @@ void main() {
       expect(repo.writtenSouls['papers'], '# Papers');
     });
 
+    testWidgets('after a rename went through and the SOUL write failed, '
+        'Save again writes only the SOUL, under the new name', (tester) async {
+      repo
+        ..soulResult = const Ok('# Research')
+        ..setSoulResult = const Err(IrisFailure(FailureKind.server));
+      await tester.pumpWidget(
+        app(const ProfileFormScreen(editing: 'research')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Name'), 'papers');
+      await tester.enterText(field('SOUL.md'), '# Papers');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(IrisButton, 'Save'));
+      await tester.pumpAndSettle();
+      // Still on the form, which now knows the profile is called papers.
+      expect(find.byType(ProfileFormScreen), findsOneWidget);
+      repo
+        ..calls.clear()
+        ..setSoulResult = const Ok(null);
+      await tester.tap(find.widgetWithText(IrisButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(repo.calls, ['setSoul papers']);
+    });
+
     testWidgets('a SOUL that has not loaded is not overwritten', (
       tester,
     ) async {

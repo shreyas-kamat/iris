@@ -46,11 +46,15 @@ class _ProfileFormScreenState extends ConsumerState<ProfileFormScreen> {
   /// be, so a failed read never turns into an empty overwrite.
   String? _loadedSoul;
 
+  /// The profile's name as the server holds it. It moves on after a rename
+  /// that went through, even when a SOUL write after it failed, so Save does
+  /// not ask for the same rename again.
+  late String? _serverName = widget.editing;
+
   bool get _editing => widget.editing != null;
   bool get _isDefault => widget.editing == 'default';
 
-  bool get _nameChanged =>
-      _editing && !_isDefault && _name.text != widget.editing;
+  bool get _nameChanged => _editing && !_isDefault && _name.text != _serverName;
   bool get _soulChanged => _loadedSoul != null && _soul.text != _loadedSoul;
 
   bool get _canSave {
@@ -113,7 +117,7 @@ class _ProfileFormScreenState extends ConsumerState<ProfileFormScreen> {
     if (repository == null || !mounted) return;
     setState(() => _saving = true);
     Result<void> result;
-    var name = widget.editing ?? _name.text;
+    var name = _serverName ?? _name.text;
     if (!_editing) {
       result = await repository.create(
         ProfileDraft(
@@ -141,11 +145,12 @@ class _ProfileFormScreenState extends ConsumerState<ProfileFormScreen> {
     } else {
       result = const Ok(null);
       if (_nameChanged) {
-        result = await repository.rename(widget.editing!, _name.text);
+        final old = _serverName!;
+        result = await repository.rename(old, _name.text);
         if (result.isOk) {
-          name = _name.text;
+          name = _serverName = _name.text;
           // The profile on screen follows its new name.
-          if (ref.read(activeProfileProvider) == widget.editing) {
+          if (ref.read(activeProfileProvider) == old) {
             ref.read(activeProfileProvider.notifier).select(name);
           }
         }
@@ -172,7 +177,7 @@ class _ProfileFormScreenState extends ConsumerState<ProfileFormScreen> {
   }
 
   Future<void> _delete() async {
-    final name = widget.editing!;
+    final name = _serverName!;
     final host =
         Uri.tryParse(ref.read(activeServerProvider)?.baseUrl ?? '')?.host ??
         'this server';
