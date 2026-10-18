@@ -57,3 +57,10 @@ the next model.
   not `ok ""`); speak-stream answers `fallback` with no `start`/audio (edge has no client wire), so the rate is unobserved.
 - Needs the user: fix the server's STT, and decide whether `fallback` is acceptable as this server's normal TTS path.
 - Next: Task 0 done once the user answers; then Task 1, Step 1.
+
+### Task 0 — blocked (re-probed) — 2026-10-19 — Sonnet 5.5
+- Re-ran after the user re-invoked `/phase8`: transcribe is now `ok ""` (STT fixed). Added a one-shot speak probe.
+- **Still blocked:** `POST /api/audio/speak` fails (Edge TTS 403 from Microsoft), and speak-stream gives `fallback` with no
+  audio. The server cannot speak at all, so the speak-stream rate cannot be recorded.
+- Needs the user: make the server's TTS work (another `tts.provider`, or fix Edge), then `/phase8`.
+- Next: re-run the probe; if speak-stream gives `start` and PCM, mark Task 0 done and start Task 1, Step 1.

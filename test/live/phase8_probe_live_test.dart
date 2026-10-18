@@ -144,6 +144,19 @@ void main() {
       'transcript="${transcribed.valueOrNull?['transcript'].raw}"',
     );
 
+    final spoken = await api.post(
+      '/api/audio/speak',
+      body: {'text': 'Ready.'},
+      query: {'profile': 'default'},
+      receiveTimeout: const Duration(seconds: 90),
+    );
+    lines.add(
+      'POST speak (one shot): ${describe(spoken)} '
+      'ok=${spoken.valueOrNull?['ok'].raw} '
+      'mime=${spoken.valueOrNull?['mime_type'].raw} '
+      'data_url_chars=${spoken.valueOrNull?['data_url'].stringOrNull?.length}',
+    );
+
     lines.add(await _speakStream(connection));
     lines.add(await _transcribeStream(connection));
     lines.add(await _voiceTurn(session));

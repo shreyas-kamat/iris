@@ -15,7 +15,8 @@ No keys, transcripts or audio are recorded here.
 | `GET /api/audio/elevenlabs/voices` | ok, `available: false`, 0 voices |
 | `POST stt-lease` active true / false | ok both. `warmed: false, action: noop` on activate; `leases` 1 then 0 |
 | `POST tts-lease` active true / false | ok both. `provider: edge, warmed: true, action: cached`; `leases` 1 then 0 |
-| `POST /api/audio/transcribe` (300 ms silence) | **rejected, HTTP 400.** Body: `API error: Error code: 404 - Model 'nvidia/parakeet-tdt-0.6b-v3' is not installed locally`. Not `ok` with `""` |
+| `POST /api/audio/transcribe` (300 ms silence) | First run: HTTP 400, STT model `nvidia/parakeet-tdt-0.6b-v3` not installed. **Re-run after the server's STT was fixed: `ok: true`, `transcript: ""`, as expected** |
+| `POST /api/audio/speak` "Ready." | **rejected, HTTP 400:** `TTS chunk 1 failed (edge): ... 403 'Invalid response status'` from Microsoft's Edge speech endpoint. No audio |
 | `speak-stream` "Ready." + done | Socket opens. **No `start` frame, no binary frames; final frame `fallback`** |
 | `transcribe-stream` (`stt.streaming` off) | First frame `{type: error, message: "no live STT for the configured provider"}` |
 | `prompt.submit` with `voice_turn: true` | **accepted**, `status: streaming`; `session.interrupt` ok |
@@ -31,9 +32,8 @@ No keys, transcripts or audio are recorded here.
 
 ## Open problems (need the user)
 
-1. **Transcribe fails on the server.** The STT provider resolves to a local model (`nvidia/parakeet-tdt-0.6b-v3`) that is
-   not installed, so every transcribe returns HTTP 400 instead of `ok` with `""`. Preflight's STT check and any call
-   will fail against this server until its STT is fixed (install the model, or point `stt` at a working provider).
-2. **Speak-stream yields `fallback` for "Ready."** Edge is a `relay` provider with no client wire. It may be that
-   synthesis legitimately produced nothing through the stream, or the stream does not support Edge. This needs a decision:
-   treat `fallback` as the normal path for this server (one-shot speak), or fix the server side.
+1. ~~Transcribe fails~~ Fixed on the server; re-probed `ok ""`.
+2. **TTS is broken server-side.** Edge synthesis gets 403 from Microsoft's speech service, so one-shot speak fails and
+   speak-stream answers `fallback` with no audio. The `fallback` is therefore not a usable path: no call can speak until
+   the server's TTS works (switch `tts.provider` to another provider such as openai, or fix Edge). Speak-stream's `start`
+   rate stays unobserved until then.
