@@ -1,5 +1,5 @@
-/// Fakes for the voice layer: a scripted audio socket and a backend whose
-/// answers a test sets. Later tasks add the mic, playback and route fakes.
+/// Fakes for the voice layer: a scripted audio socket, a backend whose
+/// answers a test sets, and the mic, playback and audio route seams.
 library;
 
 import 'dart:async';
@@ -11,6 +11,9 @@ import 'package:iris/data/voice/audio_socket.dart';
 import 'package:iris/data/voice/voice_backend.dart';
 import 'package:iris/data/voice/voice_capabilities.dart';
 import 'package:iris/data/voice/voice_catalog.dart';
+import 'package:iris/features/voice/audio/audio_out.dart';
+import 'package:iris/features/voice/audio/audio_route.dart';
+import 'package:iris/features/voice/audio/mic_capture.dart';
 import 'package:iris/features/voice/mic_permission.dart';
 
 /// An [AudioSocket] a test drives: it records what the client sends and lets
@@ -186,4 +189,188 @@ final class FakeMicPermission implements MicPermission {
 
   @override
   Future<void> openSettings() async => settingsOpened++;
+}
+
+/// A [MicCapture] a test pushes PCM through.
+final class FakeMic implements MicCapture {
+  FakeMic({this.allowed = true});
+
+  /// What [start] answers.
+  bool allowed;
+  bool open = false;
+  int starts = 0;
+  int stops = 0;
+
+  final _pcm = StreamController<Uint8List>.broadcast(sync: true);
+
+  @override
+  Stream<Uint8List> get pcm => _pcm.stream;
+
+  @override
+  Future<bool> start() async {
+    if (open) return true;
+    starts++;
+    open = allowed;
+    return allowed;
+  }
+
+  @override
+  Future<void> stop() async {
+    if (open) stops++;
+    open = false;
+  }
+
+  /// Delivers a chunk, if the mic is open.
+  void push(Uint8List chunk) {
+    if (open) _pcm.add(chunk);
+  }
+
+  /// A chunk of [samples] samples all at [value] (a square-ish level whose
+  /// RMS is `value.abs()`).
+  void pushLevel(int value, {int samples = 1600}) {
+    final data = ByteData(samples * 2);
+    for (var i = 0; i < samples; i++) {
+      data.setInt16(i * 2, i.isEven ? value : -value, Endian.little);
+    }
+    push(data.buffer.asUint8List());
+  }
+}
+
+/// An [AudioOut] that records what it was asked to play. [endPcm] and
+/// [playFile] wait until the test calls [drain] / [finishFile], or [stop].
+final class FakeAudioOut implements AudioOut {
+  /// Sample rate of each [startPcm], in order.
+  final List<int> starts = [];
+
+  /// PCM chunks of the current reply.
+  final List<Uint8List> pcm = [];
+
+  /// Files played: (bytes, mime).
+  final List<(Uint8List, String)> files = [];
+  int stops = 0;
+  bool ending = false;
+
+  /// True between [startPcm] and the end or stop of that reply.
+  bool playing = false;
+
+  Completer<void>? _drained;
+  Completer<void>? _file;
+  final _level = StreamController<double>.broadcast(sync: true);
+
+  @override
+  Stream<double> get level => _level.stream;
+
+  /// Sets the playback level the orb sees.
+  void emitLevel(double value) => _level.add(value);
+
+  @override
+  Future<void> startPcm(int sampleRate) async {
+    starts.add(sampleRate);
+    pcm.clear();
+    playing = true;
+  }
+
+  @override
+  void addPcm(Uint8List chunk) => pcm.add(chunk);
+
+  @override
+  Future<void> endPcm() {
+    ending = true;
+    return (_drained ??= Completer<void>()).future;
+  }
+
+  /// Everything queued has now been heard.
+  void drain() {
+    ending = false;
+    playing = false;
+    _drained?.complete();
+    _drained = null;
+  }
+
+  @override
+  Future<void> playFile(Uint8List bytes, String mime) {
+    files.add((bytes, mime));
+    playing = true;
+    return (_file ??= Completer<void>()).future;
+  }
+
+  void finishFile() {
+    playing = false;
+    _file?.complete();
+    _file = null;
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    ending = false;
+    playing = false;
+    _drained?.complete();
+    _drained = null;
+    _file?.complete();
+    _file = null;
+  }
+}
+
+/// An [AudioRoute] whose events a test raises.
+final class FakeAudioRoute implements AudioRoute {
+  FakeAudioRoute({this.speaker = true, this.headset});
+
+  bool speaker;
+  String? headset;
+  bool active = false;
+  int activations = 0;
+  int deactivations = 0;
+
+  final _interruptions = StreamController<InterruptionKind>.broadcast(
+    sync: true,
+  );
+  final _noisy = StreamController<void>.broadcast(sync: true);
+  final _route = StreamController<RouteInfo>.broadcast(sync: true);
+
+  RouteInfo get current => RouteInfo(speaker: speaker, headset: headset);
+
+  @override
+  Stream<InterruptionKind> get interruptions => _interruptions.stream;
+
+  @override
+  Stream<void> get becameNoisy => _noisy.stream;
+
+  @override
+  Stream<RouteInfo> get route async* {
+    if (active) yield current;
+    yield* _route.stream;
+  }
+
+  @override
+  Future<void> activate() async {
+    activations++;
+    active = true;
+    _route.add(current);
+  }
+
+  @override
+  Future<void> deactivate() async {
+    deactivations++;
+    active = false;
+  }
+
+  @override
+  Future<void> setSpeaker({required bool on}) async {
+    speaker = on;
+    if (active) _route.add(current);
+  }
+
+  void interrupt(InterruptionKind kind) => _interruptions.add(kind);
+
+  void unplug() {
+    headset = null;
+    _noisy.add(null);
+    if (active) _route.add(current);
+  }
+
+  void plugIn(String name) {
+    headset = name;
+    if (active) _route.add(current);
+  }
 }
