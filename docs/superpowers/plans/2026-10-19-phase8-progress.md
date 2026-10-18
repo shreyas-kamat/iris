@@ -48,3 +48,12 @@ the next model.
   server is unreachable from this machine, not a certificate problem on our side.
 - Needs the user: get the server reachable (VPN, network, Cloudflare Access or the host being down), then re-run `/phase8`.
 - Next: Task 0, Step 2.
+
+### Task 0 — blocked (probe run, two failures) — 2026-10-19 — Sonnet 5.5
+- Server reachable again; Steps 1–3 done. Note: `2026-10-19-phase8-probe.md`. Probe commit follows this entry.
+- Verified: `flutter test --tags live --run-skipped test/live/phase8_probe_live_test.dart` → `All tests passed!`; `flutter analyze` clean.
+- `include_defaults=false` yes (no `voice` key in it); leases yes; `voice_turn` accepted.
+- **Failed, so blocked per Step 3:** transcribe returns HTTP 400 (server STT model `nvidia/parakeet-tdt-0.6b-v3` not installed,
+  not `ok ""`); speak-stream answers `fallback` with no `start`/audio (edge has no client wire), so the rate is unobserved.
+- Needs the user: fix the server's STT, and decide whether `fallback` is acceptable as this server's normal TTS path.
+- Next: Task 0 done once the user answers; then Task 1, Step 1.
