@@ -10,7 +10,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 0 | Extend the probe | S1 | Sonnet | done | d716116 |
 | 1 | Voice capabilities, catalogue, backend, `VoiceSubmit` | S1 | Sonnet | done | e44d562 |
 | 2 | Providers, device prefs and call spans | S1 | Sonnet | done | bcfa563 |
-| 3 | `IrisVoiceOrb` | S1 | Sonnet | todo | |
+| 3 | `IrisVoiceOrb` | S1 | Sonnet | done | 98b5793 |
 | 4 | Composer: orb, voice button, permission sheets | S1 | Sonnet | todo | |
 | 5 | `SpeakStream` and `TranscribeStream` | S1 | Sonnet | todo | |
 | 6 | Audio seams, levels, detectors | S2 | Opus | todo | |
@@ -88,3 +88,11 @@ the next model.
 - Deviations: none. Extra tests: no live link and demo mode are `none`/null; settings load from saved values and ignore damaged ones; spans follow the profile.
 - Decisions for later tasks: `activeVoiceProvider` returns null in demo mode until Task 15 replaces that line; `voiceCapabilitiesProvider` is `none` on any failure, so callers use `ref.invalidate(voiceCapabilitiesProvider)` to re-read. `VoiceSettingsController` methods are `setStyle(CallStyle)`, `setSpeaker(speaker:)`, `setCaptions(captions:)`; booleans are stored as `'true'`/`'false'`, speaker defaults on and captions off. `PreferenceKeys.voiceStyle/voiceSpeaker/voiceCaptions/voiceTagsSeen/voiceCalls(id)` exist (app-wide scope `''` except spans). Spans: `VoiceCallSpan(startedAt, endedAt, fromIndex)`, `voiceCallSpansProvider(storedId)`, `ref.read(voiceCallSpansWriterProvider).add(storedId, span)`, cap 20; they live in `lib/app/device_state.dart`.
 - Next: Task 3, Step 1
+
+### Task 3 — IrisVoiceOrb — done — 2026-10-19 — Sonnet 5.5
+- Commits: 98b5793 feat(phase8): the voice orb
+- Verified: `flutter test test/design/iris_voice_orb_test.dart` → `All tests passed!` (16); `flutter test test/design` → `All tests passed!` (278); `flutter analyze` → `No issues found!`. Looked at the regenerated `gallery_aperture_dark.png`: all 12 modes render as distinct still frames.
+- Packages: none
+- Deviations: (1) `VoiceOrbMode` is defined in `palette.dart` beside `AgentState` (the palette cannot import a component) and re-exported from `iris_voice_orb.dart`. (2) The O1 sheet in the gallery changes the whole-page gallery goldens, so the seven `gallery_*.png` goldens were regenerated here, not in Task 16; Task 16 still adds the dedicated O1/B/C/E goldens. (3) Added an optional `semanticLabel` and three `@visibleForTesting` getters on the public `IrisVoiceOrbState` (`smoothedLevel`, `ripplePresence`, `pulseAlpha`). (4) The still pulse and the 400 ms band cross-fade run only for `still: true` and never under the system's reduced motion, which is fully static.
+- Decisions for later tasks: `IrisVoiceOrb(mode, size, level, still, semanticLabel)`; pass `level` (0..1 `ValueListenable<double>`) in the app so the orb uses the real level, not the simulation. `ringRadiusFor(mode, level)` returns a share of the size. A 50 ms cap per frame applies, so tests of easing must pump in small steps. `context.palette.voiceOrbColor(mode)` is the one colour source.
+- Next: Task 4, Step 1
