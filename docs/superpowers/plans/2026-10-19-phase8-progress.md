@@ -16,7 +16,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 6 | Audio seams, levels, detectors | S2 | Opus | done | 6b41765 |
 | 7 | `VoiceCall` and the chained engine | S2 | Opus | done | 589cc9e |
 | 8 | Preflight | S2 | Opus | done | 36ed7b3 |
-| 9 | GPT-Live engine | S2 | Opus | todo | |
+| 9 | GPT-Live engine | S2 | Opus | doing (2026-10-19) | |
 | 10 | Background, notification, interruptions | S2 | Opus | todo | |
 | 11 | Voice screen | S3 | Sonnet | todo | |
 | 12 | Approvals and questions by voice | S3 | Sonnet | todo | |
@@ -141,3 +141,8 @@ the next model.
 - Deviations: (1) `chainedPreflight` and `VoiceCall` take `server` (default "your Hermes server"), because the B10b copy names it and the plan's signature had nothing to name it from; Task 11 passes the server label. (2) A speak stream that cannot open, or that ends with no audio, also tries one-shot speech (as a fallback does). (3) Leases are released (`active: false`, both) when the chained engine ends after a preflight. (4) Lease answers, Ok or Err, are ignored: the lease only warms the provider. (5) `ChatController.ensureLive()` resumes a stored chat that is not attached (sharing `_attach` with `open()`), or creates a new one. (6) Not `await for` over the speak frames: leaving one early awaits the cancel, which hung under fakeAsync. (7) A timed-out check is `FailureKind.timeout`, any other is `server`; the message is the same.
 - Decisions for later tasks: `defaultServerName`, `silentWav()` in `preflight.dart`. `FakeAudioSocket` has `onJson` and `FakeAudioSocket.speaking()` (answers `done` with start + PCM). The call rig in `voice_call_test.dart` queues a speaking socket before `begin()` and then clears what the preflight recorded (`forgetPreflight()`); Task 11's widget tests need the same.
 - Next: Task 9, Step 1
+
+### Task 9 — doing — 2026-10-19 — Opus 5.5
+- Stopped for the usage limit. Nothing of Task 9 is committed; on disk, uncommitted: `pubspec.yaml`/`pubspec.lock` with **flutter_webrtc 1.6.2+hotfix.3** (2026-09-15; hotfix.4 is under two weeks old), and `flutter build apk --debug` already builds with it; `test/support/fake_voice.dart` with `FakeLivePeer` (autoStart, `sent`, `sentTypes`, `micOn`, `serverSends`, `level`) and `FakeVoiceBackend.offers`/`histories`; `test/features/gpt_live_test.dart` (Step 1, written, not yet run: it expects `liveHistory(items)`, `chunkForCommentary`, `VoiceCall(livePeer: () => peer)`, `LivePeer.setMicEnabled({required bool on})`).
+- Next: Step 2 (run it, see it fail), then write `lib/features/voice/live_channel.dart` (LivePeer + WebRtcLivePeer: data channel `oai-events`, mic track disabled until start, remote level from getStats `inbound-rtp` audioLevel every 100 ms) and `gpt_live_engine.dart` (preflight: ensureLive, then step gptLive, offer → startGptLive(sdp, liveHistory) → answer → wait for `session.started`; Err → "GPT-Live couldn't start: {detail}"; delegation → sendVoice(text, VoiceSubmit(surface: 'voice-live', voiceContext)) with a 5-minute, 6,000-char window; MessageCompleted → commentary chunks `{type: session.commentary.append, text}`; mute/unmute/close events; `error` → fail; `session.closed` → end). Wire it into `VoiceCall` for `VoiceEngine.gptLive`.
+- Unverified wire guesses to log: the field names `delta`/`text` on transcript deltas, `text` on commentary, `error.message`.
