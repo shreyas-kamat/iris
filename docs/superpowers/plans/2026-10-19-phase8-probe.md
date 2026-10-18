@@ -16,8 +16,8 @@ No keys, transcripts or audio are recorded here.
 | `POST stt-lease` active true / false | ok both. `warmed: false, action: noop` on activate; `leases` 1 then 0 |
 | `POST tts-lease` active true / false | ok both. `provider: edge, warmed: true, action: cached`; `leases` 1 then 0 |
 | `POST /api/audio/transcribe` (300 ms silence) | First run: HTTP 400, STT model `nvidia/parakeet-tdt-0.6b-v3` not installed. **Re-run after the server's STT was fixed: `ok: true`, `transcript: ""`, as expected** |
-| `POST /api/audio/speak` "Ready." | **rejected, HTTP 400:** `TTS chunk 1 failed (edge): ... 403 'Invalid response status'` from Microsoft's Edge speech endpoint. No audio |
-| `speak-stream` "Ready." + done | Socket opens. **No `start` frame, no binary frames; final frame `fallback`** |
+| `POST /api/audio/speak` "Ready." | First run: HTTP 400, Edge 403 from Microsoft. **After the server's TTS was fixed: `ok`, `mime_type: audio/mpeg`, a `data_url` (about 6.9k chars)** |
+| `speak-stream` "Ready." + done | First run: `fallback`, no audio. **After the fix: `start {sample_rate: 24000, channels: 1}`, 1 binary frame (41,472 bytes), then `end`** |
 | `transcribe-stream` (`stt.streaming` off) | First frame `{type: error, message: "no live STT for the configured provider"}` |
 | `prompt.submit` with `voice_turn: true` | **accepted**, `status: streaming`; `session.interrupt` ok |
 
@@ -25,15 +25,11 @@ No keys, transcripts or audio are recorded here.
 
 - `include_defaults=false` supported: **yes**. The voice write must tolerate the `voice` block being absent in it (create it).
 - Leases exist: **yes** (both).
-- Speak-stream sample rate: **not observed**. The server answered `fallback` and sent no audio, and one-shot speak also
-  fails (Edge 403), so the `start` rate stays unverified until the server's TTS works.
+- Speak-stream sample rate: **24000 Hz**, mono, int16 PCM. `tts.provider` is still `edge`; the earlier failures were the
+  server's TTS and STT, fixed by the user.
 - `voice_turn` accepted: **yes**. Task 7 sends it as planned.
 - Live transcribe-stream: unavailable, as expected with `stt.streaming` off.
 
-## Open problems (need the user)
+## Open problems
 
-1. ~~Transcribe fails~~ Fixed on the server; re-probed `ok ""`.
-2. **TTS is broken server-side.** Edge synthesis gets 403 from Microsoft's speech service, so one-shot speak fails and
-   speak-stream answers `fallback` with no audio. The `fallback` is therefore not a usable path: no call can speak until
-   the server's TTS works (switch `tts.provider` to another provider such as openai, or fix Edge). Speak-stream's `start`
-   rate stays unobserved until then.
+None. The earlier STT (missing local model) and TTS (Edge 403) faults were fixed on the server and re-probed.
