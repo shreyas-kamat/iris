@@ -23,7 +23,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 13 | Demo data | S3 | Sonnet | done | 54c5a0f |
 | 14 | Goldens, changelog, README | S3 | Sonnet | done | 16547bf |
 | 15 | Live write test | S3 | Sonnet | done | ec25e9d |
-| 16 | Device pass | S3 | Sonnet | todo | |
+| 16 | Device pass | S3 | Sonnet | done | c7045da |
 | 17 | Final review | S4 | Opus | todo | |
 
 Segments: S1 tasks 0–11 Sonnet · S2 task 12 Opus · S3 tasks 13–16 Sonnet · S4 task 17 Opus.
@@ -166,3 +166,19 @@ Stop at every segment boundary and ask the user to continue in a new chat on the
 - Not verified (the test does not check them): `clone_from`, `clone_all` and `clone_from_default` were not exercised (the test makes a blank profile), and no Kanban session-link key was found (the task had no session). The Phase 7 clone options stay unconfirmed on the real server.
 - Decisions for later tasks: none.
 - Next: Task 16, Step 1 (ask the user: they run the checklist, or I drive adb)
+
+### Task 16 — doing — 2026-10-18
+- User chose: I drive adb. Next: Step 1 (build and install).
+
+### Task 16 — Device pass — done — 2026-10-18 — Sonnet 5.5
+- Commits: c7045da docs(phase7): the device pass. Record: [the device pass](2026-10-17-phase7-device.md). The user chose that I drive `adb`.
+- Verified: release APK built (71.8 MB) and installed (uninstall first); the whole demo checklist walked on the Pixel_9 emulator in light mode, every line PASS (one with a gap: the "Started" toast after Run now was not caught, the run itself appeared and opened); dark mode, 320 pt width with 200% text checked on Scheduled and Tasks with no overflow or clipping. No FAIL, so no code change.
+- Deviations: (1) **The user told me to skip the real-server checks** (tabs on cold start, Scheduled and Tasks loading, pull to refresh and the 15 s poll, cold restart keeping theme and profile). They are recorded as SKIPPED, not passed; I had got as far as signing in to the real server, and did not look at the result. (2) Reduced motion is INCONCLUSIVE over `adb` (screenshots are slower than the 250 ms animation); TalkBack was NOT RUN. Both are covered only by widget tests. (3) Two emulator faults, not app faults: a white display after install (cold boot fixed it), and no DNS after the cold boot (restart with `-dns-server` fixed it).
+- Handling note: entering the sign-in details took two tries; the first put the client secret into the Client ID field. I deleted that screenshot and re-entered both fields. Nothing from `~/.iris-live.json` is in the log or the device file. The emulator may now hold a signed-in session for `hermes.shreyaskamat.in` (the Sign in result was not checked); uninstalling the app clears it.
+- Decisions for later tasks: Task 17 should look at the observations in the device file (the tab control takes about half the screen at 320 pt and 200% text; the "Triage" chip is tight at 200%).
+- Next: Task 17, Step 1 (segment S4, needs Opus)
+
+### Segment S3 complete — 2026-10-18 — Sonnet 5.5
+- Tasks 13–16 are done and committed. Next segment: S4, task 17 (final review of the whole branch), model **Opus**.
+- Open items for later: the clone options (`clone_from`, `clone_all`, `clone_from_default`) and a Kanban session-link key are unverified on the real server; the real-server device checks, TalkBack and reduced motion were not covered (see the device file); one leftover task `Iris probe 1792277106613` (t_bf4b31ef) is on the server and needs deleting by hand.
+- Next: Task 17, Step 1 (start a new chat on Opus)
