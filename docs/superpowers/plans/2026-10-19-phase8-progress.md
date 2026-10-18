@@ -9,7 +9,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 |---|---|---|---|---|---|
 | 0 | Extend the probe | S1 | Sonnet | done | d716116 |
 | 1 | Voice capabilities, catalogue, backend, `VoiceSubmit` | S1 | Sonnet | done | e44d562 |
-| 2 | Providers, device prefs and call spans | S1 | Sonnet | todo | |
+| 2 | Providers, device prefs and call spans | S1 | Sonnet | done | bcfa563 |
 | 3 | `IrisVoiceOrb` | S1 | Sonnet | todo | |
 | 4 | Composer: orb, voice button, permission sheets | S1 | Sonnet | todo | |
 | 5 | `SpeakStream` and `TranscribeStream` | S1 | Sonnet | todo | |
@@ -80,3 +80,11 @@ the next model.
 - Deviations: (1) `VoiceSubmit` lives in `lib/data/chat/chat_models.dart`, not a voice file, so chat does not import voice code. (2) The `submit sends voice fields only when set` test is in `chat_backend_test.dart`, where the chat harness is. (3) `DashboardVoice` sends `profile` explicitly on every route, the default profile included (the plan's tests expect `profile=default`), and also on the config `PUT` so a named profile's document is never written to default. (4) `capabilities()` treats only a 404 on live status as chained; another failure there is an `Err`. (5) Added an `IoAudioSocket` loopback test and `FakeVoiceBackend`.
 - Decisions for later tasks: `AudioConnector` is `(Uri, Map<String,String>) -> Future<AudioSocket>`; `IoAudioSocket.connect(uri, headers, {client})` is the default. `FakeAudioSocket` has `serverSends(Map)`, `serverSendsBytes`, `sentJson`, `sentBytes`, `closed`; `FakeVoiceBackend` has settable `*Result` fields, `calls`, `sockets` (queue) and `opened`. The lease name is `iris-voice`; a lease body with `ok: false` is an `Err`. The speak stream's rate on this server is 24000 (Task 0 note). `ChatBackend.submit` sends `voice_turn`/`interrupted`/`surface`/`voice_context` only when set; the retry-without-`voice_turn` rule is Task 7's.
 - Next: Task 2, Step 1
+
+### Task 2 — Providers, device prefs and call spans — done — 2026-10-19 — Sonnet 5.5
+- Commits: bcfa563 feat(phase8): voice providers, settings and call spans
+- Verified: `flutter test test/app test/data/preferences_store_test.dart` → `All tests passed!` (50; the new file has 12); `flutter analyze` → `No issues found!`
+- Packages: none
+- Deviations: none. Extra tests: no live link and demo mode are `none`/null; settings load from saved values and ignore damaged ones; spans follow the profile.
+- Decisions for later tasks: `activeVoiceProvider` returns null in demo mode until Task 15 replaces that line; `voiceCapabilitiesProvider` is `none` on any failure, so callers use `ref.invalidate(voiceCapabilitiesProvider)` to re-read. `VoiceSettingsController` methods are `setStyle(CallStyle)`, `setSpeaker(speaker:)`, `setCaptions(captions:)`; booleans are stored as `'true'`/`'false'`, speaker defaults on and captions off. `PreferenceKeys.voiceStyle/voiceSpeaker/voiceCaptions/voiceTagsSeen/voiceCalls(id)` exist (app-wide scope `''` except spans). Spans: `VoiceCallSpan(startedAt, endedAt, fromIndex)`, `voiceCallSpansProvider(storedId)`, `ref.read(voiceCallSpansWriterProvider).add(storedId, span)`, cap 20; they live in `lib/app/device_state.dart`.
+- Next: Task 3, Step 1
