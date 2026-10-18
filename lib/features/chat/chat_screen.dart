@@ -24,6 +24,8 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../voice/mic_permission_sheet.dart';
+import '../voice/voice_host.dart';
 import 'attachment_picker.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
@@ -89,6 +91,7 @@ class ChatScreen extends StatefulWidget {
     this.suggestions,
     this.pickFiles,
     this.recorder,
+    this.voice,
     this.branch,
     this.onBranched,
     this.menu,
@@ -103,6 +106,10 @@ class ChatScreen extends StatefulWidget {
 
   /// Records dictation. Tests pass a fake; null uses the microphone.
   final VoiceRecorder? recorder;
+
+  /// What voice needs from the app: null where there is no voice (the
+  /// server has none, or the host screen does not offer it).
+  final VoiceHost? voice;
 
   /// Where this chat was branched from, when it was.
   final BranchRecord? branch;
@@ -447,7 +454,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Attachment> _draft = [];
 
   late final VoiceRecorder _recorder = widget.recorder ?? RecordVoiceRecorder();
-  static const _maxRecording = Duration(minutes: 2);
+
+  /// The server's cap on a clip; two minutes when it has not said.
+  Duration get _maxRecording =>
+      widget.voice?.capabilities.tuning.maxRecording ??
+      const Duration(minutes: 2);
   Duration? _recording;
   bool _transcribing = false;
   Timer? _clock;
@@ -459,6 +470,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _startDictation() async {
     _missedTimer?.cancel();
     if (_missed) setState(() => _missed = false);
+    if (await ensureMicAccess(context) == MicAccess.denied) return;
+    if (!mounted) return;
     if (!await _recorder.start()) {
       if (mounted) {
         showIrisToast(
@@ -479,6 +492,13 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() => _recording = next);
       }
     });
+  }
+
+  /// The voice button. Asks for the microphone the way dictation does; the
+  /// call screen itself opens from here once it exists.
+  Future<void> _startCall() async {
+    if (await ensureMicAccess(context) == MicAccess.denied) return;
+    if (!mounted) return;
   }
 
   Future<void> _stopDictation() async {
@@ -664,6 +684,11 @@ class _ChatScreenState extends State<ChatScreen> {
             level: _recording == null ? null : _recorder.level,
             transcribing: _transcribing,
             onMic: () => unawaited(_startDictation()),
+            maxRecording: _maxRecording,
+            voiceMode: widget.voice?.capabilities.voiceMode ?? false,
+            onVoice: widget.voice?.capabilities.voiceMode ?? false
+                ? () => unawaited(_startCall())
+                : null,
             onStopRecording: () => unawaited(_stopDictation()),
             onCancelRecording: () => unawaited(_cancelDictation()),
             onContext: state.context == null

@@ -11,6 +11,7 @@ import 'package:iris/data/voice/audio_socket.dart';
 import 'package:iris/data/voice/voice_backend.dart';
 import 'package:iris/data/voice/voice_capabilities.dart';
 import 'package:iris/data/voice/voice_catalog.dart';
+import 'package:iris/features/voice/mic_permission.dart';
 
 /// An [AudioSocket] a test drives: it records what the client sends and lets
 /// the test push frames back.
@@ -156,4 +157,33 @@ final class FakeVoiceBackend implements VoiceBackend {
 
   /// Every socket handed out, in order.
   final List<FakeAudioSocket> opened = [];
+}
+
+/// A [MicPermission] a test sets: what the system says now, what asking
+/// would answer, and a record of what was done.
+final class FakeMicPermission implements MicPermission {
+  FakeMicPermission({
+    this.current = MicStatus.granted,
+    this.onRequest = MicStatus.granted,
+  });
+
+  MicStatus current;
+
+  /// The answer to the system prompt.
+  MicStatus onRequest;
+
+  int requests = 0;
+  int settingsOpened = 0;
+
+  @override
+  Future<MicStatus> status() async => current;
+
+  @override
+  Future<MicStatus> request() async {
+    requests++;
+    return current = onRequest;
+  }
+
+  @override
+  Future<void> openSettings() async => settingsOpened++;
 }

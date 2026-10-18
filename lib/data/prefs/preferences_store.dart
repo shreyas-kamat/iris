@@ -53,6 +53,10 @@ abstract final class PreferenceKeys {
   /// App-wide: `true` once the first-run voice tags have been shown.
   static const voiceTagsSeen = 'voice.tagsSeen';
 
+  /// App-wide: `true` once the microphone primer has been shown and the
+  /// system prompt asked for, so a later refusal opens Settings instead.
+  static const voiceMicAsked = 'voice.micAsked';
+
   /// Per `<server>/<profile>`: `voiceCalls.<id>` → a JSON list of the voice
   /// calls made in one conversation, oldest first.
   static String voiceCalls(String id) => 'voiceCalls.$id';

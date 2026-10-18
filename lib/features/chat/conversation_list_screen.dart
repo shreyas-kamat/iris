@@ -19,6 +19,7 @@ import '../../app/automation_providers.dart';
 import '../../app/device_state.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
+import '../../app/voice_providers.dart';
 import '../../core/failure.dart';
 import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
@@ -45,6 +46,7 @@ import '../home/usage_strip.dart';
 import '../scheduled/scheduled_tab.dart';
 import '../settings/settings_screen.dart';
 import '../tasks/tasks_tab.dart';
+import '../voice/voice_host.dart';
 import 'archived_screen.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
@@ -216,21 +218,26 @@ class _ConversationListScreenState
   }) async {
     await Navigator.of(context).push(
       IrisPageRoute<void>(
-        builder: (_) => ChatScreen(
-          suggestions: ref.read(demoModeProvider)
-              ? [for (final script in demoScripts) script.prompt]
-              : null,
-          backend: chat,
-          conversationId: conversation?.id,
-          title: conversation?.title,
-          branch:
-              branch ??
-              (conversation == null
-                  ? null
-                  : ref.read(branchRecordProvider(conversation.id))),
-          onBranched: (childId, record) =>
-              ref.read(branchRecordsProvider).save(childId, record),
-          menu: conversation == null ? null : _menuHooks(chat, conversation),
+        // A consumer, so the voice button appears when the capability read
+        // lands even if the chat opened before it did.
+        builder: (_) => Consumer(
+          builder: (context, ref, _) => ChatScreen(
+            suggestions: ref.read(demoModeProvider)
+                ? [for (final script in demoScripts) script.prompt]
+                : null,
+            backend: chat,
+            voice: _voiceHost(ref, conversation?.id),
+            conversationId: conversation?.id,
+            title: conversation?.title,
+            branch:
+                branch ??
+                (conversation == null
+                    ? null
+                    : ref.read(branchRecordProvider(conversation.id))),
+            onBranched: (childId, record) =>
+                ref.read(branchRecordsProvider).save(childId, record),
+            menu: conversation == null ? null : _menuHooks(chat, conversation),
+          ),
         ),
       ),
     );
@@ -245,6 +252,26 @@ class _ConversationListScreenState
         ..invalidate(conversationsProvider)
         ..invalidate(usageOptionsProvider);
     });
+  }
+
+  /// Voice for a chat, once the server's capabilities have been read and say
+  /// there is something to offer. Null otherwise, so nothing is drawn that
+  /// might then fail.
+  VoiceHost? _voiceHost(WidgetRef ref, String? storedId) {
+    final backend = ref.watch(activeVoiceProvider).value;
+    final capabilities = ref.watch(voiceCapabilitiesProvider).value;
+    if (backend == null || capabilities == null || !capabilities.voiceMode) {
+      return null;
+    }
+    return VoiceHost(
+      backend: backend,
+      capabilities: capabilities,
+      spans: storedId == null
+          ? const []
+          : ref.watch(voiceCallSpansProvider(storedId)),
+      onCallEnded: (id, span) =>
+          ref.read(voiceCallSpansWriterProvider).add(id, span),
+    );
   }
 
   /// What the chat's ⋯ menu asks home to do: pin, archive and delete are the
