@@ -7,7 +7,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 
 | Task | Title | Segment | Model | Status | Last commit |
 |---|---|---|---|---|---|
-| 0 | Extend the probe | S1 | Sonnet | blocked | |
+| 0 | Extend the probe | S1 | Sonnet | done | d716116 |
 | 1 | Voice capabilities, catalogue, backend, `VoiceSubmit` | S1 | Sonnet | todo | |
 | 2 | Providers, device prefs and call spans | S1 | Sonnet | todo | |
 | 3 | `IrisVoiceOrb` | S1 | Sonnet | todo | |
@@ -64,3 +64,11 @@ the next model.
   audio. The server cannot speak at all, so the speak-stream rate cannot be recorded.
 - Needs the user: make the server's TTS work (another `tts.provider`, or fix Edge), then `/phase8`.
 - Next: re-run the probe; if speak-stream gives `start` and PCM, mark Task 0 done and start Task 1, Step 1.
+
+### Task 0 — Extend the probe — done — 2026-10-19 — Sonnet 5.5
+- Commits: f29d1a0 test(phase8): probe leases, sockets and voice turns; a2ea41b test(phase8): probe one-shot speak, record TTS failure; d716116 docs(phase8): probe note, server STT and TTS working
+- Verified: `flutter test --tags live --run-skipped test/live/phase8_probe_live_test.dart` → `All tests passed!`; `flutter analyze` clean on the probe. Transcribe silence `ok ""`; one-shot speak `ok audio/mpeg`; speak-stream `start` 24000 Hz mono, 1 frame, `end`. Note: `2026-10-19-phase8-probe.md`.
+- Packages: none
+- Deviations: added a one-shot speak probe (not in Step 1) to tell a speak-stream `fallback` from a broken TTS; the user fixed the server's STT and TTS between runs.
+- Decisions for later tasks: `include_defaults=false` works but has no `voice` key, so the voice write must create the block; leases exist; `voice_turn` is accepted; speak-stream rate 24000; transcribe-stream is unavailable with `stt.streaming` off (error frame "no live STT for the configured provider").
+- Next: Task 1, Step 1
