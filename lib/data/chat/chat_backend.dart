@@ -115,10 +115,13 @@ abstract interface class ChatBackend {
 
   /// Sends [text] as a turn, or, on a busy session, as Hermes's busy policy
   /// decides. [queued] forces "run after the current reply".
+  ///
+  /// [voice] marks a turn spoken in a call.
   Future<Result<SubmitOutcome>> submit(
     String runtimeId,
     String text, {
     bool queued = false,
+    VoiceSubmit? voice,
   });
 
   /// Deletes [storedId] for good. Hermes refuses while it is live.
@@ -491,9 +494,18 @@ final class DashboardChat implements ChatBackend {
     String runtimeId,
     String text, {
     bool queued = false,
+    VoiceSubmit? voice,
   }) async => (await _session.call(
     'prompt.submit',
-    params: {'session_id': runtimeId, 'text': text, if (queued) 'queued': true},
+    params: {
+      'session_id': runtimeId,
+      'text': text,
+      if (queued) 'queued': true,
+      if (voice != null && voice.voiceTurn) 'voice_turn': true,
+      if (voice != null && voice.interrupted) 'interrupted': true,
+      'surface': ?voice?.surface,
+      'voice_context': ?voice?.voiceContext,
+    },
     timeout: submitTimeout,
   )).map((json) => SubmitOutcome.fromStatus(json['status'].stringOrNull));
 

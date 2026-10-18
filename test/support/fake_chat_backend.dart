@@ -106,6 +106,9 @@ final class FakeChatBackend implements ChatBackend {
 
   /// `(runtimeId, text, queued)` for every submit.
   final List<(String, String, bool)> submits = [];
+
+  /// The `voice` argument of every submit, parallel to [submits].
+  final List<VoiceSubmit?> voiceSubmits = [];
   final List<String> deletes = [];
   final List<String> undos = [];
   final List<String> branches = [];
@@ -194,9 +197,11 @@ final class FakeChatBackend implements ChatBackend {
     String runtimeId,
     String text, {
     bool queued = false,
+    VoiceSubmit? voice,
   }) async {
     submitted.add((runtimeId, text));
     submits.add((runtimeId, text, queued));
+    voiceSubmits.add(voice);
     return switch (submitResult) {
       Err(:final failure) => Err(failure),
       Ok() => submitOutcome,

@@ -55,6 +55,7 @@ final class DemoChatBackend implements ChatBackend {
     String runtimeId,
     String text, {
     bool queued = false,
+    VoiceSubmit? voice,
   }) async {
     _world.submit(runtimeId, text);
     return const Ok(SubmitOutcome.started);

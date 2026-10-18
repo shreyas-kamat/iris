@@ -952,6 +952,41 @@ void main() {
       expect((await pending).valueOrNull, SubmitOutcome.started);
     });
 
+    test('submit sends voice fields only when set', () async {
+      var pending = chat.submit(
+        'run-1',
+        'hi',
+        voice: const VoiceSubmit(voiceTurn: true),
+      );
+      var sent = await answer({'status': 'streaming'});
+      await pending;
+      expect(sent['params']['voice_turn'].boolean(), isTrue);
+      expect(sent['params']['surface'].exists, isFalse);
+      expect(sent['params']['interrupted'].exists, isFalse);
+      expect(sent['params']['voice_context'].exists, isFalse);
+
+      pending = chat.submit(
+        'run-1',
+        'hi',
+        voice: const VoiceSubmit(
+          voiceTurn: true,
+          interrupted: true,
+          surface: 'voice-live',
+          voiceContext: 'You: hello',
+        ),
+      );
+      sent = await answer({'status': 'streaming'});
+      await pending;
+      expect(sent['params']['interrupted'].boolean(), isTrue);
+      expect(sent['params']['surface'].string(), 'voice-live');
+      expect(sent['params']['voice_context'].string(), 'You: hello');
+
+      pending = chat.submit('run-1', 'typed');
+      sent = await answer({'status': 'streaming'});
+      await pending;
+      expect(sent['params']['voice_turn'].exists, isFalse);
+    });
+
     test('the busy mode is read with status and written by name', () async {
       final read = chat.busyMode();
       var sent = await answer({'value': 'queue'});
