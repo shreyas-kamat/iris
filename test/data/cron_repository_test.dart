@@ -49,7 +49,11 @@ void main() {
 
     test('a job with no name shows its prompt\'s first line', () {
       final job = CronJob.fromJsonOrNull(
-        Json.of({'id': 'j2', 'prompt': ' Check the logs \nthen post', 'schedule': '30m'}),
+        Json.of({
+          'id': 'j2',
+          'prompt': ' Check the logs \nthen post',
+          'schedule': '30m',
+        }),
       )!;
       expect(job.title, 'Check the logs');
       expect(job.scheduleText, '30m');
@@ -80,27 +84,39 @@ void main() {
 
     test('update clears a model that was reset to the default', () {
       const draft = JobDraft(schedule: '30m', prompt: 'x');
-      expect(draft.toUpdateBody()['model'], isNull);
-      expect(draft.toUpdateBody().containsKey('model'), isTrue);
+      // '' rather than null: ApiClient drops null fields from a body.
+      expect(draft.toUpdateBody()['model'], '');
+      expect(draft.toUpdateBody()['provider'], '');
+    });
+
+    test('update clears a delivery target set to Nowhere', () {
+      // Hermes keeps a field the body leaves out, and reads '' as "local".
+      const draft = JobDraft(schedule: '30m', prompt: 'x');
+      expect(draft.toUpdateBody()['deliver'], '');
+      const kept = JobDraft(schedule: '30m', prompt: 'x', deliver: 'telegram');
+      expect(kept.toUpdateBody()['deliver'], 'telegram');
     });
   });
 
   group('DashboardCronRepository', () {
-    test('lists jobs for the default profile without a profile query', () async {
-      http.on(
-        'GET',
-        '/api/cron/jobs',
-        (_) => FakeReply.json({
-          'jobs': [
-            {'id': 'a', 'name': 'A'},
-            {'name': 'no id'},
-          ],
-        }),
-      );
-      final jobs = (await repo().jobs()).valueOrNull!;
-      expect(jobs.map((j) => j.id), ['a']);
-      expect(http.requests.single.uri.queryParameters, isEmpty);
-    });
+    test(
+      'lists jobs for the default profile without a profile query',
+      () async {
+        http.on(
+          'GET',
+          '/api/cron/jobs',
+          (_) => FakeReply.json({
+            'jobs': [
+              {'id': 'a', 'name': 'A'},
+              {'name': 'no id'},
+            ],
+          }),
+        );
+        final jobs = (await repo().jobs()).valueOrNull!;
+        expect(jobs.map((j) => j.id), ['a']);
+        expect(http.requests.single.uri.queryParameters, isEmpty);
+      },
+    );
 
     test('scopes a named profile in the query', () async {
       http.on('GET', '/api/cron/jobs', (_) => FakeReply.json([]));
@@ -109,18 +125,35 @@ void main() {
     });
 
     test('pause and resume use their own routes', () async {
-      http.on('POST', '/api/cron/jobs/a/pause',
-          (_) => FakeReply.json({'id': 'a', 'enabled': false}));
-      http.on('POST', '/api/cron/jobs/a/resume',
-          (_) => FakeReply.json({'job': {'id': 'a', 'enabled': true}}));
+      http.on(
+        'POST',
+        '/api/cron/jobs/a/pause',
+        (_) => FakeReply.json({'id': 'a', 'enabled': false}),
+      );
+      http.on(
+        'POST',
+        '/api/cron/jobs/a/resume',
+        (_) => FakeReply.json({
+          'job': {'id': 'a', 'enabled': true},
+        }),
+      );
       final r = repo();
-      expect((await r.setEnabled('a', enabled: false)).valueOrNull!.enabled, isFalse);
-      expect((await r.setEnabled('a', enabled: true)).valueOrNull!.enabled, isTrue);
+      expect(
+        (await r.setEnabled('a', enabled: false)).valueOrNull!.enabled,
+        isFalse,
+      );
+      expect(
+        (await r.setEnabled('a', enabled: true)).valueOrNull!.enabled,
+        isTrue,
+      );
     });
 
     test('create posts the draft and returns the job', () async {
-      http.on('POST', '/api/cron/jobs',
-          (_) => FakeReply.json({'id': 'new', 'name': 'N'}));
+      http.on(
+        'POST',
+        '/api/cron/jobs',
+        (_) => FakeReply.json({'id': 'new', 'name': 'N'}),
+      );
       final result = await repo().create(
         const JobDraft(schedule: '30m', prompt: 'p', name: 'N'),
       );
@@ -132,9 +165,25 @@ void main() {
       });
     });
 
+    test('an update sends the cleared model and delivery target', () async {
+      http.on('PUT', '/api/cron/jobs/a', (_) => FakeReply.json({'id': 'a'}));
+      await repo().update('a', const JobDraft(schedule: '30m', prompt: 'p'));
+      expect(http.requests.single.data, {
+        'schedule': '30m',
+        'prompt': 'p',
+        'name': '',
+        'model': '',
+        'provider': '',
+        'deliver': '',
+      });
+    });
+
     test('a server rejection keeps its message', () async {
-      http.on('POST', '/api/cron/jobs', (_) =>
-          FakeReply.json({'detail': "Couldn't parse 'x'"}, status: 422));
+      http.on(
+        'POST',
+        '/api/cron/jobs',
+        (_) => FakeReply.json({'detail': "Couldn't parse 'x'"}, status: 422),
+      );
       final result = await repo().create(
         const JobDraft(schedule: 'x', prompt: 'p'),
       );
@@ -142,18 +191,26 @@ void main() {
     });
 
     test('runs reads sessions from a list or a runs key', () async {
-      http.on('GET', '/api/cron/jobs/a/runs', (_) => FakeReply.json({
-            'runs': [
-              {'id': 's1', 'title': 'Run 1', 'started_at': 1760684400},
-            ],
-          }));
+      http.on(
+        'GET',
+        '/api/cron/jobs/a/runs',
+        (_) => FakeReply.json({
+          'runs': [
+            {'id': 's1', 'title': 'Run 1', 'started_at': 1760684400},
+          ],
+        }),
+      );
       final runs = (await repo().runs('a')).valueOrNull!;
       expect(runs.single.id, 's1');
       expect(http.requests.single.uri.queryParameters['limit'], '20');
     });
 
     test('an id is escaped in the path', () async {
-      http.on('DELETE', '/api/cron/jobs/a%20b', (_) => FakeReply.json({'ok': true}));
+      http.on(
+        'DELETE',
+        '/api/cron/jobs/a%20b',
+        (_) => FakeReply.json({'ok': true}),
+      );
       expect((await repo().delete('a b')).isOk, isTrue);
     });
 

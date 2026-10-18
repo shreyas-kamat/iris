@@ -164,18 +164,21 @@ final class JobDraft {
     if (_present(deliver)) 'deliver': deliver!.trim(),
   };
 
-  /// An update sends every field, with `null` for one that was cleared, so
-  /// "Profile default" really resets a model that was set before.
+  /// An update sends every field, with `''` for one that was cleared, so
+  /// "Profile default" and "Nowhere" really reset what was set before. Not
+  /// `null`: `ApiClient` drops null fields, and Hermes keeps a field the body
+  /// leaves out. Hermes reads `''` as unset (a cleared `deliver` as `local`).
   Map<String, Object?> toUpdateBody() => {
     'schedule': schedule.trim(),
     'prompt': prompt.trim(),
     'name': _present(name) ? name!.trim() : '',
-    'model': _present(model) ? model!.trim() : null,
-    'provider': _present(provider) ? provider!.trim() : null,
-    if (_present(deliver)) 'deliver': deliver!.trim(),
+    'model': _present(model) ? model!.trim() : '',
+    'provider': _present(provider) ? provider!.trim() : '',
+    'deliver': _present(deliver) ? deliver!.trim() : '',
   };
 
-  static bool _present(String? value) => value != null && value.trim().isNotEmpty;
+  static bool _present(String? value) =>
+      value != null && value.trim().isNotEmpty;
 }
 
 /// Where a job's reply can be sent.
