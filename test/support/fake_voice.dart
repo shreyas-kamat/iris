@@ -99,6 +99,12 @@ final class FakeVoiceBackend implements VoiceBackend {
   /// Transcribed audio sizes, in bytes.
   final List<int> transcribed = [];
 
+  /// The transcribed audio itself, in order.
+  final List<Uint8List> wavs = [];
+
+  /// Answered first, in order, before [transcribeResult].
+  final List<Result<String>> transcribeQueue = [];
+
   @override
   Future<Result<VoiceCapabilities>> capabilities() async {
     calls.add('capabilities');
@@ -109,6 +115,8 @@ final class FakeVoiceBackend implements VoiceBackend {
   Future<Result<String>> transcribe(Uint8List wav) async {
     calls.add('transcribe');
     transcribed.add(wav.length);
+    wavs.add(wav);
+    if (transcribeQueue.isNotEmpty) return transcribeQueue.removeAt(0);
     return transcribeResult;
   }
 

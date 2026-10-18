@@ -27,6 +27,9 @@ final class DemoChatBackend implements ChatBackend {
   Stream<void> get reconnected => const Stream.empty();
 
   @override
+  Stream<bool> get liveChanges => const Stream.empty();
+
+  @override
   Future<Result<ConversationPage>> conversations(int offset) async =>
       Ok(_world.page(profile, offset, archived: false));
 
@@ -94,8 +97,10 @@ final class DemoChatBackend implements ChatBackend {
   }
 
   @override
-  Future<Result<void>> setReasoning(String runtimeId, ReasoningEffort effort) async =>
-      const Ok(null);
+  Future<Result<void>> setReasoning(
+    String runtimeId,
+    ReasoningEffort effort,
+  ) async => const Ok(null);
 
   @override
   Future<Result<void>> setFast(String runtimeId, {required bool fast}) async =>
@@ -205,7 +210,10 @@ final class DemoChatBackend implements ChatBackend {
   @override
   Future<Result<ConversationSummary>> conversation(String storedId) async {
     final page = _world.page(profile, 0, archived: false).items;
-    for (final row in [..._world.page(profile, 0, archived: true).items, ...page]) {
+    for (final row in [
+      ..._world.page(profile, 0, archived: true).items,
+      ...page,
+    ]) {
       if (row.id == storedId) return Ok(row);
     }
     return const Err(IrisFailure(FailureKind.notFound));

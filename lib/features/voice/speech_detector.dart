@@ -38,6 +38,10 @@ final class SpeechDetector {
   Duration? _lastLoud;
   bool _started = false;
 
+  /// A take is under way: loud audio has been heard and has not yet ended
+  /// or been dropped as too short.
+  bool get inTake => _takeStart != null;
+
   SpeechEvent? feed(double rms, Duration at) {
     final chunkStart = _lastAt;
     _lastAt = at;

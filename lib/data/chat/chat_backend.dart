@@ -99,6 +99,9 @@ abstract interface class ChatBackend {
   /// conversation has to resume again or its events go nowhere.
   Stream<void> get reconnected;
 
+  /// True when the live link comes up, false when it drops; changes only.
+  Stream<bool> get liveChanges;
+
   /// A page of this profile's conversations, newest first, from [offset].
   Future<Result<ConversationPage>> conversations(int offset);
 
@@ -275,6 +278,7 @@ final class DashboardChat implements ChatBackend {
   late final StreamSubscription<RpcServerRequest> _requestSubscription;
   late final StreamSubscription<LinkState> _linkSubscription;
   final _reconnected = StreamController<void>.broadcast();
+  final _liveChanges = StreamController<bool>.broadcast();
   bool _live;
   bool _everLive;
 
@@ -284,8 +288,12 @@ final class DashboardChat implements ChatBackend {
   @override
   Stream<void> get reconnected => _reconnected.stream;
 
+  @override
+  Stream<bool> get liveChanges => _liveChanges.stream;
+
   void _onLink(LinkState state) {
     final live = state.phase == LinkPhase.live;
+    if (live != _live && (live || _everLive)) _liveChanges.add(live);
     if (live && !_live && _everLive) _reconnected.add(null);
     if (live) _everLive = true;
     _live = live;
@@ -991,5 +999,6 @@ final class DashboardChat implements ChatBackend {
     await _linkSubscription.cancel();
     await _events.close();
     await _reconnected.close();
+    await _liveChanges.close();
   }
 }

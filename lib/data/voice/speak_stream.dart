@@ -79,9 +79,11 @@ final class SpeakStream {
     if (_finished) return;
     _finished = true;
     _send({'stop': true});
-    await _sub.cancel();
-    await _frames.close();
+    // The socket first: a reader that has already cancelled may never let
+    // the frames controller finish closing.
     await _socket.close();
+    await _sub.cancel();
+    unawaited(_frames.close());
   }
 
   void _send(Map<String, Object?> json) {
