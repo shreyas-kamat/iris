@@ -1638,8 +1638,18 @@ class _ConversationList extends StatelessWidget {
   ) {
     final palette = context.palette;
     final rows = <Widget>[];
+    // The merge is newest first across profiles, so they can alternate: each
+    // profile's hits are gathered under one heading, the profile with the
+    // newest hit first.
+    final ordered = scope == SearchScope.all
+        ? [
+            for (final name in {for (final hit in shown) hit.profile})
+              for (final hit in shown)
+                if (hit.profile == name) hit,
+          ]
+        : shown;
     String? lastProfile;
-    for (final (index, found) in shown.indexed) {
+    for (final (index, found) in ordered.indexed) {
       if (scope == SearchScope.all &&
           found.profile != null &&
           found.profile != lastProfile) {

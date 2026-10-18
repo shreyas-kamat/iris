@@ -133,6 +133,39 @@ void main() {
     expect(find.textContaining('Searched default, research'), findsOneWidget);
   });
 
+  testWidgets('hits that interleave by time get one heading per profile', (
+    tester,
+  ) async {
+    tester.view
+      ..physicalSize = const Size(800, 2400)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // Newest first, as the merge returns them: the profiles alternate.
+    backend.searchAcrossResult = Ok([
+      hit('s1', 'Backup notes', profile: 'default', at: DateTime(2026, 10, 3)),
+      hit('s2', 'Backup paper', profile: 'research', at: DateTime(2026, 10, 2)),
+      hit('s3', 'Backup cron', profile: 'default', at: DateTime(2026, 9, 30)),
+    ]);
+    await tester.pumpWidget(home());
+    await settle(tester);
+    await tester.tap(find.byType(SearchField));
+    await settle(tester);
+    await tester.tap(find.text('All profiles'));
+    await settle(tester);
+    await type(tester, 'backup');
+    expect(tester.takeException(), isNull);
+    expect(find.bySemanticsLabel('default'), findsOneWidget);
+    expect(find.bySemanticsLabel('research'), findsOneWidget);
+    // Each profile's hits sit together under its heading, the profile with
+    // the newest hit first.
+    final top = {
+      for (final title in ['Backup notes', 'Backup cron', 'Backup paper'])
+        title: tester.getTopLeft(find.text(title)).dy,
+    };
+    expect(top['Backup notes']!, lessThan(top['Backup cron']!));
+    expect(top['Backup cron']!, lessThan(top['Backup paper']!));
+  });
+
   testWidgets(
     'tapping a hit under another profile switches to it, then opens',
     (tester) async {
