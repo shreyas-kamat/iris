@@ -11,6 +11,7 @@ import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/segmented.dart';
 import '../../design/components/sheet.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
@@ -322,60 +323,11 @@ class _EffortControl extends StatelessWidget {
   final ValueChanged<ReasoningEffort> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final palette = context.palette;
-    final type = context.type;
-    final wide = MediaQuery.textScalerOf(context).scale(1) > 1.4;
-    Widget segment(ReasoningEffort effort) {
-      final on = effort == selected;
-      return Semantics(
-        button: true,
-        selected: on,
-        label: '${effort.label}${on ? ', selected' : ''}',
-        excludeSemantics: true,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => onChanged(effort),
-          child: AnimatedContainer(
-            duration: context.reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 180),
-            constraints: const BoxConstraints(minHeight: 42, minWidth: 44),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: on ? palette.surfaceRaised : null,
-              borderRadius: BorderRadius.circular(11),
-              border: on
-                  ? Border.all(
-                      color: palette.lineStrong,
-                      width: IrisStroke.hairline,
-                    )
-                  : null,
-            ),
-            child: Text(
-              effort.label,
-              style: type.body.copyWith(
-                fontSize: 13.5,
-                color: on ? palette.ink : palette.inkMuted,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    final segments = [for (final e in ReasoningEffort.values) segment(e)];
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: palette.surfaceSunken,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: palette.line, width: IrisStroke.hairline),
-      ),
-      child: wide
-          ? Wrap(spacing: 2, runSpacing: 2, children: segments)
-          : Row(children: [for (final s in segments) Expanded(child: s)]),
-    );
-  }
+  Widget build(BuildContext context) => IrisSegmented<ReasoningEffort>(
+    values: ReasoningEffort.values,
+    selected: selected,
+    labelOf: (effort) => effort.label,
+    onChanged: onChanged,
+    height: 42,
+  );
 }

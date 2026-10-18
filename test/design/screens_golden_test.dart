@@ -11,16 +11,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/automation_providers.dart';
 import 'package:iris/app/device_state.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/app/theme_controller.dart';
 import 'package:iris/app/usage.dart';
 import 'package:iris/core/json.dart';
 import 'package:iris/core/result.dart';
+import 'package:iris/data/automation/kanban_models.dart';
 import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/chat/connection_models.dart';
+import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/theme/iris_theme.dart';
@@ -30,9 +33,11 @@ import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/connection_card.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
+import 'package:iris/features/profiles/profiles_screen.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 import 'package:iris/features/settings/usage_settings_screen.dart';
 
+import '../support/fake_automation.dart';
 import '../support/fake_chat_backend.dart';
 import '../support/fonts.dart';
 
@@ -89,7 +94,10 @@ Widget _framed(
 }
 
 /// The server, the live link and the profiles every screen reads.
-List<Override> _sharedOverrides(FakeChatBackend backend) => [
+List<Override> _sharedOverrides(
+  FakeChatBackend backend, {
+  List<AgentProfile>? profiles,
+}) => [
   activeServerProvider.overrideWithValue(
     const ServerConfig(
       id: 's',
@@ -102,10 +110,12 @@ List<Override> _sharedOverrides(FakeChatBackend backend) => [
   ),
   activeChatProvider.overrideWith((ref) async => backend),
   profilesProvider.overrideWith(
-    (ref) async => const [
-      AgentProfile(name: 'default', isDefault: true, model: 'opus-4.5'),
-      AgentProfile(name: 'ananta', model: 'gpt-6-luna'),
-    ],
+    (ref) async =>
+        profiles ??
+        const [
+          AgentProfile(name: 'default', isDefault: true, model: 'opus-4.5'),
+          AgentProfile(name: 'ananta', model: 'gpt-6-luna'),
+        ],
   ),
 ];
 
@@ -306,10 +316,7 @@ void main() {
         overrides: [
           ..._sharedOverrides(backend),
           conversationsProvider.overrideWith(
-            (ref) async => ConversationPage(
-              items: _conversations,
-              total: 7,
-            ),
+            (ref) async => ConversationPage(items: _conversations, total: 7),
           ),
         ],
         name: 'home',
@@ -356,8 +363,7 @@ void main() {
     });
 
     testWidgets('chat with a reply, a tool and code, $mode', (tester) async {
-      final backend = FakeChatBackend()
-        ..historyResult = Ok(_exchange);
+      final backend = FakeChatBackend()..historyResult = Ok(_exchange);
       addTearDown(backend.close);
       await capture(
         tester,
@@ -373,8 +379,7 @@ void main() {
     });
 
     testWidgets('a new chat in its empty state, $mode', (tester) async {
-      final backend = FakeChatBackend()
-        ..historyResult = const Ok([]);
+      final backend = FakeChatBackend()..historyResult = const Ok([]);
       addTearDown(backend.close);
       await capture(
         tester,
@@ -564,7 +569,8 @@ void main() {
     });
 
     testWidgets('home with pinned and live chats, $mode', (tester) async {
-      final backend = FakeChatBackend()..conversationsResult = Ok(_conversations);
+      final backend = FakeChatBackend()
+        ..conversationsResult = Ok(_conversations);
       addTearDown(backend.close);
       await capture(
         tester,
@@ -587,6 +593,183 @@ void main() {
           ),
         ],
         name: 'home_pinned_live',
+      );
+    });
+
+    final bothTabs = activeCapabilitiesProvider.overrideWith(
+      (ref) => Stream.value(
+        ServerCapabilities(
+          available: const {ServerCapability.cronJobs, ServerCapability.kanban},
+          probedAt: DateTime(2026, 10, 14),
+        ),
+      ),
+    );
+
+    testWidgets('home Scheduled tab, $mode', (tester) async {
+      final backend = FakeChatBackend()
+        ..conversationsResult = Ok(_conversations);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const ConversationListScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          bothTabs,
+          conversationsProvider.overrideWith(
+            (ref) async => ConversationPage(items: _conversations, total: 5),
+          ),
+          cronJobsProvider.overrideWith(
+            (ref) => Stream.value([
+              fakeJob(
+                'a',
+                name: 'Morning inbox digest',
+                nextRun: _now.add(const Duration(hours: 9, minutes: 12)),
+              ),
+              fakeJob(
+                'b',
+                name: 'Nightly backup to cold storage',
+                schedule: '0 2 * * *',
+                lastError: 'backup target returned 502',
+                lastRun: _now.subtract(const Duration(hours: 2)),
+              ),
+              fakeJob(
+                'c',
+                prompt: 'Audit dependencies',
+                schedule: '0 9 * * 1',
+                display: 'every monday 9am',
+                nextRun: _now.add(const Duration(days: 3, hours: 4)),
+              ),
+              fakeJob(
+                'd',
+                name: 'Sync Linear',
+                schedule: '*/15 * * * *',
+                enabled: false,
+              ),
+            ]),
+          ),
+        ],
+        name: 'scheduled',
+        after: () async {
+          await tester.tap(find.text('Scheduled'));
+          await settle(tester);
+        },
+      );
+    });
+
+    testWidgets('home Tasks tab on Running, $mode', (tester) async {
+      final backend = FakeChatBackend()
+        ..conversationsResult = Ok(_conversations);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const ConversationListScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          bothTabs,
+          conversationsProvider.overrideWith(
+            (ref) async => ConversationPage(items: _conversations, total: 5),
+          ),
+          kanbanBoardProvider.overrideWith(
+            (ref) => Stream.value(
+              KanbanBoard(
+                columns: [
+                  KanbanColumn(
+                    id: 'todo',
+                    tasks: [
+                      fakeTask('t_27', title: 'Draft Q3 roadmap summary'),
+                    ],
+                  ),
+                  KanbanColumn(
+                    id: 'running',
+                    tasks: [
+                      fakeTask(
+                        't_30',
+                        title: 'Investigate worker heartbeat gaps overnight',
+                        status: 'running',
+                        assignee: 'homelab',
+                        priority: 2,
+                        summary: 'Pulled the heartbeat logs',
+                        startedAt: _now.subtract(const Duration(minutes: 4)),
+                        progress: const KanbanProgress(2, 5),
+                      ),
+                      fakeTask(
+                        't_28',
+                        title: 'Refactor billing to usage-based pricing',
+                        status: 'running',
+                        startedAt: _now.subtract(const Duration(minutes: 11)),
+                      ),
+                    ],
+                  ),
+                  KanbanColumn(
+                    id: 'blocked',
+                    tasks: [
+                      fakeTask(
+                        't_31',
+                        title: 'Nightly backup failing with 502',
+                        status: 'blocked',
+                        blockKind: 'needs_input',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        name: 'tasks',
+        after: () async {
+          await tester.tap(find.text('Tasks'));
+          await settle(tester);
+          await tester.tap(find.text('Running').first);
+          await settle(tester);
+        },
+      );
+    });
+
+    testWidgets('chat with the more menu open, $mode', (tester) async {
+      final backend = FakeChatBackend()..historyResult = Ok(_exchange);
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: ChatScreen(
+          backend: backend,
+          conversationId: 'stored-1',
+          title: 'Investigate worker heartbeat gaps',
+          menu: ChatMenuHooks(
+            isPinned: () => false,
+            onTogglePin: () {},
+            onArchive: () async => true,
+            onDelete: () async => true,
+          ),
+        ),
+        isDark: isDark,
+        overrides: _sharedOverrides(backend),
+        name: 'chat_menu',
+        after: () async {
+          await tester.tap(find.bySemanticsLabel('More'));
+          await settle(tester);
+        },
+      );
+    });
+
+    testWidgets('profiles list, $mode', (tester) async {
+      final backend = FakeChatBackend();
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const ProfilesScreen(),
+        isDark: isDark,
+        overrides: _sharedOverrides(
+          backend,
+          profiles: const [
+            AgentProfile(name: 'default', isDefault: true, model: 'opus-4.5'),
+            AgentProfile(name: 'research', model: 'gpt-5.2'),
+            AgentProfile(name: 'homelab', model: 'sonnet-4.5'),
+          ],
+        ),
+        name: 'profiles',
       );
     });
 
@@ -640,7 +823,9 @@ void main() {
           ]) {
             await tester.enterText(find.byType(EditableText), text);
             await tester.pump();
-            await tester.tap(find.bySemanticsLabel('Queue, sends after the running reply'));
+            await tester.tap(
+              find.bySemanticsLabel('Queue, sends after the running reply'),
+            );
             await tester.pump(const Duration(milliseconds: 400));
           }
           semantics.dispose();

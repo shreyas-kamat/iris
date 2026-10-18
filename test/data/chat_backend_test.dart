@@ -718,6 +718,47 @@ void main() {
       expect(query, containsPair('limit', '${DashboardChat.searchLimit}'));
     });
 
+    test('searchAcross asks every profile and labels the hits', () async {
+      final asked = <String>[];
+      http.on('GET', '/api/sessions/search', (request) {
+        final profile = request.uri.queryParameters['profile']!;
+        asked.add(profile);
+        return FakeReply.json({
+          'results': [
+            {'session_id': '$profile-1', 'title': 'Deploy in $profile'},
+          ],
+        });
+      });
+      final hits = (await chat.searchAcross('deploy', [
+        'default',
+        'research',
+      ])).valueOrNull!;
+      expect(asked.toSet(), {'default', 'research'});
+      expect({for (final h in hits) h.storedId: h.profile}, {
+        'default-1': 'default',
+        'research-1': 'research',
+      });
+    });
+
+    test('searchAcross survives one profile failing', () async {
+      http.on('GET', '/api/sessions/search', (request) {
+        return request.uri.queryParameters['profile'] == 'gone'
+            ? FakeReply.json({'detail': 'Not Found'}, status: 404)
+            : FakeReply.json({
+                'results': [
+                  {'session_id': 'a', 'title': 'A'},
+                ],
+              });
+      });
+      final result = await chat.searchAcross('x', ['default', 'gone']);
+      expect(result.valueOrNull!.single.profile, 'default');
+    });
+
+    test('searchAcross fails when every profile fails', () async {
+      final result = await chat.searchAcross('x', ['default', 'gone']);
+      expect(result.isErr, isTrue);
+    });
+
     test('session.info reports the context window as an event', () async {
       final context = chat.events.firstWhere((e) => e is ContextChanged);
       socket.serverSends({

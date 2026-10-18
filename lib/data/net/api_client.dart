@@ -122,6 +122,26 @@ final class ApiClient {
     ),
   );
 
+  /// PUTs a JSON body to [path] and returns its response as tolerant JSON.
+  Future<Result<Json>> put(
+    String path, {
+    Map<String, Object?>? body,
+    Map<String, Object?>? query,
+    CancelToken? cancelToken,
+  }) => _send(
+    path,
+    () => _dio.put<String>(
+      path,
+      data: _clean(body),
+      queryParameters: _clean(query),
+      cancelToken: cancelToken,
+      options: Options(
+        responseType: ResponseType.plain,
+        contentType: Headers.jsonContentType,
+      ),
+    ),
+  );
+
   /// DELETEs [path] and returns its response as tolerant JSON.
   Future<Result<Json>> delete(
     String path, {

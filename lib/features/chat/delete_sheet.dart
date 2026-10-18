@@ -10,12 +10,16 @@ import '../../design/components/sheet.dart';
 
 /// True when the person confirms. Delete is the failed colour: it cannot be
 /// undone.
-Future<bool> showDeleteSheet(BuildContext context, String title) async {
+Future<bool> showDeleteSheet(
+  BuildContext context,
+  String title, {
+  String message = 'This removes it from Hermes for good.',
+}) async {
   final confirmed = await showIrisSheet<bool>(
     context: context,
     builder: (sheetContext) => IrisSheet(
       title: 'Delete ‘$title’?',
-      subtitle: 'This removes it from Hermes for good.',
+      subtitle: message,
       actions: IrisSheetActions(
         secondary: IrisButton(
           label: 'Cancel',

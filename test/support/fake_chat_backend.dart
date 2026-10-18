@@ -79,6 +79,11 @@ final class FakeChatBackend implements ChatBackend {
   /// Queries searched, in order.
   final List<String> searches = [];
 
+  Result<List<SearchHit>> searchAcrossResult = const Ok([]);
+
+  /// `<query> in <profile>,<profile>`, in the order asked.
+  final List<String> acrossSearches = [];
+
   /// Answered first, in order, before [modelOptionsResult]: a gateway whose
   /// answer changes between two asks, such as a usage cache warming up.
   final List<Result<ModelOptions>> modelOptionsQueue = [];
@@ -313,6 +318,15 @@ final class FakeChatBackend implements ChatBackend {
   Future<Result<List<SearchHit>>> search(String query) async {
     searches.add(query);
     return searchResult;
+  }
+
+  @override
+  Future<Result<List<SearchHit>>> searchAcross(
+    String query,
+    List<String> profiles,
+  ) async {
+    acrossSearches.add('$query in ${profiles.join(',')}');
+    return searchAcrossResult;
   }
 
   @override

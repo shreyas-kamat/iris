@@ -10,6 +10,7 @@ import '../data/chat/chat_backend.dart';
 import '../data/chat/chat_event.dart';
 import '../data/chat/chat_models.dart';
 import '../data/chat/connection_models.dart';
+import '../data/chat/search_merge.dart';
 import 'demo_content.dart';
 import 'demo_world.dart';
 
@@ -212,4 +213,14 @@ final class DemoChatBackend implements ChatBackend {
   @override
   Future<Result<List<SearchHit>>> search(String query) async =>
       Ok(_world.search(profile, query));
+
+  @override
+  Future<Result<List<SearchHit>>> searchAcross(
+    String query,
+    List<String> profiles,
+  ) async => Ok(
+    mergeProfileHits({
+      for (final name in profiles) name: _world.search(name, query),
+    }),
+  );
 }

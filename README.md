@@ -26,8 +26,12 @@ There is an offline demo if you want a look first.
   view; chats that are replying right now show under Live.
 - **Passwords and connections.** Unlock the password manager, enter a one-time code, or save a login when
   Hermes asks; connect connectors and MCP servers from a card in the chat.
-- **Profiles and usage.** Switch between the server's agent profiles; see how much of a provider's quota
-  is used on the home screen.
+- **Scheduled and Tasks.** On servers that have them, home gets tabs for cron jobs (pause, run now, create,
+  edit, delete, past runs) and the Kanban board (columns, task detail, move and create tasks).
+- **Chat menu.** Rename, pin, branch, archive, compress, undo, export as Markdown, session info and delete,
+  from the ⋯ button in the chat header.
+- **Profiles and usage.** Switch between the server's agent profiles, and create, rename, edit the SOUL of
+  or delete them; search across every profile; see how much of a provider's quota is used on the home screen.
 - **Look and feel.** Ten skins, light and dark, honours reduced motion and large text, touch targets of at
   least 44 points. See [`docs/design-language.md`](docs/design-language.md).
 - **Try the demo.** From the first screen, with no server and no network: sample conversations and five

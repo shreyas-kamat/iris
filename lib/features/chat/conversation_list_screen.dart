@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/automation_providers.dart';
 import '../../app/device_state.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
@@ -29,6 +30,7 @@ import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/segmented.dart';
 import '../../design/components/sheet.dart';
 import '../../design/components/toast.dart';
 import '../../design/platform/adaptive.dart';
@@ -40,7 +42,9 @@ import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import '../home/link_status_screen.dart';
 import '../home/usage_strip.dart';
+import '../scheduled/scheduled_tab.dart';
 import '../settings/settings_screen.dart';
+import '../tasks/tasks_tab.dart';
 import 'archived_screen.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
@@ -83,6 +87,10 @@ class _ConversationListScreenState
   /// hero once it is scrolled far enough away.
   double _heroHeight = 140;
 
+  /// Whether the segmented control is drawn this build. With tabs, the control
+  /// takes the greeting's place, so there is no hero to snap.
+  bool _hasTabs = false;
+
   /// The query the server is asked, settled 200 ms after the last keystroke.
   String _serverQuery = '';
   Timer? _debounce;
@@ -91,12 +99,19 @@ class _ConversationListScreenState
   void initState() {
     super.initState();
     _search.addListener(_onQuery);
-    _searchFocus.addListener(() {
-      if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
-      // Recent searches show while the empty field has focus.
-      if (mounted) setState(() {});
-    });
+    _searchFocus.addListener(_onSearchFocus);
     _scroll.addListener(_onScroll);
+  }
+
+  /// Recent searches show while the empty field has focus. Closing search
+  /// puts the scope back, so the next search starts narrow.
+  void _onSearchFocus() {
+    if (!mounted) return;
+    if (_searchFocus.hasFocus) unawaited(IrisHaptics.selection());
+    if (!_searchFocus.hasFocus && _search.text.trim().isEmpty) {
+      ref.read(searchScopeProvider.notifier).select(SearchScope.here);
+    }
+    setState(() {});
   }
 
   void _onScroll() {
@@ -110,6 +125,7 @@ class _ConversationListScreenState
   /// Settles a half-collapsed hero to open or closed, so the bar is never
   /// left between its two forms.
   bool _snap(ScrollEndNotification notification) {
+    if (_hasTabs) return false;
     // Only the list itself: text fields hold scrollables of their own.
     if (notification.depth != 0 || _searchFocus.hasFocus) return false;
     final metrics = notification.metrics;
@@ -214,6 +230,7 @@ class _ConversationListScreenState
                   : ref.read(branchRecordProvider(conversation.id))),
           onBranched: (childId, record) =>
               ref.read(branchRecordsProvider).save(childId, record),
+          menu: conversation == null ? null : _menuHooks(chat, conversation),
         ),
       ),
     );
@@ -229,6 +246,47 @@ class _ConversationListScreenState
         ..invalidate(usageOptionsProvider);
     });
   }
+
+  /// What the chat's ⋯ menu asks home to do: pin, archive and delete are the
+  /// list's business, so the chat calls back instead of knowing how.
+  ChatMenuHooks _menuHooks(
+    ChatBackend chat,
+    ConversationSummary conversation,
+  ) => ChatMenuHooks(
+    isPinned: () => ref.read(pinsProvider).contains(conversation.id),
+    onTogglePin: () => ref.read(pinsProvider.notifier).toggle(conversation.id),
+    onArchive: () async {
+      final result = await chat.setArchived(conversation.id, archived: true);
+      if (result is Err) return false;
+      ref.read(pinsProvider.notifier).unpin(conversation.id);
+      return true;
+    },
+    onDelete: () async {
+      final title = _titles[conversation.id] ?? conversation.title;
+      if (!mounted || !await showDeleteSheet(context, title)) return false;
+      if (!mounted) return false;
+      final replying = ref.read(liveChatsProvider).value ?? const {};
+      if (replying.containsKey(conversation.id)) {
+        showIrisToast(
+          context,
+          message: 'Stop the reply before deleting this chat.',
+        );
+        return false;
+      }
+      final result = await chat.delete(conversation.id);
+      if (!mounted) return false;
+      if (result case Err(:final failure)) {
+        showIrisToast(
+          context,
+          message: 'Could not delete: ${ChatController.describe(failure)}',
+        );
+        return false;
+      }
+      ref.read(pinsProvider.notifier).unpin(conversation.id);
+      ref.read(branchRecordsProvider).forget(conversation.id);
+      return true;
+    },
+  );
 
   Future<void> _actions(
     ChatBackend chat,
@@ -397,6 +455,40 @@ class _ConversationListScreenState
     if (!listed) ref.invalidate(conversationsProvider);
   }
 
+  /// Set while a tapped hit is switching profile, so a second tap cannot
+  /// start another switch underneath it.
+  bool _switchingProfile = false;
+
+  /// Opens a search hit. A hit under another profile switches to that profile
+  /// first, and opens through the backend that profile's switch builds: the old
+  /// backend belongs to the profile being left.
+  Future<void> _openHit(
+    ChatBackend current,
+    SearchHit hit,
+    ConversationSummary conversation,
+  ) async {
+    if (_switchingProfile) return;
+    final target = hit.profile;
+    if (target == null || target == ref.read(activeProfileProvider)) {
+      await _open(current, conversation: conversation);
+      return;
+    }
+    _switchingProfile = true;
+    final ChatBackend? next;
+    try {
+      ref.read(activeProfileProvider.notifier).select(target);
+      next = await ref.read(activeChatProvider.future);
+    } finally {
+      _switchingProfile = false;
+    }
+    // The profile may have moved on while the backend was built (it was
+    // deleted, or switched again): that backend is already being let go.
+    if (!mounted || next == null) return;
+    if (ref.read(activeProfileProvider) != target) return;
+    _search.clear();
+    await _open(next, conversation: conversation);
+  }
+
   Future<void> _openArchived(ChatBackend chat) async {
     await Navigator.of(context).push(
       IrisPageRoute<void>(
@@ -431,12 +523,23 @@ class _ConversationListScreenState
     // A search that found something is worth finding again; one that found
     // nothing is not.
     final settled = _serverQuery;
+    final scope = ref.watch(searchScopeProvider);
+    final profiles =
+        ref.watch(profilesProvider).value ?? const <AgentProfile>[];
+    final across = scope == SearchScope.all && profiles.length > 1;
     if (settled.isNotEmpty) {
       ref.listen(conversationSearchProvider(settled), (_, next) {
         if (next case AsyncData(:final value) when value.isNotEmpty) {
           ref.read(recentSearchesProvider.notifier).add(settled);
         }
       });
+      if (across) {
+        ref.listen(crossProfileSearchProvider(settled), (_, next) {
+          if (next case AsyncData(:final value) when value.isNotEmpty) {
+            ref.read(recentSearchesProvider.notifier).add(settled);
+          }
+        });
+      }
     }
     // A refreshed first page starts the list over.
     ref.listen(conversationsProvider, (_, next) {
@@ -456,9 +559,11 @@ class _ConversationListScreenState
     final pinnedIds = ref.watch(pinsProvider);
     final replying =
         ref.watch(liveChatsProvider).value ?? const <String, LiveStatus>{};
-    final profiles =
-        ref.watch(profilesProvider).value ?? const <AgentProfile>[];
     final profile = ref.watch(activeProfileProvider);
+    final tabs = ref.watch(homeTabsProvider);
+    final tab = ref.watch(visibleHomeTabProvider);
+    final hasTabs = tabs.isNotEmpty;
+    _hasTabs = hasTabs;
     final (linkState, headline, _) = describeLink(link);
     final headlineText = replying.isEmpty
         ? headline
@@ -483,10 +588,88 @@ class _ConversationListScreenState
       });
     }
 
+    final sessions = NotificationListener<ScrollEndNotification>(
+      onNotification: _snap,
+      child: _ConversationList(
+        pins: pinnedIds,
+        live: replying,
+        lifted: _lifted,
+        fetchedPins: _fetchedPins,
+        top: [
+          // Fades as it scrolls under the bar, where the compact link
+          // takes over.
+          if (!hasTabs)
+            ValueListenableBuilder<double>(
+              valueListenable: _collapse,
+              builder: (context, t, child) =>
+                  Opacity(opacity: (1 - t * 1.4).clamp(0.0, 1.0), child: child),
+              child: KeyedSubtree(
+                key: _heroKey,
+                child: _Hero(
+                  orbState: orbState,
+                  linkState: linkState,
+                  headline: headlineText,
+                  host: server == null ? '' : _hostOf(server.baseUrl),
+                  total: conversations.value == null
+                      ? null
+                      : conversations.value!.total - _gone.length,
+                  now: now,
+                  onGateway: openGateway,
+                ),
+              ),
+            ),
+          const UsageStrip(),
+        ],
+        conversations: conversations,
+        more: _more,
+        loadingMore: _loadingMore,
+        scroll: _scroll,
+        search: _search,
+        searchFocus: _searchFocus,
+        serverHits: _serverQuery.isEmpty
+            ? null
+            : (across
+                  ? ref.watch(crossProfileSearchProvider(_serverQuery))
+                  : ref.watch(conversationSearchProvider(_serverQuery))),
+        scope: scope,
+        onScope: ref.read(searchScopeProvider.notifier).select,
+        profileNames: [for (final p in profiles) p.name],
+        currentProfile: profile,
+        recent: ref.watch(recentSearchesProvider),
+        onRecent: (query) => _search.text = query,
+        onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
+        titles: _titles,
+        gone: _gone,
+        onActions: chat == null
+            ? null
+            : (conversation) => unawaited(_actions(chat, conversation)),
+        onArchived: chat == null ? null : () => unawaited(_openArchived(chat)),
+        onOpen: chat == null
+            ? null
+            : (conversation) =>
+                  unawaited(_open(chat, conversation: conversation)),
+        onOpenHit: chat == null
+            ? null
+            : (hit, conversation) =>
+                  unawaited(_openHit(chat, hit, conversation)),
+        onMore: chat == null
+            ? null
+            : (offset) => unawaited(_loadMore(chat, offset)),
+        onRetry: () => ref.invalidate(conversationsProvider),
+        onRefresh: () async {
+          ref
+            ..invalidate(conversationsProvider)
+            ..invalidate(usageOptionsProvider);
+          await ref.read(conversationsProvider.future);
+        },
+        now: now,
+      ),
+    );
+
     return IrisScaffold(
       header: _HomeBar(
         demo: ref.watch(demoModeProvider),
-        collapse: _collapse,
+        collapse: hasTabs ? const AlwaysStoppedAnimation<double>(1) : _collapse,
         profile: profile,
         // The pill only opens something when there is a choice to make.
         onProfile: profiles.length > 1
@@ -501,87 +684,47 @@ class _ConversationListScreenState
         headline: headline,
         onGateway: openGateway,
       ),
-      body: Stack(
+      body: Column(
         children: [
-          NotificationListener<ScrollEndNotification>(
-            onNotification: _snap,
-            child: _ConversationList(
-              pins: pinnedIds,
-              live: replying,
-              lifted: _lifted,
-              fetchedPins: _fetchedPins,
-              top: [
-                // Fades as it scrolls under the bar, where the compact link
-                // takes over.
-                ValueListenableBuilder<double>(
-                  valueListenable: _collapse,
-                  builder: (context, t, child) => Opacity(
-                    opacity: (1 - t * 1.4).clamp(0.0, 1.0),
-                    child: child,
-                  ),
-                  child: KeyedSubtree(
-                    key: _heroKey,
-                    child: _Hero(
-                      orbState: orbState,
-                      linkState: linkState,
-                      headline: headlineText,
-                      host: server == null ? '' : _hostOf(server.baseUrl),
-                      total: conversations.value == null
-                          ? null
-                          : conversations.value!.total - _gone.length,
-                      now: now,
-                      onGateway: openGateway,
-                    ),
+          if (hasTabs)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.window.gutter,
+                0,
+                context.window.gutter,
+                IrisSpace.sm,
+              ),
+              child: IrisSegmented<HomeTab>(
+                values: tabs,
+                selected: tab,
+                labelOf: (value) => value.label,
+                onChanged: (value) {
+                  unawaited(IrisHaptics.selection());
+                  _searchFocus.unfocus();
+                  ref.read(homeTabProvider.notifier).select(value);
+                },
+              ),
+            ),
+          Expanded(
+            child: Stack(
+              children: [
+                switch (tab) {
+                  HomeTab.sessions => sessions,
+                  HomeTab.scheduled => const ScheduledTab(),
+                  HomeTab.tasks => const TasksTab(),
+                },
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _NewChatBar(
+                    enabled: chat != null && live,
+                    onTap: chat == null || !live
+                        ? null
+                        : () => unawaited(_open(chat)),
                   ),
                 ),
-                const UsageStrip(),
               ],
-              conversations: conversations,
-              more: _more,
-              loadingMore: _loadingMore,
-              scroll: _scroll,
-              search: _search,
-              searchFocus: _searchFocus,
-              serverHits: _serverQuery.isEmpty
-                  ? null
-                  : ref.watch(conversationSearchProvider(_serverQuery)),
-              recent: ref.watch(recentSearchesProvider),
-              onRecent: (query) => _search.text = query,
-              onClearRecent: ref.read(recentSearchesProvider.notifier).clear,
-              titles: _titles,
-              gone: _gone,
-              onActions: chat == null
-                  ? null
-                  : (conversation) => unawaited(_actions(chat, conversation)),
-              onArchived: chat == null
-                  ? null
-                  : () => unawaited(_openArchived(chat)),
-              onOpen: chat == null
-                  ? null
-                  : (conversation) =>
-                        unawaited(_open(chat, conversation: conversation)),
-              onMore: chat == null
-                  ? null
-                  : (offset) => unawaited(_loadMore(chat, offset)),
-              onRetry: () => ref.invalidate(conversationsProvider),
-              onRefresh: () async {
-                ref
-                  ..invalidate(conversationsProvider)
-                  ..invalidate(usageOptionsProvider);
-                await ref.read(conversationsProvider.future);
-              },
-              now: now,
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _NewChatBar(
-              enabled: chat != null && live,
-              onTap: chat == null || !live
-                  ? null
-                  : () => unawaited(_open(chat)),
             ),
           ),
         ],
@@ -1053,6 +1196,11 @@ class _ConversationList extends StatelessWidget {
     required this.search,
     required this.searchFocus,
     required this.serverHits,
+    required this.scope,
+    required this.onScope,
+    required this.profileNames,
+    required this.currentProfile,
+    required this.onOpenHit,
     required this.recent,
     required this.onRecent,
     required this.onClearRecent,
@@ -1090,6 +1238,21 @@ class _ConversationList extends StatelessWidget {
 
   /// The server's answer to the settled query; null when none is active.
   final AsyncValue<List<SearchHit>>? serverHits;
+
+  /// What the search covers: this profile, or every profile.
+  final SearchScope scope;
+  final ValueChanged<SearchScope> onScope;
+
+  /// Every profile on the server, by name; the scope is a choice only when
+  /// there is more than one.
+  final List<String> profileNames;
+
+  /// The profile the list belongs to.
+  final String currentProfile;
+
+  /// Opens a search hit, switching profile first when it is under another.
+  final void Function(SearchHit hit, ConversationSummary conversation)?
+  onOpenHit;
 
   /// The last searches on this server, newest first.
   final List<String> recent;
@@ -1220,6 +1383,11 @@ class _ConversationList extends StatelessWidget {
           searching: serverHits?.isLoading ?? false,
         ),
       ),
+      if (profileNames.length > 1 && (searchFocus.hasFocus || searching))
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.sm),
+          child: SearchScopeBar(scope: scope, onChanged: onScope),
+        ),
       if (searching)
         ..._searchItems(context, gutter, list, open)
       else if (recent.isNotEmpty || searchFocus.hasFocus)
@@ -1374,45 +1542,7 @@ class _ConversationList extends StatelessWidget {
                 ),
               ),
           ]
-        : <Widget>[
-            for (final (index, found) in shown.indexed)
-              Builder(
-                key: ValueKey('hit-${found.storedId}'),
-                builder: (context) {
-                  final title = titles[found.storedId] ?? found.title;
-                  return Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      gutter,
-                      0,
-                      gutter,
-                      IrisSpace.xs,
-                    ),
-                    child: SearchHitRow(
-                      query: search.text,
-                      now: now,
-                      best: index == 0,
-                      pinned: pins.contains(found.storedId),
-                      hit: SearchHit(
-                        storedId: found.storedId,
-                        title: title,
-                        snippet: found.snippet,
-                        lastActive: found.lastActive,
-                        messageCount: found.messageCount,
-                        matches: found.matches,
-                      ),
-                      onTap: open == null
-                          ? null
-                          : () => open(
-                              ConversationSummary(
-                                id: found.storedId,
-                                title: title,
-                              ),
-                            ),
-                    ),
-                  );
-                },
-              ),
-          ];
+        : _hitRows(context, gutter, shown);
     final settled = hits != null || failed;
     final matches = shown.fold<int>(0, (sum, hit) => sum + hit.matches);
     return [
@@ -1454,6 +1584,23 @@ class _ConversationList extends StatelessWidget {
           children: rows,
         ),
       ),
+      if (hits != null && profileNames.length > 1)
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            IrisSpace.sm,
+            gutter,
+            IrisSpace.sm,
+          ),
+          child: Text(
+            scope == SearchScope.all
+                ? 'Searched ${profileNames.join(', ')}.'
+                : 'Searching $currentProfile only. Switch to All profiles to '
+                      'include '
+                      '${profileNames.where((n) => n != currentProfile).join(', ')}.',
+            style: type.caption.copyWith(color: palette.inkFaint),
+          ),
+        ),
       if (rows.isEmpty && (settled || local.isEmpty))
         Padding(
           padding: const EdgeInsets.symmetric(vertical: IrisSpace.xl),
@@ -1480,6 +1627,86 @@ class _ConversationList extends StatelessWidget {
           ),
         ),
     ];
+  }
+
+  /// One row per hit, with a profile heading before each profile's first hit
+  /// when the search covers every profile.
+  List<Widget> _hitRows(
+    BuildContext context,
+    double gutter,
+    List<SearchHit> shown,
+  ) {
+    final palette = context.palette;
+    final rows = <Widget>[];
+    // The merge is newest first across profiles, so they can alternate: each
+    // profile's hits are gathered under one heading, the profile with the
+    // newest hit first.
+    final ordered = scope == SearchScope.all
+        ? [
+            for (final name in {for (final hit in shown) hit.profile})
+              for (final hit in shown)
+                if (hit.profile == name) hit,
+          ]
+        : shown;
+    String? lastProfile;
+    for (final (index, found) in ordered.indexed) {
+      if (scope == SearchScope.all &&
+          found.profile != null &&
+          found.profile != lastProfile) {
+        rows.add(
+          Padding(
+            key: ValueKey('heading-${found.profile}'),
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              IrisSpace.md,
+              gutter,
+              IrisSpace.xs,
+            ),
+            // Its own node, so a screen reader hears it as a heading rather
+            // than run into the hit before it.
+            child: Semantics(
+              container: true,
+              header: true,
+              child: IrisLabel(found.profile!, color: palette.inkFaint),
+            ),
+          ),
+        );
+      }
+      lastProfile = found.profile;
+      final title = titles[found.storedId] ?? found.title;
+      rows.add(
+        Padding(
+          key: ValueKey('hit-${found.profile}-${found.storedId}'),
+          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, IrisSpace.xs),
+          child: SearchHitRow(
+            query: search.text,
+            now: now,
+            best: index == 0,
+            pinned: pins.contains(found.storedId),
+            hit: SearchHit(
+              storedId: found.storedId,
+              title: title,
+              snippet: found.snippet,
+              lastActive: found.lastActive,
+              messageCount: found.messageCount,
+              matches: found.matches,
+              profile: found.profile,
+            ),
+            onTap: onOpenHit == null
+                ? null
+                : () => onOpenHit!(
+                    found,
+                    ConversationSummary(
+                      id: found.storedId,
+                      title: title,
+                      profile: found.profile,
+                    ),
+                  ),
+          ),
+        ),
+      );
+    }
+    return rows;
   }
 
   /// Floating bar height plus the fade above it, so the last row clears it.

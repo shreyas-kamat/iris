@@ -1250,6 +1250,91 @@ void main() {
       expect(controller.value.items.whereType<PromptRecord>(), isEmpty);
     });
   });
+
+  group('compress and rename (the ⋯ menu)', () {
+    test('compress calls the backend for a live chat', () async {
+      final controller = controllerFor();
+      await controller.open();
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      await controller.compress();
+      expect(backend.compressions, ['run-1']);
+      expect(toasts.last, 'Compressed');
+    });
+
+    test('compress with no runtime says there is nothing to compress', () async {
+      final controller = controllerFor(id: null);
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      await controller.compress();
+      expect(toasts.single, 'Nothing to compress yet');
+      expect(backend.compressions, isEmpty);
+    });
+
+    test('a refused compress is reported', () async {
+      backend.compressResult = const Err(
+        IrisFailure(FailureKind.server, message: 'busy'),
+      );
+      final controller = controllerFor();
+      await controller.open();
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      await controller.compress();
+      expect(toasts.last, startsWith('Could not compress'));
+    });
+
+    test('rename shows the new title and tells the backend', () async {
+      final controller = controllerFor();
+      await controller.open();
+      await controller.rename('Better title');
+      expect(controller.value.title, 'Better title');
+      expect(backend.renames, [('stored-1', 'Better title')]);
+    });
+
+    test('a refused rename puts the old title back and says why', () async {
+      backend.renameResult = const Err(
+        IrisFailure(FailureKind.rejected, message: 'no'),
+      );
+      final controller = controllerFor();
+      await controller.open();
+      final toasts = <String>[];
+      controller.onToast = (message, {actionLabel, onAction}) =>
+          toasts.add(message);
+      final before = controller.value.title;
+      await controller.rename('Better title');
+      expect(controller.value.title, before);
+      expect(toasts.last, startsWith('Could not rename'));
+    });
+  });
+
+  test('fullTranscript reads every earlier page, oldest first', () async {
+    backend
+      ..historyResult = const Ok([UserTurn(id: '3', text: 'newest')])
+      ..historyEarlier = const HistoryCursor(offset: 0, fromNewest: false)
+      ..earlierResult = const Ok(
+        HistoryPage(items: [UserTurn(id: '1', text: 'oldest')]),
+      );
+    final controller = controllerFor();
+    await controller.open();
+    final all = await controller.fullTranscript();
+    expect(all.map((item) => item.id), ['1', '3']);
+  });
+
+  test('fullTranscript stops when an earlier page fails', () async {
+    backend
+      ..historyResult = const Ok([UserTurn(id: '3', text: 'newest')])
+      ..historyEarlier = const HistoryCursor(offset: 0, fromNewest: false)
+      ..earlierResult = const Err(IrisFailure(FailureKind.server));
+    final controller = controllerFor();
+    await controller.open();
+    final all = await controller.fullTranscript();
+    // The failed page leaves a plain notice in the transcript; the export
+    // drops plain notices, so only the messages are compared.
+    expect(all.whereType<UserTurn>().map((item) => item.id), ['3']);
+  });
 }
 
 /// Whether [secret] appears anywhere the state could show or keep it.

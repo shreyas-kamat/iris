@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/providers.dart';
 import '../data/net/capabilities.dart';
 import '../data/net/server_config.dart';
+import 'demo_automation.dart';
 import 'demo_world.dart';
 
 /// The demo's world while it is shown; null otherwise.
@@ -54,10 +55,22 @@ const demoServer = ServerConfig(
 );
 
 final demoCapabilities = ServerCapabilities(
-  available: const {ServerCapability.profiles, ServerCapability.sessionSearch},
+  available: const {
+    ServerCapability.profiles,
+    ServerCapability.sessionSearch,
+    ServerCapability.cronJobs,
+    ServerCapability.kanban,
+  },
   probedAt: DateTime(2026, 10, 15),
   serverVersion: 'demo',
 );
+
+/// The demo's jobs, tasks and profile tools. One per demo visit.
+final demoAutomationProvider = Provider<DemoAutomation>((ref) {
+  final world = ref.watch(demoSessionProvider);
+  if (world == null) throw StateError('No demo is running');
+  return DemoAutomation(world, clock: ref.read(clockProvider));
+});
 
 /// Leaves the demo from anywhere: back to the bottom of the stack, where the
 /// gate then shows the welcome screen.

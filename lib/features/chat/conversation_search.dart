@@ -10,6 +10,7 @@ import '../../core/result.dart';
 import '../../data/chat/chat_models.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
+import '../../design/components/segmented.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
@@ -25,6 +26,46 @@ final conversationSearchProvider = FutureProvider.autoDispose
       final chat = await ref.watch(activeChatProvider.future);
       if (chat == null) return const [];
       return switch (await chat.search(query)) {
+        Ok(:final value) => value,
+        Err(:final failure) => throw failure,
+      };
+    });
+
+/// What a home search covers.
+enum SearchScope {
+  here('This profile'),
+  all('All profiles');
+
+  const SearchScope(this.label);
+  final String label;
+}
+
+final searchScopeProvider = NotifierProvider<SearchScopeState, SearchScope>(
+  SearchScopeState.new,
+);
+
+class SearchScopeState extends Notifier<SearchScope> {
+  @override
+  SearchScope build() => SearchScope.here;
+
+  void select(SearchScope scope) => state = scope;
+}
+
+/// The hits for a query across every profile on the server, labelled by
+/// profile.
+final crossProfileSearchProvider = FutureProvider.autoDispose
+    .family<List<SearchHit>, String>((ref, query) async {
+      final chat = await ref.watch(activeChatProvider.future);
+      if (chat == null) return const [];
+      final names = [
+        for (final profile
+            in ref.watch(profilesProvider).value ?? const <AgentProfile>[])
+          profile.name,
+      ];
+      final profiles = names.isEmpty
+          ? [ref.read(activeProfileProvider)]
+          : names;
+      return switch (await chat.searchAcross(query, profiles)) {
         Ok(:final value) => value,
         Err(:final failure) => throw failure,
       };
@@ -407,4 +448,24 @@ class RecentSearchChips extends StatelessWidget {
       ],
     );
   }
+}
+
+/// "This profile | All profiles", under the search field.
+class SearchScopeBar extends StatelessWidget {
+  const SearchScopeBar({
+    required this.scope,
+    required this.onChanged,
+    super.key,
+  });
+
+  final SearchScope scope;
+  final ValueChanged<SearchScope> onChanged;
+
+  @override
+  Widget build(BuildContext context) => IrisSegmented<SearchScope>(
+    values: SearchScope.values,
+    selected: scope,
+    labelOf: (value) => value.label,
+    onChanged: onChanged,
+  );
 }

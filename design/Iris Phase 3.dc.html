@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&amp;family=Geist+Mono:wght@400;500&amp;family=Instrument+Serif:ital@0;1&amp;display=swap" rel="stylesheet">
+<script src="./iris.js"></script>
+<style>html,body{background:#07070A !important}body{margin:0;background:#07070A;color:#ECEBF2;font-family:Geist,system-ui,sans-serif;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#C9C3FF}a:hover{color:#ECEBF2}button{font-family:inherit;color:inherit}::-webkit-scrollbar{display:none}</style>
+</helmet>
+
+<section data-screen-label="Overview" style="display:flex;flex-direction:column;gap:36px;padding:72px 64px 56px;background:#07070A;color:#ECEBF2">
+  <div style="display:flex;flex-direction:column;gap:12px;max-width:820px">
+    <span style="font:500 12px 'Geist Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:#A9A7B8">Iris · phase 3 · scheduled, tasks, menus, profiles</span>
+    <span style="font:400 72px/0.95 'Instrument Serif',serif">What Hermes does while you’re away.</span>
+    <span style="font:400 16px/1.55 Geist,sans-serif;color:#A9A7B8;text-wrap:pretty">Every frame is 393×852, Aperture dark first, with light variants for A2, B1 and D1 and a 320pt board. Frames only show fields the server sends. If a field is missing, its slot is left out, never filled in. Each phone’s note names the Phase 2 part it reuses.</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px">
+    <div style="flex:1 1 520px;display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:22px;background:#13131A;border:1px solid #1E1E27;font:400 12.5px/1.6 'Geist Mono',monospace;color:#A9A7B8">
+      <span style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">DRAWN AS SENT</span>
+      <span><span style="color:#ECEBF2">Schedules</span> · schedule.display if present, else schedule.expr, verbatim in a mono chip. Never translated.</span>
+      <span><span style="color:#ECEBF2">Job name</span> · name, else the first line of prompt. Model and Deliver to rows only exist when set.</span>
+      <span><span style="color:#ECEBF2">Tasks</span> · no due dates, no percent bars. Progress only as “n of m subtasks”. Elapsed comes from started_at, on Running cards only.</span>
+      <span><span style="color:#ECEBF2">Optional</span> · assignee, latest_summary, comment and warning counts collapse when absent or 0</span>
+      <span><span style="color:#ECEBF2">Profiles</span> · model is read-only from config. The default profile has no rename field or Delete.</span>
+    </div>
+    <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:22px;background:#13131A;border:1px solid #1E1E27;font:400 12.5px/1.6 'Geist Mono',monospace;color:#A9A7B8">
+      <span style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">INDEX</span>
+      <span><a href="#A1">A</a> · Home tabs + Scheduled · A1–A6, A2·L</span>
+      <span><a href="#B1">B</a> · Tasks (Kanban plugin) · B1–B5, B1·L, B1·320</span>
+      <span><a href="#C1">C</a> · Chat ⋯ menu · C1, C1·B, C2, C3</span>
+      <span><a href="#D1">D</a> · Profiles + cross-profile search · D1–D5, D1·L</span>
+      <span><span style="color:#ECEBF2">Shared</span> · same tokens, type, 44pt hit areas, radii and springs as Phase 2. Nothing here restyles it.</span>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="A Home tabs + Scheduled" style="display:flex;flex-direction:column;gap:28px;padding:56px 64px;background:#07070A;color:#ECEBF2;border-top:1px solid #1E1E27">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:820px">
+    <span style="font:500 12px 'Geist Mono',monospace;letter-spacing:.14em;color:#A9A7B8">A1 – A6</span>
+    <span style="font:italic 400 44px/1 'Instrument Serif',serif">Home tabs and scheduled jobs</span>
+    <span style="font:400 15px/1.55 Geist;color:#A9A7B8;text-wrap:pretty">The segmented control sits right under the header, in the greeting’s old spot, so it stays in the same place on every tab. Everything below it belongs to the selected tab: the usage strip, search and Live/Earlier appear on Sessions only. The Ask bar stays on all three.</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+    <div id="A1" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A1</span><span style="font:500 14px Geist">Home · Sessions</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 10px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Tasks</div></div></div>
+        <div style="margin:0 16px;display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:20px;background:#13131A;border:1px solid #1E1E27">
+          <sc-for list="{{ usage }}" as="u" hint-placeholder-count="2">
+            <div style="display:grid;grid-template-columns:96px 1fr auto;align-items:center;gap:10px"><span style="font:500 13px Geist">{{ u.name }}</span><div style="height:6px;border-radius:3px;background:#07070A;overflow:hidden"><div style="height:100%;border-radius:3px;width:{{ u.pct }};background:{{ u.col }}"></div></div><span style="font:400 11px 'Geist Mono';color:{{ u.tc }};white-space:nowrap">{{ u.label }}</span></div>
+          </sc-for>
+        </div>
+        <div style="padding:10px 16px 4px"><div style="height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 15.5px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>Search chats</div></div>
+        <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:4px">
+          <span style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8;padding:12px 6px 4px">LIVE</span>
+          <sc-for list="{{ live }}" as="r" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 12px 10px 10px;border-radius:18px;background:#13131A;border:1px solid #1E1E27">
+              <div style="width:44px;height:44px;border-radius:14px;background:#07070A;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="{{ r.st }}" size="36"></iris-orb></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font:500 14px/1.3 Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span><span style="font:400 11px 'Geist Mono';letter-spacing:.02em;color:#A9A7B8">{{ r.m }}</span></div>
+              <span style="font:500 11px Geist;padding:4px 8px;border-radius:999px;color:{{ r.c }};background:{{ r.tint }};flex:none;white-space:nowrap">{{ r.lab }}</span>
+            </div>
+          </sc-for>
+          <span style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8;padding:12px 6px 4px">EARLIER</span>
+          <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px 8px 10px;border-radius:18px">
+              <div style="width:40px;height:40px;border-radius:13px;background:#13131A;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="rest" size="28" glow="off"></iris-orb></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font:400 14px/1.3 Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span><span style="font:400 11px 'Geist Mono';letter-spacing:.02em;color:#A9A7B8">{{ r.m }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · Phase 2 home (profile pill, B7 usage strip condensed to one bar per provider, B4 search field at rest, Live rows), plus the original Iris App segmented control at 44h</div>
+    </div>
+
+    <div id="A2" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A2</span><span style="font:500 14px Geist">Scheduled · dark</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 4px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Sessions</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Tasks</div></div></div>
+        <div style="height:52px;flex:none;display:flex;align-items:center;justify-content:center;gap:10px"><iris-orb state="loading" size="28"></iris-orb><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8">REFRESHING</span></div>
+        <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;padding:0 0 0 6px"><span style="flex:1;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">4 JOBS</span><div style="height:44px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;font:500 14px Geist;color:#C9C3FF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New job</div></div>
+          <sc-for list="{{ jobsD }}" as="j" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:8px;padding:14px 6px 14px 16px;border-radius:18px;background:#13131A;border:1px solid {{ j.bd }}">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+                <span style="font:500 14px/1.3 Geist;color:{{ j.nc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.n }}</span>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font:400 11px 'Geist Mono';padding:3px 7px;border-radius:6px;background:#07070A;color:#A9A7B8">{{ j.sch }}</span><span style="display:flex;align-items:center;gap:5px;font:400 11.5px 'Geist Mono';color:{{ j.c }}"><sc-if value="{{ j.run }}"><iris-orb state="tool" size="18"></iris-orb></sc-if>{{ j.st }}</span></div>
+                <sc-if value="{{ j.fail }}"><span style="font:400 12px/1.4 'Geist Mono';color:#FF6B6B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.err }}</span></sc-if>
+              </div>
+              <div style="width:59px;height:44px;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:51px;height:31px;border-radius:999px;padding:3px;display:flex;justify-content:{{ j.jc }};background:{{ j.track }}"><div style="width:25px;height:25px;border-radius:50%;background:{{ j.knob }}"></div></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · original Iris App cron card + Phase 2 card tokens, B7 51×31 switch, loading orb as the pull-to-refresh indicator. The third job has no name, so it shows the prompt’s first line.</div>
+    </div>
+
+    <div id="A2-light" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#ECE9FF;color:#4F3FCF">A2·L</span><span style="font:500 14px Geist">Scheduled · light</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#F7F6FB;color:#16151D;display:flex;flex-direction:column;box-shadow:0 0 0 1px #CDCAD9,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6B6980;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#16151D"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#FFFFFF;border:1px solid #E6E4EE"><div style="width:32px;height:32px;border-radius:50%;background:#ECE9FF;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#4F3FCF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#4E4C60">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#FFFFFF;border:1px solid #E6E4EE;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16151D" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 4px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#EFEEF5;border:1px solid #E6E4EE"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#4E4C60">Sessions</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#FFFFFF;border:1px solid #CDCAD9;font:500 13px Geist">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#4E4C60">Tasks</div></div></div>
+        <div style="height:52px;flex:none;display:flex;align-items:center;justify-content:center;gap:10px"><iris-orb state="loading" size="28" theme="light"></iris-orb><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#4E4C60">REFRESHING</span></div>
+        <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;padding:0 0 0 6px"><span style="flex:1;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#4E4C60">4 JOBS</span><div style="height:44px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;font:500 14px Geist;color:#4F3FCF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New job</div></div>
+          <sc-for list="{{ jobsL }}" as="j" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:8px;padding:14px 6px 14px 16px;border-radius:18px;background:#FFFFFF;border:1px solid {{ j.bd }}">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+                <span style="font:500 14px/1.3 Geist;color:{{ j.nc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.n }}</span>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font:400 11px 'Geist Mono';padding:3px 7px;border-radius:6px;background:#EFEEF5;color:#4E4C60">{{ j.sch }}</span><span style="display:flex;align-items:center;gap:5px;font:400 11.5px 'Geist Mono';color:{{ j.c }}"><sc-if value="{{ j.run }}"><iris-orb state="tool" size="18" theme="light"></iris-orb></sc-if>{{ j.st }}</span></div>
+                <sc-if value="{{ j.fail }}"><span style="font:400 12px/1.4 'Geist Mono';color:#C0312D;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.err }}</span></sc-if>
+              </div>
+              <div style="width:59px;height:44px;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:51px;height:31px;border-radius:999px;padding:3px;display:flex;justify-content:{{ j.jc }};background:{{ j.track }}"><div style="width:25px;height:25px;border-radius:50%;background:{{ j.knob }};box-shadow:0 1px 3px rgba(22,21,29,.2)"></div></div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#F7F6FB 60%,rgba(247,246,251,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#FFFFFF;border:1px solid #CDCAD9;box-shadow:0 8px 24px rgba(22,21,29,.08)"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#4E4C60"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#ECE9FF;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#16151D;opacity:.5;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1·L light home tokens: surface cards with line border, sunken chips, light state hues, switch on accent</div>
+    </div>
+
+    <div id="A3" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A3</span><span style="font:500 14px Geist">Scheduled · empty</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">R</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">hermes.local</span><span style="font:500 13px Geist">research</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 4px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Sessions</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Tasks</div></div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 40px 160px;text-align:center"><iris-orb state="rest" size="80" glow="off"></iris-orb><span style="font:italic 400 28px/1.1 'Instrument Serif',serif;text-wrap:pretty">No scheduled jobs on research</span><span style="font:400 14px/1.5 Geist;color:#A9A7B8;text-wrap:pretty">Jobs run a prompt on a schedule and keep each run as a chat.</span><div style="height:48px;padding:0 22px;margin-top:6px;border-radius:14px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;gap:8px;font:600 15px Geist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14121F" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New job</div></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · B3 Archived empty state (rest orb 80, no glow, serif 28, inkMuted body) + A1 confirm’s 48h accent button</div>
+    </div>
+
+    <div id="A4" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A4</span><span style="font:500 14px Geist">Job detail</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ t.a4 }}" as="x" hint-placeholder-count="2"><button onClick="{{ x.pick }}" style="height:30px;padding:0 12px;border-radius:999px;font:500 12px Geist;cursor:pointer;white-space:nowrap;flex:none;background:{{ x.bg }};color:{{ x.fg }};border:1px solid {{ x.bd }}">{{ x.name }}</button></sc-for></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="padding:4px 12px;flex:none"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></div></div>
+        <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 16px 48px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-direction:column;gap:10px;padding:0 6px">
+            <span style="font:italic 400 34px/1.05 'Instrument Serif',serif;text-wrap:pretty">Nightly backup to cold storage</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font:400 11px 'Geist Mono';padding:3px 7px;border-radius:6px;background:#13131A;border:1px solid #1E1E27;color:#A9A7B8">0 2 * * *</span><span style="font:400 11.5px 'Geist Mono';color:#FF6B6B">failed 2h ago</span><span style="font:400 11.5px 'Geist Mono';color:#A9A7B8">· next in 21h 40m</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:6px 6px 6px 16px;border-radius:20px;background:#13131A;border:1px solid #1E1E27"><span style="flex:1;font:400 15px Geist">Enabled</span><div style="width:59px;height:44px;display:flex;align-items:center;justify-content:center"><div style="width:51px;height:31px;border-radius:999px;padding:3px;display:flex;justify-content:flex-end;background:#C9C3FF"><div style="width:25px;height:25px;border-radius:50%;background:#14121F"></div></div></div></div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:16px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.32)"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#FF6B6B">LAST ERROR</span><span style="font:400 12.5px/1.5 'Geist Mono';color:#ECEBF2">backup target returned 502 Bad Gateway (s3-cold, 3 retries)</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">PROMPT</span>
+            <div style="padding:14px 16px;border-radius:20px;background:#13131A;border:1px solid #1E1E27;font:400 14.5px/1.55 Geist;white-space:pre-wrap;text-wrap:pretty">Back up /srv/data to the s3-cold bucket.
+Verify the checksum of the newest archive, delete archives older than 30 days, and post a one-line summary.</div>
+          </div>
+          <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;min-height:52px;padding:10px 16px"><span style="flex:1;font:400 15px Geist">Model</span><span style="font:400 12px 'Geist Mono';color:#A9A7B8">opus-4.5</span></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:52px;padding:10px 16px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 15px Geist">Delivers to</span><span style="font:400 12px 'Geist Mono';color:#A9A7B8">telegram-ops</span></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1.3;height:48px;border-radius:14px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;justify-content:center;gap:8px;font:600 15px Geist"><svg width="14" height="14" viewBox="0 0 24 24" fill="#14121F"><path d="M7 4l13 8-13 8z"></path></svg>Run now</div>
+            <div style="flex:1;height:48px;border-radius:14px;background:#13131A;border:1px solid #34333F;display:flex;align-items:center;justify-content:center;font:500 15px Geist">Edit</div>
+            <div style="flex:1;height:48px;border-radius:14px;background:#13131A;border:1px solid #34333F;display:flex;align-items:center;justify-content:center;font:500 15px Geist;color:#FF6B6B">Delete</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:6px 6px 4px">PAST RUNS</span>
+            <sc-if value="{{ a4.started }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px 8px 10px;border-radius:18px;background:#13131A;border:1px solid #1E1E27"><div style="width:40px;height:40px;border-radius:13px;background:#07070A;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="tool" size="28"></iris-orb></div><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font:500 14px Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Nightly backup to cold storage</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">opus-4.5 · started now</span></div></div></sc-if>
+            <sc-for list="{{ runs }}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px 8px 10px;border-radius:18px">
+                <div style="width:40px;height:40px;border-radius:13px;background:#13131A;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="rest" size="28" glow="off"></iris-orb></div>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font:400 14px Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">{{ r.m }} · {{ r.s }}</span></div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{ a4.started }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:16px;right:16px;bottom:40px;z-index:8;display:flex;align-items:center;gap:12px;padding:0 4px 0 14px;min-height:52px;border-radius:18px;background:#17161F;border:1px solid #34333F;box-shadow:0 16px 40px rgba(0,0,0,.5)"><iris-orb state="tool" size="28"></iris-orb><span style="flex:1;min-width:0;font:400 14px Geist">Started</span><div style="height:44px;padding:0 14px;display:flex;align-items:center;font:600 14px Geist;color:#C9C3FF">Open</div></div>
+        </sc-if>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 settings rows, B6 needs-you strip recoloured to failed for Last error, A1 Recent rows for Past runs, B3 toast. Scrolls; the new run joins Past runs.</div>
+    </div>
+
+    <div id="A5" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A5</span><span style="font:500 14px Geist">New job</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px 8px;height:52px;flex:none"><div style="height:44px;padding:0 10px;display:flex;align-items:center;font:500 15px Geist;color:#C9C3FF">Cancel</div><span style="font:500 15px Geist">New job</span><div style="height:44px;display:flex;align-items:center"><div style="height:36px;padding:0 18px;border-radius:999px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;font:600 14px Geist">Save</div></div></div>
+        <div style="flex:1;overflow:hidden;padding:8px 16px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">NAME · OPTIONAL</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 16px Geist">Weekly planning digest</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">SCHEDULE</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1.5px solid #C9C3FF;font:400 16px 'Geist Mono'">every monday 9am<span style="display:inline-block;width:2px;height:19px;margin-left:1px;background:#C9C3FF"></span></div><span style="font:400 11.5px/1.5 'Geist Mono';color:#A9A7B8;padding:0 6px">30m · every 2h · every monday 9am · 0 9 * * * · or a date</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">PROMPT</span><div style="min-height:150px;padding:14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 15px/1.55 Geist;white-space:pre-wrap">Look at last week’s closed tasks and open PRs on hermes-core.
+Draft a planning note: what shipped, what slipped, and the three things to do first this week.</div></div>
+          <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:400 15px Geist">Model</span><span style="font:400 12.5px Geist;color:#A9A7B8">Opens the model sheet</span></div><span style="font:400 12px 'Geist Mono';color:#A9A7B8">Profile default</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px;border-top:1px solid #1E1E27"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:400 15px Geist">Deliver to</span><span style="font:400 12.5px Geist;color:#A9A7B8">Where each run’s reply is sent</span></div><span style="font:400 12px 'Geist Mono';color:#C9C3FF">telegram-ops</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg></div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · B3 rename field (sunken, 1.5pt accent focus) + A5 settings rows → A6 model sheet. Deliver to is hidden when the server has no targets. Save is a 36 pill in a 44 hit.</div>
+    </div>
+
+    <div id="A5-E" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A5·E</span><span style="font:500 14px Geist">Edit job · server error</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px 8px;height:52px;flex:none"><div style="height:44px;padding:0 10px;display:flex;align-items:center;font:500 15px Geist;color:#C9C3FF">Cancel</div><span style="font:500 15px Geist">Edit job</span><div style="height:44px;display:flex;align-items:center"><div style="height:36px;padding:0 18px;border-radius:999px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;font:600 14px Geist">Save</div></div></div>
+        <div style="flex:1;overflow:hidden;padding:8px 16px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">NAME · OPTIONAL</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 16px Geist">Weekly planning digest</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">SCHEDULE</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1.5px solid #FF6B6B;font:400 16px 'Geist Mono'">every blursday</div><span style="display:flex;align-items:center;gap:6px;font:400 12px/1.5 'Geist Mono';color:#FF6B6B;padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5v.5"></path></svg>Couldn’t parse ‘every blursday’</span><span style="font:400 11.5px/1.5 'Geist Mono';color:#A9A7B8;padding:0 6px">30m · every 2h · every monday 9am · 0 9 * * * · or a date</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">PROMPT</span><div style="min-height:150px;padding:14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 15px/1.55 Geist;white-space:pre-wrap">Look at last week’s closed tasks and open PRs on hermes-core.
+Draft a planning note: what shipped, what slipped, and the three things to do first this week.</div></div>
+          <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px"><span style="flex:1;font:400 15px Geist">Model</span><span style="font:400 12px 'Geist Mono';color:#A9A7B8">opus-4.5</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 15px Geist">Deliver to</span><span style="font:400 12px 'Geist Mono';color:#C9C3FF">telegram-ops</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg></div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 form with A7’s failed field treatment: 1.5pt failed border, the server’s message verbatim, focus returns to Schedule</div>
+    </div>
+
+    <div id="A6" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">A6</span><span style="font:500 14px Geist">Delete job?</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="padding:4px 12px"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27"></div></div>
+        <div style="padding:8px 22px;display:flex;flex-direction:column;gap:12px"><span style="font:italic 400 34px/1.05 'Instrument Serif',serif">Weekly planning digest</span><span style="align-self:flex-start;font:400 11px 'Geist Mono';padding:3px 7px;border-radius:6px;background:#13131A;color:#A9A7B8">every monday 9am</span></div>
+        <div style="margin:10px 16px;height:60px;border-radius:20px;background:#13131A;border:1px solid #1E1E27"></div>
+        <div style="margin:0 16px;height:150px;border-radius:20px;background:#13131A;border:1px solid #1E1E27"></div>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:28px;right:28px;top:300px;z-index:8;border-radius:26px;background:#17161F;border:1px solid #34333F;padding:22px 20px 16px;display:flex;flex-direction:column;gap:18px;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 17px/1.35 Geist;text-wrap:pretty">Delete ‘Weekly planning digest’?</span><span style="font:400 14px/1.5 Geist;color:#A9A7B8;text-wrap:pretty">This removes the job from Hermes for good. Chats from past runs stay.</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="height:48px;border-radius:14px;background:#FF6B6B;color:#14121F;display:flex;align-items:center;justify-content:center;font:600 15px Geist">Delete</div><div style="height:48px;border-radius:14px;background:#13131A;border:1px solid #34333F;display:flex;align-items:center;justify-content:center;font:500 15px Geist">Cancel</div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1 chat delete confirm, unchanged (radius 26, failed fill Delete, surface Cancel, scrim 72% + blur 4)</div>
+    </div>
+  </div>
+</section>
+
+
+<section data-screen-label="B Tasks" style="display:flex;flex-direction:column;gap:28px;padding:56px 64px;background:#07070A;color:#ECEBF2;border-top:1px solid #1E1E27">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:820px">
+    <span style="font:500 12px 'Geist Mono',monospace;letter-spacing:.14em;color:#A9A7B8">B1 – B5</span>
+    <span style="font:italic 400 44px/1 'Instrument Serif',serif">Tasks, one column at a time</span>
+    <span style="font:400 15px/1.55 Geist;color:#A9A7B8;text-wrap:pretty">A phone can’t show seven columns, so the board is a row of column chips with counts, and the selected column’s cards below. Running, Review and Scheduled belong to Hermes. You can see them, but you can’t move a card into them.</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+    <div id="B1" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B1</span><span style="font:500 14px Geist">Board · Running</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 10px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Tasks</div></div></div>
+        <div style="position:relative;overflow:hidden;flex:none"><div style="display:flex;gap:6px;padding:0 16px;margin-left:-60px"><sc-for list="{{ colsRun }}" as="c" hint-placeholder-count="7"><div style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;font:500 13px Geist;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}">{{ c.n }}<span style="font:400 11px 'Geist Mono'">{{ c.c }}</span></div></sc-for></div><div style="position:absolute;top:0;bottom:0;right:0;width:36px;background:linear-gradient(to left,#0B0B10,rgba(11,11,16,0))"></div></div>
+        <div style="flex:1;overflow:hidden;padding:6px 16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;padding:0 0 0 6px"><span style="flex:1;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">RUNNING · SET BY HERMES</span><div style="height:44px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;font:500 14px Geist;color:#C9C3FF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New task</div></div>
+          <sc-for list="{{ tRun }}" as="k" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:18px;background:#13131A;border:1px solid #1E1E27">
+              <div style="display:flex;align-items:flex-start;gap:10px"><sc-if value="{{ k.run }}"><iris-orb state="tool" size="22"></iris-orb></sc-if><span style="flex:1;font:500 14.5px/1.35 Geist;text-wrap:pretty">{{ k.title }}</span><sc-if value="{{ k.run }}"><span style="font:500 11.5px 'Geist Mono';color:#FFB547;padding-top:2px">{{ k.el }}</span></sc-if></div>
+              <sc-if value="{{ k.hasSum }}"><span style="font:400 13px/1.45 Geist;color:#A9A7B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ k.sum }}</span></sc-if>
+              <sc-if value="{{ k.hasProg }}"><span style="font:400 11.5px 'Geist Mono';color:#ECEBF2">{{ k.prog }}</span></sc-if>
+              <div style="display:flex;align-items:center;gap:10px;font:400 11px 'Geist Mono';color:#A9A7B8"><span>{{ k.id }}</span><sc-if value="{{ k.hasWho }}"><span>{{ k.who }}</span></sc-if><span>p{{ k.p }}</span><span style="flex:1"></span><sc-if value="{{ k.hasCm }}"><span style="display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>{{ k.cm }}</span></sc-if><sc-if value="{{ k.hasWn }}"><span style="display:flex;align-items:center;gap:4px;color:#FF8A5C"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3zM12 10v4M12 17v.5"></path></svg>{{ k.wn }}</span></sc-if></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · original Iris App task filters + task card, minus its % bar and due dates. Phase 2 tool orb 22 + mono elapsed clock from started_at; “2 of 5 subtasks” only when progress is sent.</div>
+    </div>
+
+    <div id="B1-B" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B1·B</span><span style="font:500 14px Geist">Board · Blocked</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 10px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Tasks</div></div></div>
+        <div style="position:relative;overflow:hidden;flex:none"><div style="display:flex;gap:6px;padding:0 16px;margin-left:-150px"><sc-for list="{{ colsBlk }}" as="c" hint-placeholder-count="7"><div style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;font:500 13px Geist;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}">{{ c.n }}<span style="font:400 11px 'Geist Mono'">{{ c.c }}</span></div></sc-for></div><div style="position:absolute;top:0;bottom:0;right:0;width:36px;background:linear-gradient(to left,#0B0B10,rgba(11,11,16,0))"></div><div style="position:absolute;top:0;bottom:0;left:0;width:36px;background:linear-gradient(to right,#0B0B10,rgba(11,11,16,0))"></div></div>
+        <div style="flex:1;overflow:hidden;padding:6px 16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;padding:0 0 0 6px"><span style="flex:1;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">BLOCKED · 3</span><div style="height:44px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;font:500 14px Geist;color:#C9C3FF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New task</div></div>
+          <sc-for list="{{ tBlk }}" as="k" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:18px;background:#13131A;border:1px solid #1E1E27">
+              <span style="font:500 14.5px/1.35 Geist;text-wrap:pretty">{{ k.title }}</span>
+              <sc-if value="{{ k.block }}"><span style="align-self:flex-start;font:500 11px Geist;padding:4px 8px;border-radius:999px;color:{{ k.bc }};background:{{ k.bt }}">{{ k.bk }}</span></sc-if>
+              <sc-if value="{{ k.hasSum }}"><span style="font:400 13px/1.45 Geist;color:#A9A7B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ k.sum }}</span></sc-if>
+              <div style="display:flex;align-items:center;gap:10px;font:400 11px 'Geist Mono';color:#A9A7B8"><span>{{ k.id }}</span><sc-if value="{{ k.hasWho }}"><span>{{ k.who }}</span></sc-if><span>p{{ k.p }}</span><span style="flex:1"></span><sc-if value="{{ k.hasCm }}"><span style="display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>{{ k.cm }}</span></sc-if><sc-if value="{{ k.hasWn }}"><span style="display:flex;align-items:center;gap:4px;color:#FF8A5C"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3zM12 10v4M12 17v.5"></path></svg>{{ k.wn }}</span></sc-if></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · Phase 2 state chip for the block_kind badge, shown verbatim: needs input uses needs-you, the others (dependency, capability, transient) use the neutral Skipped chip. Warning count uses needs-you.</div>
+    </div>
+
+    <div id="B1-light" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#ECE9FF;color:#4F3FCF">B1·L</span><span style="font:500 14px Geist">Board · light</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#F7F6FB;color:#16151D;display:flex;flex-direction:column;box-shadow:0 0 0 1px #CDCAD9,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6B6980;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#16151D"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#FFFFFF;border:1px solid #E6E4EE"><div style="width:32px;height:32px;border-radius:50%;background:#ECE9FF;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#4F3FCF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#4E4C60">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#FFFFFF;border:1px solid #E6E4EE;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16151D" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 10px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#EFEEF5;border:1px solid #E6E4EE"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#4E4C60">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#4E4C60">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#FFFFFF;border:1px solid #CDCAD9;font:500 13px Geist">Tasks</div></div></div>
+        <div style="position:relative;overflow:hidden;flex:none"><div style="display:flex;gap:6px;padding:0 16px;margin-left:-60px"><sc-for list="{{ colsRunL }}" as="c" hint-placeholder-count="7"><div style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;font:500 13px Geist;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}">{{ c.n }}<span style="font:400 11px 'Geist Mono'">{{ c.c }}</span></div></sc-for></div><div style="position:absolute;top:0;bottom:0;right:0;width:36px;background:linear-gradient(to left,#F7F6FB,rgba(247,246,251,0))"></div></div>
+        <div style="flex:1;overflow:hidden;padding:6px 16px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;padding:0 0 0 6px"><span style="flex:1;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#4E4C60">RUNNING · SET BY HERMES</span><div style="height:44px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;font:500 14px Geist;color:#4F3FCF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New task</div></div>
+          <sc-for list="{{ tRunL }}" as="k" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:18px;background:#FFFFFF;border:1px solid #E6E4EE">
+              <div style="display:flex;align-items:flex-start;gap:10px"><iris-orb state="tool" size="22" theme="light"></iris-orb><span style="flex:1;font:500 14.5px/1.35 Geist;text-wrap:pretty">{{ k.title }}</span><span style="font:500 11.5px 'Geist Mono';color:#8A5000;padding-top:2px">{{ k.el }}</span></div>
+              <sc-if value="{{ k.hasSum }}"><span style="font:400 13px/1.45 Geist;color:#4E4C60;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ k.sum }}</span></sc-if>
+              <sc-if value="{{ k.hasProg }}"><span style="font:400 11.5px 'Geist Mono';color:#16151D">{{ k.prog }}</span></sc-if>
+              <div style="display:flex;align-items:center;gap:10px;font:400 11px 'Geist Mono';color:#4E4C60"><span>{{ k.id }}</span><sc-if value="{{ k.hasWho }}"><span>{{ k.who }}</span></sc-if><span>p{{ k.p }}</span><span style="flex:1"></span><sc-if value="{{ k.hasCm }}"><span style="display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>{{ k.cm }}</span></sc-if><sc-if value="{{ k.hasWn }}"><span style="display:flex;align-items:center;gap:4px;color:#B5410F"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3zM12 10v4M12 17v.5"></path></svg>{{ k.wn }}</span></sc-if></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#F7F6FB 60%,rgba(247,246,251,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#FFFFFF;border:1px solid #CDCAD9;box-shadow:0 8px 24px rgba(22,21,29,.08)"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#4E4C60"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#ECE9FF;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#16151D;opacity:.5;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1·L light tokens; the selected column chip uses the light accent fill from the Phase 2 state chips</div>
+    </div>
+
+    <div id="B1-320" style="flex:none;display:flex;flex-direction:column;gap:14px;width:320px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B1·320</span><span style="font:500 14px Geist">Board · 320pt</span></div>
+      <div style="position:relative;width:320px;height:852px;border-radius:44px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:48px;flex:none;display:flex;align-items:center;padding:4px 30px 0;font:600 15px Geist">9:41</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 12px">
+          <div style="height:44px;display:flex;align-items:center;gap:8px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><span style="font:500 13px Geist">default</span></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 12px 10px"><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;font:500 12.5px Geist;color:#A9A7B8">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 12.5px Geist;color:#A9A7B8">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 12.5px Geist">Tasks</div></div></div>
+        <div style="position:relative;overflow:hidden;flex:none"><div style="display:flex;gap:6px;padding:0 12px;margin-left:-150px"><sc-for list="{{ colsRun }}" as="c" hint-placeholder-count="7"><div style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;font:500 13px Geist;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}">{{ c.n }}<span style="font:400 11px 'Geist Mono'">{{ c.c }}</span></div></sc-for></div><div style="position:absolute;top:0;bottom:0;right:0;width:28px;background:linear-gradient(to left,#0B0B10,rgba(11,11,16,0))"></div><div style="position:absolute;top:0;bottom:0;left:0;width:28px;background:linear-gradient(to right,#0B0B10,rgba(11,11,16,0))"></div></div>
+        <div style="flex:1;overflow:hidden;padding:6px 12px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;padding:0 0 0 6px"><span style="flex:1 1 140px;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">RUNNING · 2</span><div style="height:44px;display:flex;align-items:center;gap:6px;padding:0 6px 0 10px;font:500 14px Geist;color:#C9C3FF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New task</div></div>
+          <sc-for list="{{ tRun }}" as="k" hint-placeholder-count="2">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:18px;background:#13131A;border:1px solid #1E1E27">
+              <div style="display:flex;align-items:flex-start;gap:10px"><iris-orb state="tool" size="22"></iris-orb><span style="flex:1;min-width:0;font:500 14.5px/1.35 Geist;text-wrap:pretty">{{ k.title }}</span></div>
+              <sc-if value="{{ k.hasSum }}"><span style="font:400 13px/1.45 Geist;color:#A9A7B8;text-wrap:pretty">{{ k.sum }}</span></sc-if>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font:400 11px 'Geist Mono';color:#A9A7B8"><span style="color:#FFB547">{{ k.el }}</span><sc-if value="{{ k.hasProg }}"><span style="color:#ECEBF2">{{ k.prog }}</span></sc-if><span>{{ k.id }}</span><sc-if value="{{ k.hasWho }}"><span>{{ k.who }}</span></sc-if><span>p{{ k.p }}</span><sc-if value="{{ k.hasCm }}"><span style="display:flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"></path></svg>{{ k.cm }}</span></sc-if><sc-if value="{{ k.hasWn }}"><span style="display:flex;align-items:center;gap:4px;color:#FF8A5C"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3zM12 10v4M12 17v.5"></path></svg>{{ k.wn }}</span></sc-if></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-60px;width:120px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1·320 reflow rules: summary wraps instead of truncating, the elapsed clock joins the wrapped meta line, the server name drops from the pill</div>
+    </div>
+
+    <div id="B2" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B2</span><span style="font:500 14px Geist">Empty column</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">hermes.local</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 10px"><div style="display:grid;grid-template-columns:repeat(3,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Scheduled</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Tasks</div></div></div>
+        <div style="position:relative;overflow:hidden;flex:none"><div style="display:flex;gap:6px;padding:0 16px;margin-left:-250px"><sc-for list="{{ colsRev }}" as="c" hint-placeholder-count="7"><div style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:6px;height:40px;padding:0 14px;border-radius:999px;font:500 13px Geist;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }}">{{ c.n }}<span style="font:400 11px 'Geist Mono'">{{ c.c }}</span></div></sc-for></div><div style="position:absolute;top:0;bottom:0;left:0;width:36px;background:linear-gradient(to right,#0B0B10,rgba(11,11,16,0))"></div></div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 40px 160px;text-align:center"><iris-orb state="rest" size="72" glow="off"></iris-orb><span style="font:500 17px/1.35 Geist">Nothing in Review</span><span style="font:400 14px/1.5 Geist;color:#A9A7B8;text-wrap:pretty">Hermes moves tasks here. You can’t add one yourself.</span></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · B4 no-results state (rest orb 72, 17/500 line, one hint). No New task in system-set columns. Person-movable columns say “Nothing in To do” and keep New task.</div>
+    </div>
+
+    <div id="B2-N" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B2·N</span><span style="font:500 14px Geist">No Kanban plugin</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 16px">
+          <div style="height:44px;display:flex;align-items:center;gap:10px;padding:0 12px 0 6px;border-radius:999px;background:#13131A;border:1px solid #1E1E27"><div style="width:32px;height:32px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 12px Geist;color:#C9C3FF">D</div><div style="display:flex;flex-direction:column;line-height:1.15"><span style="font:400 10px 'Geist Mono';color:#A9A7B8">pi.lan</span><span style="font:500 13px Geist">default</span></div></div>
+          <div style="flex:1"></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"></path><circle cx="16" cy="7" r="2.5"></circle><circle cx="10" cy="17" r="2.5"></circle></svg></div>
+        </div>
+        <div style="padding:8px 16px 10px"><div style="display:grid;grid-template-columns:repeat(2,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Sessions</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">Scheduled</div></div></div>
+        <div style="padding:2px 16px 4px"><div style="height:48px;display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 15.5px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>Search chats</div></div>
+        <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:4px">
+          <span style="font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8;padding:12px 6px 4px">EARLIER</span>
+          <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:8px 12px 8px 10px;border-radius:18px">
+              <div style="width:40px;height:40px;border-radius:13px;background:#13131A;display:flex;align-items:center;justify-content:center;flex:none"><iris-orb state="rest" size="28" glow="off"></iris-orb></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font:400 14px/1.3 Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.t }}</span><span style="font:400 11px 'Geist Mono';letter-spacing:.02em;color:#A9A7B8">{{ r.m }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px;border-radius:24px;background:#17161F;border:1px solid #34333F"><div style="flex:1;height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;font:400 15px Geist;color:#A9A7B8"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Ask Iris anything…</div><div style="width:44px;height:44px;border-radius:18px;background:#25223A;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1 home with a two-segment control (equal halves, same 44h). No placeholder, no upsell: the Tasks tab just isn’t there.</div>
+    </div>
+
+    <div id="B3" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B3</span><span style="font:500 14px Geist">Task detail</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ t.b3 }}" as="x" hint-placeholder-count="3"><button onClick="{{ x.pick }}" style="height:30px;padding:0 12px;border-radius:999px;font:500 12px Geist;cursor:pointer;white-space:nowrap;flex:none;background:{{ x.bg }};color:{{ x.fg }};border:1px solid {{ x.bd }}">{{ x.name }}</button></sc-for></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="padding:4px 12px;flex:none;display:flex;align-items:center;gap:10px"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></div><span style="font:400 12px 'Geist Mono';color:#A9A7B8">t_26</span><span style="font:500 11px Geist;padding:4px 8px;border-radius:999px;color:#C9C3FF;background:#25223A">Review</span></div>
+        <div ref="{{ b3Ref }}" style="flex:1;min-height:0;overflow-y:auto;padding:8px 16px 130px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:12px;padding:0 6px">
+            <span style="font:italic 400 34px/1.05 'Instrument Serif',serif;text-wrap:pretty">Rotate gateway API keys</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="height:32px;display:flex;align-items:center;gap:8px;padding:0 10px 0 4px;border-radius:999px;background:#13131A;border:1px solid #1E1E27;font:500 13px Geist"><span style="width:24px;height:24px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 11px Geist;color:#C9C3FF">H</span>homelab</span><span style="font:400 11px 'Geist Mono';padding:3px 7px;border-radius:6px;background:#13131A;border:1px solid #1E1E27;color:#A9A7B8">priority 2</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;min-height:44px;padding:0 10px;border-radius:12px;font:400 11.5px 'Geist Mono';color:#A9A7B8;background:#13131A"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Parent · t_20 <span style="color:#ECEBF2">Q4 security hygiene</span></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2.4" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg></div>
+          <div style="display:flex;flex-direction:column;gap:8px;padding:0 6px;font:400 15px/1.6 Geist;text-wrap:pretty"><span>Rotate the keys for the public gateway and update the three services that read them:</span><span style="display:flex;flex-direction:column;gap:2px;padding-left:4px"><span>• <span style="font:400 13px 'Geist Mono';padding:1px 5px;border-radius:5px;background:#17161F">api-edge</span></span><span>• <span style="font:400 13px 'Geist Mono';padding:1px 5px;border-radius:5px;background:#17161F">billing-worker</span></span><span>• <span style="font:400 13px 'Geist Mono';padding:1px 5px;border-radius:5px;background:#17161F">webhook-relay</span></span></span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:16px;background:#13131A;border:1px solid #1E1E27"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8">LATEST SUMMARY</span><span style="font:400 14px/1.5 Geist">Rotated keys and restarted all three services.</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">RESULT</span><div style="padding:14px 16px;border-radius:20px;background:#13131A;border:1px solid #1E1E27;font:400 14.5px/1.6 Geist;text-wrap:pretty">New keys are live in <strong style="font-weight:600">vault/gateway</strong>. Old keys were revoked at 14:20. <span style="font:400 13px 'Geist Mono';padding:1px 5px;border-radius:5px;background:#07070A">webhook-relay</span> needed a second restart.</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:16px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.32)"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#FF6B6B">LAST FAILURE</span><span style="font:400 12.5px/1.5 'Geist Mono'">webhook-relay: health check timed out after 30s</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">SUBTASKS · 3</span>
+            <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 16px"><span style="font:400 11px 'Geist Mono';color:#A9A7B8">t_34</span><span style="flex:1;font:400 14px Geist">Update api-edge</span><span style="font:400 11.5px 'Geist Mono';color:#6EE787">Done</span></div>
+              <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 16px;border-top:1px solid #1E1E27"><span style="font:400 11px 'Geist Mono';color:#A9A7B8">t_35</span><span style="flex:1;font:400 14px Geist">Update billing-worker</span><span style="font:400 11.5px 'Geist Mono';color:#6EE787">Done</span></div>
+              <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 16px;border-top:1px solid #1E1E27"><span style="font:400 11px 'Geist Mono';color:#A9A7B8">t_36</span><span style="flex:1;font:400 14px Geist">Update webhook-relay</span><span style="font:400 11.5px 'Geist Mono';color:#C9C3FF">Review</span></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">COMMENTS · 2</span>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:16px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;gap:8px"><span style="font:500 13px Geist">you</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">2h</span></div><span style="font:400 14px/1.5 Geist">Hold off until the 14:00 deploy is out.</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:16px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;gap:8px"><span style="font:500 13px Geist">homelab</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">1h</span></div><span style="font:400 14px/1.5 Geist">Deploy is finished, starting the rotation now.</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">RUNS · 2</span>
+            <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 16px"><span style="flex:1;font:400 12px 'Geist Mono'">14:12 → 14:31</span><span style="font:500 11px Geist;padding:4px 8px;border-radius:999px;color:#6EE787;background:rgba(110,231,135,.14)">completed</span></div>
+              <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 16px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 12px 'Geist Mono'">13:02 → 13:09</span><span style="font:500 11px Geist;padding:4px 8px;border-radius:999px;color:#FF6B6B;background:rgba(255,107,107,.14)">failed</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:28px 16px 30px;display:flex;gap:8px;background:linear-gradient(to top,#0B0B10 60%,rgba(11,11,16,0))">
+          <div style="flex:1;height:48px;border-radius:14px;background:#13131A;border:1px solid #34333F;display:flex;align-items:center;justify-content:center;gap:8px;font:500 15px Geist"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M14 6l6 6-6 6"></path></svg>Move</div>
+          <div style="flex:1;height:48px;border-radius:14px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;justify-content:center;font:600 15px Geist">Open session</div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A4 job-detail layout, A2 branched-from row for the parent link, B10 Markdown styles for the body and result, settings-list rows for subtasks and runs. Comments are read-only. Open session only appears when the task links to one.</div>
+    </div>
+
+    <div id="B4" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B4</span><span style="font:500 14px Geist">Move sheet</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="padding:4px 12px;display:flex;align-items:center;gap:10px"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27"></div><span style="font:400 12px 'Geist Mono';color:#A9A7B8">t_31</span><span style="font:500 11px Geist;padding:4px 8px;border-radius:999px;color:#FF8A5C;background:rgba(255,138,92,.14)">Blocked · needs input</span></div>
+        <span style="font:italic 400 34px/1.05 'Instrument Serif',serif;padding:10px 22px">Nightly backup failing with 502 from gateway</span>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:8px;right:8px;bottom:8px;z-index:8;border-radius:28px;background:#17161F;border:1px solid #34333F;padding:8px 8px 22px;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.5)">
+          <div style="width:36px;height:5px;border-radius:3px;background:#34333F;align-self:center;margin:2px 0 10px"></div>
+          <div style="display:flex;flex-direction:column;gap:2px;padding:4px 14px 12px;border-bottom:1px solid #1E1E27"><span style="font:500 15px Geist">Move t_31</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Nightly backup failing with 502 from gateway</span></div>
+          <sc-for list="{{ move }}" as="m" hint-placeholder-count="8">
+            <div style="display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-radius:14px;background:{{ m.bg }};margin-top:2px">
+              <span style="flex:1;font:400 15px Geist;color:{{ m.fg }}">{{ m.n }}</span>
+              <sc-if value="{{ m.sys }}"><span style="display:flex;align-items:center;gap:6px;font:400 11.5px 'Geist Mono';color:#A9A7B8"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Set by Hermes</span></sc-if>
+              <sc-if value="{{ m.cur }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1 conversation sheet (grabber, 52h rows, title header). Current row on accentQuiet with a check. System-set rows use inkMuted, a lock and “Set by Hermes”, and don’t respond to taps.</div>
+    </div>
+
+    <div id="B5" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">B5</span><span style="font:500 14px Geist">New task</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px 8px;height:52px;flex:none"><div style="height:44px;padding:0 10px;display:flex;align-items:center;font:500 15px Geist;color:#C9C3FF">Cancel</div><span style="font:500 15px Geist">New task</span><div style="height:44px;display:flex;align-items:center"><div style="height:36px;padding:0 18px;border-radius:999px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;font:600 14px Geist">Create</div></div></div>
+        <div style="flex:1;overflow:hidden;padding:8px 16px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">TITLE</span><div style="min-height:50px;display:flex;align-items:center;padding:12px 14px;border-radius:14px;background:#07070A;border:1.5px solid #C9C3FF;font:400 16px/1.4 Geist">Rotate the webhook signing secret<span style="display:inline-block;width:2px;height:19px;margin-left:1px;background:#C9C3FF"></span></div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">BODY · OPTIONAL · MARKDOWN</span><div style="min-height:130px;padding:14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 15px/1.55 Geist;color:#A9A7B8">What needs doing, and how you’ll know it’s done</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">COLUMN</span><div style="display:grid;grid-template-columns:repeat(2,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:#17161F;border:1px solid #34333F;font:500 13px Geist">Triage</div><div style="display:flex;align-items:center;justify-content:center;font:500 13px Geist;color:#A9A7B8">To do</div></div></div>
+          <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:10px 16px"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:400 15px Geist">Assignee</span><span style="font:400 12.5px Geist;color:#A9A7B8">Optional · a profile</span></div><span style="font:400 12px 'Geist Mono';color:#A9A7B8">None</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"></path></svg></div>
+            <div style="display:flex;align-items:center;gap:6px;min-height:60px;padding:8px 8px 8px 16px;border-top:1px solid #1E1E27"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:400 15px Geist">Priority</span><span style="font:400 12.5px Geist;color:#A9A7B8">Optional</span></div><div style="width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"></path></svg></div><span style="min-width:28px;text-align:center;font:500 14px 'Geist Mono'">2</span><div style="width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div></div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 job form + the A6 segmented control (Triage | To do only). The Assignee row opens a profile picker in A5 picker style; the priority stepper uses 44pt buttons. Create stays disabled until there’s a title.</div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="C Chat menu" style="display:flex;flex-direction:column;gap:28px;padding:56px 64px;background:#07070A;color:#ECEBF2;border-top:1px solid #1E1E27">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:820px">
+    <span style="font:500 12px 'Geist Mono',monospace;letter-spacing:.14em;color:#A9A7B8">C1 – C3</span>
+    <span style="font:italic 400 44px/1 'Instrument Serif',serif">The chat’s ⋯ menu</span>
+    <span style="font:400 15px/1.55 Geist;color:#A9A7B8;text-wrap:pretty">This is the same sheet as the home long-press, grouped by what each action touches. While Hermes is replying, actions that rewrite history are dimmed and say why, rather than disappearing.</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+    <div id="C1" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">C1</span><span style="font:500 14px Geist">⋯ menu · idle</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid #1E1E27">
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></div>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px"><iris-orb state="rest" size="32"></iris-orb><div style="min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font:500 14px Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Investigate worker heartbeat gaps</span><span style="font:500 11.5px Geist;color:#8E89AE">Done</span></div></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#25223A;border:1px solid #C9C3FF;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="#C9C3FF"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></div>
+        </div>
+        <div style="padding:18px 16px;font:400 15px/1.6 Geist;color:#ECEBF2">The gaps line up with the 02:00 backup. Moving it to 04:30 should clear them.</div>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:8px;right:8px;bottom:8px;z-index:8;border-radius:28px;background:#17161F;border:1px solid #34333F;padding:8px 8px 20px;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.5)">
+          <div style="width:36px;height:5px;border-radius:3px;background:#34333F;align-self:center;margin:2px 0 8px"></div>
+          <div style="display:flex;flex-direction:column;gap:2px;padding:2px 14px 10px;border-bottom:1px solid #1E1E27"><span style="font:500 15px Geist">Investigate worker heartbeat gaps</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">opus-4.5 · 18 messages</span></div>
+          <sc-for list="{{ menuIdle }}" as="g" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;border-top:1px solid {{ g.line }};margin:0 6px;padding:4px 0">
+              <sc-if value="{{ g.hasLab }}"><span style="font:500 10.5px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:6px 8px 2px">{{ g.lab }}</span></sc-if>
+              <sc-for list="{{ g.rows }}" as="r"><div style="display:flex;align-items:center;gap:14px;min-height:{{ r.h }};padding:0 8px;font:{{ r.fw }} 15px Geist;color:{{ r.c }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ r.ic }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="{{ r.d }}"></path></svg>{{ r.l }}</div></sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1 conversation sheet with mono group labels and line dividers; rows trimmed to 48h for nine actions. ⋯ stays lit on accentQuiet while the sheet is open. Export opens the system share sheet.</div>
+    </div>
+
+    <div id="C1-B" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">C1·B</span><span style="font:500 14px Geist">⋯ menu · replying</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid #1E1E27">
+          <div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27"></div>
+          <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px"><iris-orb state="streaming" size="32"></iris-orb><div style="min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font:500 14px Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Investigate worker heartbeat gaps</span><span style="font:500 11.5px Geist;color:#4FE3C1">Writing</span></div></div>
+          <div style="width:44px;height:44px;border-radius:50%;background:#25223A;border:1px solid #C9C3FF"></div>
+        </div>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:8px;right:8px;bottom:8px;z-index:8;border-radius:28px;background:#17161F;border:1px solid #34333F;padding:8px 8px 20px;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.5)">
+          <div style="width:36px;height:5px;border-radius:3px;background:#34333F;align-self:center;margin:2px 0 8px"></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:2px 14px 10px;border-bottom:1px solid #1E1E27"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font:500 15px Geist;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Investigate worker heartbeat gaps</span><span style="font:400 11px 'Geist Mono';color:#4FE3C1">replying · opus-4.5</span></div><iris-orb state="streaming" size="28"></iris-orb></div>
+          <sc-for list="{{ menuBusy }}" as="g" hint-placeholder-count="5">
+            <div style="display:flex;flex-direction:column;border-top:1px solid {{ g.line }};margin:0 6px;padding:4px 0">
+              <sc-if value="{{ g.hasLab }}"><span style="font:500 10.5px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:6px 8px 2px">{{ g.lab }}</span></sc-if>
+              <sc-for list="{{ g.rows }}" as="r"><div style="display:flex;align-items:center;gap:14px;min-height:{{ r.h }};padding:0 8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ r.ic }}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="{{ r.d }}"></path></svg><div style="display:flex;flex-direction:column;gap:2px"><span style="font:{{ r.fw }} 15px Geist;color:{{ r.c }}">{{ r.l }}</span><sc-if value="{{ r.hasSub }}"><span style="font:400 11.5px 'Geist Mono';color:#A9A7B8">{{ r.sub }}</span></sc-if></div></div></sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1 “Refused” rule shown in place. Disabled rows have an inkFaint glyph, inkMuted label and a one-line mono reason. The streaming orb in the header tells you why.</div>
+    </div>
+
+    <div id="C2" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">C2</span><span style="font:500 14px Geist">Rename</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid #1E1E27"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27"></div><iris-orb state="rest" size="32"></iris-orb><span style="font:500 14px Geist">Investigate worker heartbeat gaps</span></div>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;z-index:8;display:flex;flex-direction:column">
+          <div style="margin:0 8px 8px;border-radius:28px;background:#17161F;border:1px solid #34333F;padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px">
+            <div style="width:36px;height:5px;border-radius:3px;background:#34333F;align-self:center"></div>
+            <span style="font:500 17px Geist">Rename chat</span>
+            <div style="height:50px;display:flex;align-items:center;gap:8px;padding:0 4px 0 14px;border-radius:14px;background:#07070A;border:1.5px solid #C9C3FF"><span style="flex:1;min-width:0;font:400 16px Geist;white-space:nowrap;overflow:hidden"><span style="background:#25223A;border-radius:3px;padding:1px 0">Investigate worker heartbeat gaps</span></span><div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="#A9A7B8"><circle cx="12" cy="12" r="9"></circle><path d="M9 9l6 6M15 9l-6 6" stroke="#07070A" stroke-width="2" stroke-linecap="round"></path></svg></div></div>
+            <div style="display:flex;gap:8px"><div style="flex:1;height:48px;border-radius:14px;border:1px solid #34333F;display:flex;align-items:center;justify-content:center;font:500 15px Geist">Cancel</div><div style="flex:1;height:48px;border-radius:14px;background:#1E1E27;color:#A9A7B8;display:flex;align-items:center;justify-content:center;font:600 15px Geist">Save</div></div>
+          </div>
+          <div style="background:#1C1B24;padding:8px 3px 34px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ kb }}" as="row" hint-placeholder-count="3"><div style="display:flex;justify-content:center;gap:6px"><sc-for list="{{ row.keys }}" as="key"><div style="width:33px;height:42px;border-radius:6px;background:#34333F;display:flex;align-items:center;justify-content:center;font:400 19px Geist">{{ key.k }}</div></sc-for></div></sc-for>
+            <div style="display:flex;gap:6px;padding:0 3px"><div style="width:88px;height:42px;border-radius:6px;background:#2A2933;display:flex;align-items:center;justify-content:center;font:400 15px Geist">123</div><div style="flex:1;height:42px;border-radius:6px;background:#34333F"></div><div style="width:88px;height:42px;border-radius:6px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;justify-content:center;font:500 15px Geist">done</div></div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · B3 rename sheet, unchanged: whole title pre-selected on accentQuiet, and Save stays disabled until the title changes</div>
+    </div>
+
+    <div id="C3" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">C3</span><span style="font:500 14px Geist">Session info</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 12px 8px;border-bottom:1px solid #1E1E27"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27"></div><iris-orb state="rest" size="32"></iris-orb><span style="font:500 14px Geist">Investigate worker heartbeat gaps</span></div>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:8px;right:8px;bottom:8px;z-index:8;border-radius:28px;background:#17161F;border:1px solid #34333F;padding:8px 8px 22px;display:flex;flex-direction:column;box-shadow:0 -20px 60px rgba(0,0,0,.5)">
+          <div style="width:36px;height:5px;border-radius:3px;background:#34333F;align-self:center;margin:2px 0 10px"></div>
+          <span style="font:500 17px/1.35 Geist;padding:2px 14px 12px;text-wrap:pretty">Investigate worker heartbeat gaps</span>
+          <div style="margin:0 6px;border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Profile</span><span style="font:400 12px 'Geist Mono'">default</span></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Model</span><span style="font:400 12px 'Geist Mono'">opus-4.5</span></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Created</span><span style="font:400 12px 'Geist Mono'">Oct 16, 22:04</span></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Last active</span><span style="font:400 12px 'Geist Mono'">Oct 17, 08:51</span></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Messages</span><span style="font:400 12px 'Geist Mono'">18</span></div>
+            <div style="display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 14px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Tokens</span><span style="font:400 12px 'Geist Mono'">61.2k in · 22.9k out</span></div>
+            <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:6px 14px;border-top:1px solid #1E1E27"><span style="flex:1;font:400 14px Geist;color:#A9A7B8">Context</span><svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="#34333F" stroke-width="3"></circle><circle cx="13" cy="13" r="11" fill="none" stroke="#C9C3FF" stroke-width="3" stroke-linecap="round" stroke-dasharray="29 69.1" transform="rotate(-90 13 13)"></circle></svg><span style="font:400 12px 'Geist Mono'">42%</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:14px 14px 0"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8">SESSION ID</span><div style="display:flex;align-items:center;gap:8px;height:50px;padding:0 4px 0 14px;border-radius:14px;background:#07070A;border:1px solid #34333F"><span style="flex:1;min-width:0;font:400 13px 'Geist Mono';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">sess_01JB8K2Q7M4X9V3N6T</span><div style="width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"></rect><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"></path></svg></div></div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 settings rows (values in mono), B6 context ring at 26, and the A7 sunken mono field for the id. Copy shows the B3 toast “Copied session id”.</div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="D Profiles + search" style="display:flex;flex-direction:column;gap:28px;padding:56px 64px 96px;background:#07070A;color:#ECEBF2;border-top:1px solid #1E1E27">
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:820px">
+    <span style="font:500 12px 'Geist Mono',monospace;letter-spacing:.14em;color:#A9A7B8">D1 – D5</span>
+    <span style="font:italic 400 44px/1 'Instrument Serif',serif">Profiles, and search across them</span>
+    <span style="font:400 15px/1.55 Geist;color:#A9A7B8;text-wrap:pretty">Each profile is a separate Hermes, with its own model, SOUL, memory and jobs. Deleting one asks you to type its name, because it removes data from the server. Search stays on this profile unless you widen it.</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+    <div id="D1" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">D1</span><span style="font:500 14px Geist">Settings → Profiles</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="padding:4px 12px"><div style="width:44px;height:44px;border-radius:50%;background:#13131A;border:1px solid #1E1E27;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ECEBF2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></div></div>
+        <div style="flex:1;overflow:hidden;padding:6px 16px;display:flex;flex-direction:column;gap:16px">
+          <span style="font:italic 400 38px/1 'Instrument Serif',serif;padding:0 6px">Profiles</span>
+          <span style="font:400 14px/1.5 Geist;color:#A9A7B8;padding:0 6px;text-wrap:pretty">On hermes.local. Tap the current check to switch.</span>
+          <div style="border-radius:20px;background:#13131A;border:1px solid #1E1E27;overflow:hidden">
+            <sc-for list="{{ profD }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;min-height:72px;padding:10px 12px 10px 14px;border-top:1px solid {{ p.line }}">
+                <div style="width:36px;height:36px;border-radius:50%;background:#25223A;display:flex;align-items:center;justify-content:center;font:600 13px Geist;color:#C9C3FF;flex:none">{{ p.av }}</div>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="display:flex;align-items:center;gap:8px;font:500 15px Geist">{{ p.n }}<sc-if value="{{ p.def }}"><span style="font:500 10.5px 'Geist Mono';letter-spacing:.06em;padding:2px 6px;border-radius:6px;background:#07070A;color:#A9A7B8">DEFAULT</span></sc-if></span><span style="font:400 12.5px Geist;color:#A9A7B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.d }}</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">{{ p.m }}</span></div>
+                <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex:none"><sc-if value="{{ p.cur }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if></div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6E6C7E" stroke-width="2" stroke-linecap="round" style="flex:none"><path d="M9 18l6-6-6-6"></path></svg>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-top:1px solid #1E1E27;font:500 15px Geist;color:#C9C3FF"><div style="width:36px;height:36px;border-radius:50%;border:1.5px dashed #34333F;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C9C3FF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>New profile</div>
+          </div>
+          <span style="font:400 11.5px/1.55 'Geist Mono';color:#A9A7B8;padding:0 6px">The model comes from each profile’s config on the server and can’t be edited here.</span>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 settings list + the home profile-pill avatar. The check is a separate 44pt target (switch); the row opens Edit. Default tag uses the sunken mono chip.</div>
+    </div>
+
+    <div id="D1-light" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#ECE9FF;color:#4F3FCF">D1·L</span><span style="font:500 14px Geist">Profiles · light</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#F7F6FB;color:#16151D;display:flex;flex-direction:column;box-shadow:0 0 0 1px #CDCAD9,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6B6980;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#16151D"></div></div></div>
+        <div style="padding:4px 12px"><div style="width:44px;height:44px;border-radius:50%;background:#FFFFFF;border:1px solid #E6E4EE;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16151D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></div></div>
+        <div style="flex:1;overflow:hidden;padding:6px 16px;display:flex;flex-direction:column;gap:16px">
+          <span style="font:italic 400 38px/1 'Instrument Serif',serif;padding:0 6px">Profiles</span>
+          <span style="font:400 14px/1.5 Geist;color:#4E4C60;padding:0 6px;text-wrap:pretty">On hermes.local. Tap the current check to switch.</span>
+          <div style="border-radius:20px;background:#FFFFFF;border:1px solid #E6E4EE;overflow:hidden">
+            <sc-for list="{{ profL }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;min-height:72px;padding:10px 12px 10px 14px;border-top:1px solid {{ p.line }}">
+                <div style="width:36px;height:36px;border-radius:50%;background:#ECE9FF;display:flex;align-items:center;justify-content:center;font:600 13px Geist;color:#4F3FCF;flex:none">{{ p.av }}</div>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="display:flex;align-items:center;gap:8px;font:500 15px Geist">{{ p.n }}<sc-if value="{{ p.def }}"><span style="font:500 10.5px 'Geist Mono';letter-spacing:.06em;padding:2px 6px;border-radius:6px;background:#EFEEF5;color:#4E4C60">DEFAULT</span></sc-if></span><span style="font:400 12.5px Geist;color:#4E4C60;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.d }}</span><span style="font:400 11px 'Geist Mono';color:#4E4C60">{{ p.m }}</span></div>
+                <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;flex:none"><sc-if value="{{ p.cur }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></sc-if></div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B6980" stroke-width="2" stroke-linecap="round" style="flex:none"><path d="M9 18l6-6-6-6"></path></svg>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-top:1px solid #E6E4EE;font:500 15px Geist;color:#4F3FCF"><div style="width:36px;height:36px;border-radius:50%;border:1.5px dashed #CDCAD9;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F3FCF" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>New profile</div>
+          </div>
+          <span style="font:400 11.5px/1.55 'Geist Mono';color:#4E4C60;padding:0 6px">The model comes from each profile’s config on the server and can’t be edited here.</span>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#16151D;opacity:.5;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1·L light tokens on the D1 list: surface card with line dividers, accentQuiet avatars, light accent check</div>
+    </div>
+
+    <div id="D2" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">D2</span><span style="font:500 14px Geist">New profile</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px 8px;height:52px;flex:none"><div style="height:44px;padding:0 10px;display:flex;align-items:center;font:500 15px Geist;color:#C9C3FF">Cancel</div><span style="font:500 15px Geist">New profile</span><div style="height:44px;display:flex;align-items:center"><div style="height:36px;padding:0 18px;border-radius:999px;background:#1E1E27;color:#A9A7B8;display:flex;align-items:center;font:600 14px Geist">Create</div></div></div>
+        <div style="flex:1;overflow:hidden;padding:8px 16px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">NAME</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1.5px solid #FF6B6B;font:400 16px 'Geist Mono'">Work Notes<span style="display:inline-block;width:2px;height:19px;margin-left:1px;background:#C9C3FF"></span></div><span style="display:flex;align-items:center;gap:6px;font:400 12px/1.5 'Geist Mono';color:#FF6B6B;padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5M12 16.5v.5"></path></svg>Lowercase letters, digits, - and _ only</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">START FROM</span>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:4px;border-radius:20px;background:#13131A;border:1px solid #1E1E27">
+              <div style="display:flex;align-items:center;gap:14px;min-height:60px;padding:8px 12px;border-radius:16px"><div style="width:28px;height:28px;border-radius:50%;border:2px solid #34333F;flex:none"></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font:500 15px Geist">Blank</span><span style="font:400 12.5px Geist;color:#A9A7B8">Nothing copied</span></div></div>
+              <div style="display:flex;align-items:center;gap:14px;min-height:60px;padding:8px 12px;border-radius:16px;background:#25223A"><div style="width:28px;height:28px;border-radius:50%;border:2.5px solid #C9C3FF;display:flex;align-items:center;justify-content:center;flex:none"><div style="width:10px;height:10px;border-radius:50%;background:#C9C3FF"></div></div><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:500 15px Geist">Copy of <span style="font:500 14px 'Geist Mono';color:#C9C3FF">default</span></span><span style="font:400 12.5px Geist;color:#A9A7B8">Copies config and skills</span></div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2" stroke-linecap="round"><path d="M7 10l5 5 5-5"></path></svg></div>
+              <div style="display:flex;align-items:center;gap:14px;min-height:60px;padding:8px 12px;border-radius:16px"><div style="width:28px;height:28px;border-radius:50%;border:2px solid #34333F;flex:none"></div><div style="display:flex;flex-direction:column;gap:2px"><span style="font:500 15px Geist">Full copy of <span style="font:500 14px 'Geist Mono'">default</span></span><span style="font:400 12.5px Geist;color:#A9A7B8">Also copies memory and sessions</span></div></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">SOUL · OPTIONAL</span><div style="min-height:150px;padding:14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 15px/1.55 Geist;color:#A9A7B8">Who this profile is and how it should work. Markdown.</div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 form, A5 iris radio picker for Start from (tap the source name to pick another profile), and the A5·E error line, which validates as you type. Create stays disabled while the name is invalid.</div>
+    </div>
+
+    <div id="D3" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">D3</span><span style="font:500 14px Geist">Edit profile</span></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 10px 8px;height:52px;flex:none"><div style="height:44px;padding:0 10px;display:flex;align-items:center;font:500 15px Geist;color:#C9C3FF">Cancel</div><span style="font:500 15px Geist">research</span><div style="height:44px;display:flex;align-items:center"><div style="height:36px;padding:0 18px;border-radius:999px;background:#C9C3FF;color:#14121F;display:flex;align-items:center;font:600 14px Geist">Save</div></div></div>
+        <div style="flex:1;overflow:hidden;padding:8px 16px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8;padding:0 6px">NAME</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1px solid #34333F;font:400 16px 'Geist Mono'">research</div></div>
+          <div style="display:flex;align-items:center;gap:12px;min-height:52px;padding:10px 16px;border-radius:20px;background:#13131A;border:1px solid #1E1E27"><span style="flex:1;font:400 15px Geist">Model</span><span style="font:400 12px 'Geist Mono';color:#A9A7B8">gpt-5.2 · from config</span></div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;padding:0 0 0 6px"><span style="flex:1;font:500 11px 'Geist Mono';letter-spacing:.1em;color:#A9A7B8">SOUL.MD</span><span style="font:400 12.5px Geist;color:#A9A7B8">Monospace</span><div style="width:59px;height:44px;display:flex;align-items:center;justify-content:center"><div style="width:51px;height:31px;border-radius:999px;padding:3px;display:flex;justify-content:flex-end;background:#C9C3FF"><div style="width:25px;height:25px;border-radius:50%;background:#14121F"></div></div></div></div>
+            <div style="min-height:290px;padding:14px;border-radius:14px;background:#07070A;border:1.5px solid #C9C3FF;font:400 13.5px/1.65 'Geist Mono';white-space:pre-wrap"><span style="color:#C9C3FF"># Research</span>
+
+You help me read long papers and keep notes I can come back to.
+
+<span style="color:#C9C3FF">## How to work</span>
+<span style="color:#A9A7B8">-</span> Cite the source for every claim.
+<span style="color:#A9A7B8">-</span> Prefer primary sources over summaries.
+<span style="color:#A9A7B8">-</span> Plain language first, then the detail.<span style="display:inline-block;width:2px;height:16px;margin-left:1px;vertical-align:-3px;background:#C9C3FF"></span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;min-height:52px;padding:0 16px;border-radius:20px;background:#13131A;border:1px solid #1E1E27;font:500 15px Geist;color:#FF6B6B"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg>Delete profile</div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A5 form + B7 switch for Monospace + the A1 sheet’s failed Delete row. For the default profile, Name is plain text and Delete isn’t shown.</div>
+    </div>
+
+    <div id="D4" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">D4</span><span style="font:500 14px Geist">Delete profile?</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ t.d4 }}" as="x" hint-placeholder-count="2"><button onClick="{{ x.pick }}" style="height:30px;padding:0 12px;border-radius:999px;font:500 12px Geist;cursor:pointer;white-space:nowrap;flex:none;background:{{ x.bg }};color:{{ x.fg }};border:1px solid {{ x.bd }}">{{ x.name }}</button></sc-for></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;justify-content:center;height:52px;font:500 15px Geist">research</div>
+        <div style="margin:8px 16px;height:50px;border-radius:14px;background:#07070A;border:1px solid #34333F"></div>
+        <div style="position:absolute;inset:0;z-index:5;background:rgba(7,7,10,.72);backdrop-filter:blur(4px)"></div>
+        <div style="position:absolute;left:20px;right:20px;top:96px;z-index:8;border-radius:26px;background:#17161F;border:1px solid #34333F;padding:22px 20px 16px;display:flex;flex-direction:column;gap:16px;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+          <div style="display:flex;flex-direction:column;gap:8px"><span style="font:500 17px/1.35 Geist">Delete <span style="font-family:'Geist Mono'">research</span>?</span><span style="font:400 14px/1.5 Geist;color:#A9A7B8;text-wrap:pretty">Its sessions, memory, skills and scheduled jobs are removed from hermes.local. This can’t be undone.</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="font:400 12px 'Geist Mono';color:#A9A7B8">Type <span style="color:#ECEBF2">research</span> to confirm</span><div style="height:50px;display:flex;align-items:center;padding:0 14px;border-radius:14px;background:#07070A;border:1.5px solid #C9C3FF;font:400 16px 'Geist Mono'">{{ d4.val }}<span style="display:inline-block;width:2px;height:19px;margin-left:1px;background:#C9C3FF"></span></div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="height:48px;border-radius:14px;background:{{ d4.btnBg }};color:{{ d4.btnFg }};display:flex;align-items:center;justify-content:center;font:600 15px Geist;transition:background .2s">Delete profile</div><div style="height:48px;border-radius:14px;background:#13131A;border:1px solid #34333F;display:flex;align-items:center;justify-content:center;font:500 15px Geist">Cancel</div></div>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;z-index:9;background:#1C1B24;padding:8px 3px 34px;display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ kb }}" as="row" hint-placeholder-count="3"><div style="display:flex;justify-content:center;gap:6px"><sc-for list="{{ row.keys }}" as="key"><div style="width:33px;height:42px;border-radius:6px;background:#34333F;display:flex;align-items:center;justify-content:center;font:400 19px Geist">{{ key.k }}</div></sc-for></div></sc-for>
+          <div style="display:flex;gap:6px;padding:0 3px"><div style="width:88px;height:42px;border-radius:6px;background:#2A2933;display:flex;align-items:center;justify-content:center;font:400 15px Geist">123</div><div style="flex:1;height:42px;border-radius:6px;background:#34333F"></div><div style="width:88px;height:42px;border-radius:6px;background:#2A2933;display:flex;align-items:center;justify-content:center;font:500 15px Geist">done</div></div>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · A1 delete confirm, raised above the keyboard, with the B3 rename field. Delete stays disabled (line fill, inkMuted) until the name matches exactly, with autocorrect off.</div>
+    </div>
+
+    <div id="D5" style="flex:none;display:flex;flex-direction:column;gap:14px;width:393px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px 'Geist Mono',monospace;padding:4px 8px;border-radius:8px;background:#25223A;color:#C9C3FF">D5</span><span style="font:500 14px Geist">Search across profiles</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ t.d5 }}" as="x" hint-placeholder-count="2"><button onClick="{{ x.pick }}" style="height:30px;padding:0 12px;border-radius:999px;font:500 12px Geist;cursor:pointer;white-space:nowrap;flex:none;background:{{ x.bg }};color:{{ x.fg }};border:1px solid {{ x.bd }}">{{ x.name }}</button></sc-for></div>
+      <div style="position:relative;width:393px;height:852px;border-radius:52px;overflow:hidden;background:#0B0B10;display:flex;flex-direction:column;box-shadow:0 0 0 1px #34333F,0 0 0 9px #121217,0 0 0 10px #2A2933,0 40px 100px rgba(0,0,0,.6)">
+        <div style="height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:4px 30px 0 44px;position:relative"><span style="font:600 16px Geist">9:41</span><div style="position:absolute;left:137px;top:11px;width:120px;height:34px;border-radius:20px;background:#000"></div><div style="width:25px;height:12px;border-radius:4px;border:1px solid #6E6C7E;padding:1.5px"><div style="width:75%;height:100%;border-radius:2px;background:#ECEBF2"></div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 12px 8px 16px">
+          <div style="flex:1;height:48px;display:flex;align-items:center;gap:10px;padding:0 4px 0 14px;border-radius:16px;background:#13131A;border:1.5px solid #C9C3FF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A9A7B8" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg><span style="flex:1;font:400 15.5px Geist">backup<span style="display:inline-block;width:2px;height:18px;margin-left:1px;vertical-align:-3px;background:#C9C3FF"></span></span></div>
+          <div style="height:44px;padding:0 6px;display:flex;align-items:center;font:500 15px Geist;color:#C9C3FF">Cancel</div>
+        </div>
+        <div style="padding:0 16px 8px"><div style="display:grid;grid-template-columns:repeat(2,1fr);height:44px;padding:4px;border-radius:14px;background:#13131A;border:1px solid #1E1E27"><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:{{ d5.sa }};border:1px solid {{ d5.sab }};color:{{ d5.sac }};font:500 13px Geist">This profile</div><div style="display:flex;align-items:center;justify-content:center;border-radius:10px;background:{{ d5.sb }};border:1px solid {{ d5.sbb }};color:{{ d5.sbc }};font:500 13px Geist">All profiles</div></div></div>
+        <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:4px;padding:4px 16px">
+          <sc-for list="{{ d5.groups }}" as="g" hint-placeholder-count="1">
+            <div style="display:flex;align-items:center;gap:8px;padding:10px 6px 4px"><span style="flex:1;font:500 11px 'Geist Mono',monospace;letter-spacing:.1em;color:#A9A7B8">{{ g.p }}</span><span style="display:flex;align-items:center;gap:5px;font:400 11px 'Geist Mono';color:#A9A7B8">{{ g.note }}</span></div>
+            <sc-for list="{{ g.hits }}" as="h">
+              <div style="display:flex;flex-direction:column;gap:5px;padding:10px 12px;border-radius:18px"><span style="font:500 14.5px Geist">{{ h.t }}</span><span style="font:400 13.5px/1.5 Geist;color:#A9A7B8">{{ h.a }}<span style="background:#25223A;color:#ECEBF2;border-radius:4px;padding:0 3px">{{ h.h }}</span>{{ h.b }}</span><span style="font:400 11px 'Geist Mono';color:#A9A7B8">{{ h.m }}</span></div>
+            </sc-for>
+          </sc-for>
+          <sc-if value="{{ d5.one }}" hint-placeholder-val="{{ true }}"><span style="font:400 12.5px/1.5 Geist;color:#A9A7B8;padding:10px 6px;text-wrap:pretty">Searching default only. Switch to All profiles to include research and homelab.</span></sc-if>
+        </div>
+        <div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#ECEBF2;opacity:.55;z-index:30"></div>
+      </div>
+      <div style="padding:12px 16px;border-radius:16px;background:#13131A;border:1px solid #1E1E27;font:400 11.5px/1.55 'Geist Mono',monospace;color:#A9A7B8"><span style="color:#ECEBF2">Reuses</span> · B4 search (field, highlight pill, result rows) + the A1 segmented control at two segments. Profile headers are section labels. Tapping a hit under another profile switches to it and opens the chat; the profile pill updates first.</div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;reducedMotion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
+const F = { a4: ['Detail', 'After Run now'], b3: ['Top', 'Middle', 'Bottom'], d4: ['Empty', 'Typed'], d5: ['This profile', 'All profiles'] };
+const P = { d: { mut: '#A9A7B8', fail: '#FF6B6B', tool: '#FFB547', ink: '#ECEBF2', line: '#1E1E27', fb: 'rgba(255,107,107,.32)', on: '#C9C3FF', onK: '#14121F', off: '#34333F', offK: '#ECEBF2', needs: '#FF8A5C', nt: 'rgba(255,138,92,.14)', neu: 'rgba(142,137,174,.16)' }, l: { mut: '#4E4C60', fail: '#C0312D', tool: '#8A5000', ink: '#16151D', line: '#E6E4EE', fb: 'rgba(192,49,45,.35)', on: '#4F3FCF', onK: '#FFFFFF', off: '#CDCAD9', offK: '#FFFFFF', needs: '#B5410F', nt: 'rgba(181,65,15,.10)', neu: 'rgba(98,95,124,.12)' } };
+const JOBS = [
+  { n: 'Weekly planning digest', sch: 'every monday 9am', st: 'next in 9h 12m', k: 'ok', on: true },
+  { n: 'Nightly backup to cold storage', sch: '0 2 * * *', st: 'failed 2h ago', err: 'backup target returned 502 Bad Gateway', k: 'fail', on: true },
+  { n: 'Summarise open PRs on hermes-core', sch: 'every 2h', st: 'paused', k: 'paused', on: false },
+  { n: 'Inbox triage', sch: '30m', st: 'running…', k: 'run', on: true }
+];
+const jobs = l => { const c = l ? P.l : P.d; return JOBS.map(j => ({ ...j, run: j.k === 'run', fail: !!j.err, c: j.k === 'fail' ? c.fail : j.k === 'run' ? c.tool : c.mut, nc: j.on ? c.ink : c.mut, bd: j.k === 'fail' ? c.fb : c.line, jc: j.on ? 'flex-end' : 'flex-start', track: j.on ? c.on : c.off, knob: j.on ? c.onK : c.offK })); };
+const LIVE = [{ t: 'Investigate worker heartbeat gaps', m: 'opus-4.5 · now', st: 'thinking', lab: 'Thinking', c: '#9B7BFF', tint: 'rgba(155,123,255,.14)' }, { t: 'Refactor billing to usage-based pricing', m: 'sonnet-4.5 · 2m', st: 'tool', lab: 'Running tests', c: '#FFB547', tint: 'rgba(255,181,71,.14)' }];
+const RECENT = [{ t: 'Design review: onboarding flow', m: 'gemini-3-pro · 1h' }, { t: 'Add passkey support to auth service', m: 'gpt-5.2 · yesterday' }, { t: 'Local embeddings vs API cost', m: 'hermes-3 · Aug 21' }];
+const RUNS = [{ t: 'Nightly backup to cold storage', m: 'opus-4.5', s: 'today 02:00' }, { t: 'Nightly backup to cold storage', m: 'opus-4.5', s: 'yesterday 02:00' }, { t: 'Nightly backup to cold storage', m: 'opus-4.5', s: 'Oct 15 02:00' }];
+const COLS = [['Triage', 2], ['To do', 4], ['Ready', 1], ['Running', 2], ['Blocked', 3], ['Review', 1], ['Done', 12]];
+const cols = (sel, l, zero) => COLS.map(([n, c]) => { const on = n === sel; return { n, c: n === zero ? 0 : c, bg: on ? (l ? '#4F3FCF' : '#ECEBF2') : (l ? '#FFFFFF' : '#13131A'), fg: on ? (l ? '#FFFFFF' : '#0B0B10') : (l ? '#4E4C60' : '#A9A7B8'), bd: on ? (l ? '#4F3FCF' : '#ECEBF2') : (l ? '#CDCAD9' : '#34333F') }; });
+const RUNNING = [
+  { id: 't_30', title: 'Investigate worker heartbeat gaps overnight', who: 'default', p: 1, sum: 'Correlating the gaps with the 02:00 backup window', prog: '2 of 5 subtasks', cm: 3, el: '4m', run: true },
+  { id: 't_32', title: 'Refactor billing to usage-based pricing', who: 'research', p: 2, sum: 'Running the test suite on the pricing branch', el: '11m', wn: 1, run: true }
+];
+const BLOCKED = [
+  { id: 't_31', title: 'Nightly backup failing with 502 from gateway', who: 'homelab', p: 1, sum: 'Needs the S3 credentials for the cold bucket', cm: 2, bk: 'needs input', kind: 'needs' },
+  { id: 't_28', title: 'Ship passkey migration', who: 'default', p: 2, sum: 'Waiting on t_27', bk: 'dependency' },
+  { id: 't_33', title: 'Sync team calendar invites', p: 3, bk: 'transient', sum: 'Calendar API rate-limited, will retry', wn: 2 }
+];
+const tk = (list, l) => { const c = l ? P.l : P.d; return list.map(k => ({ ...k, run: !!k.run, block: !!k.bk, hasWho: !!k.who, hasSum: !!k.sum, hasProg: !!k.prog, hasCm: k.cm > 0, hasWn: k.wn > 0, bc: k.kind === 'needs' ? c.needs : c.mut, bt: k.kind === 'needs' ? c.nt : c.neu })); };
+const MOVE = [['Triage'], ['To do'], ['Ready'], ['Scheduled', 1], ['Running', 1], ['Blocked', 0, 1], ['Review', 1], ['Done']].map(([n, sys, cur]) => ({ n, sys: !!sys, free: !sys, cur: !!cur, fg: sys ? '#A9A7B8' : '#ECEBF2', bg: cur ? '#25223A' : 'transparent' }));
+const IC = { rename: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4', pin: 'M9 4h6l-1 6 4 4H6l4-4zM12 14v6', branch: 'M6 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4M6 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4M18 5a2 2 0 1 0 0 4a2 2 0 1 0 0-4M6 7v10M18 9c0 5-12 3-12 8', archive: 'M3 4h18v5H3zM5 9v10h14V9M10 13h4', compress: 'M4 4l5 5M9 5v4H5M20 4l-5 5M15 5v4h4M4 20l5-5M9 19v-4H5M20 20l-5-5M15 19v-4h4', undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3', share: 'M12 3v12M7.5 7.5L12 3l4.5 4.5M5 13v7h14v-7', info: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v6M12 7.5v.5', del: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13' };
+const menu = busy => {
+  const why = 'Waits until the reply finishes';
+  const G = [
+    ['CONVERSATION', [['Rename', 'rename'], ['Pin', 'pin'], ['Branch', 'branch'], ['Archive', 'archive']]],
+    ['CONTEXT', [['Compress', 'compress', busy && why], ['Undo last turn', 'undo', busy && why]]],
+    ['SHARE', [['Export as Markdown', 'share']]],
+    ['INFO', [['Session info', 'info']]],
+    ['', [['Delete', 'del', busy && 'Stop the reply before deleting', 1]]]
+  ];
+  return G.map(([lab, rows], gi) => ({ lab, hasLab: !!lab, line: gi ? '#1E1E27' : 'transparent', rows: rows.map(([l, ic, sub, red]) => ({ l, d: IC[ic], sub: sub || '', hasSub: !!sub, h: sub ? '60px' : '48px', c: sub ? '#A9A7B8' : red ? '#FF6B6B' : '#ECEBF2', ic: sub ? '#6E6C7E' : red ? '#FF6B6B' : '#ECEBF2', fw: red ? 500 : 400 })) }));
+};
+const PROF = [{ n: 'default', m: 'opus-4.5', d: 'Everyday assistant', def: true, cur: true }, { n: 'research', m: 'gpt-5.2', d: 'Long reads and literature notes' }, { n: 'homelab', m: 'hermes-3-local', d: 'Looks after the home servers' }];
+const prof = l => PROF.map((p, i) => ({ ...p, def: !!p.def, cur: !!p.cur, line: i ? (l ? '#E6E4EE' : '#1E1E27') : 'transparent', av: p.n[0].toUpperCase() }));
+const HIT = (t, a, h, b, m) => ({ t, a, h, b, m });
+const SR = [
+  { p: 'DEFAULT · CURRENT', note: '', hits: [HIT('Nightly backup to cold storage', '…the ', 'backup', ' at 02:00 saturates the disk on node-3…', 'today'), HIT('Investigate worker heartbeat gaps', '…move the ', 'backup', ' to 04:30, when the queue is empty.', 'yesterday')] },
+  { p: 'RESEARCH', note: 'switches profile', hits: [HIT('Cold storage pricing compared', '…S3 Glacier is cheapest for a weekly ', 'backup', ' you rarely restore…', 'Oct 12')] },
+  { p: 'HOMELAB', note: 'switches profile', hits: [HIT('NAS rebuild plan', '…keep one offline ', 'backup', ' before you swap the second drive.', 'Oct 9'), HIT('UPS shutdown script', '…flush the ', 'backup', ' queue before the NAS powers down.', 'Sep 30')] }
+];
+const KB = [['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'], ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'], ['z', 'x', 'c', 'v', 'b', 'n', 'm']].map(r => ({ keys: r.map(k => ({ k })) }));
+
+class Component extends DCLogic {
+  state = {};
+  b3r = React.createRef();
+  componentDidMount() { this.syncMotion(); }
+  componentDidUpdate(_, prev) {
+    this.syncMotion();
+    const el = this.b3r.current;
+    if (el && prev.b3 !== this.state.b3) el.scrollTo({ top: [0, .5, 1][this.state.b3 ?? 0] * (el.scrollHeight - el.clientHeight), behavior: 'smooth' });
+  }
+  syncMotion() { document.documentElement.toggleAttribute('data-iris-still', !!this.props.reducedMotion); }
+  renderVals() {
+    const cur = k => this.state[k] ?? 0, t = {};
+    for (const k in F) { const c = cur(k); t[k] = F[k].map((name, i) => { const on = i === c; return { name, pick: () => this.setState({ [k]: i }), bg: on ? '#ECEBF2' : '#13131A', fg: on ? '#0B0B10' : '#A9A7B8', bd: on ? '#ECEBF2' : '#34333F' }; }); }
+    const typed = cur('d4') === 1, all = cur('d5') === 1;
+    return {
+      t,
+      usage: [{ name: 'Anthropic', p: 42, label: 'resets 14:00' }, { name: 'OpenAI', p: 88, label: 'resets 12:40' }].map(u => ({ ...u, pct: u.p + '%', col: u.p >= 85 ? '#FF8A5C' : '#C9C3FF', tc: u.p >= 85 ? '#FF8A5C' : '#A9A7B8' })),
+      live: LIVE, recent: RECENT, runs: RUNS,
+      jobsD: jobs(false), jobsL: jobs(true),
+      a4: { started: cur('a4') === 1 },
+      colsRun: cols('Running', false), colsBlk: cols('Blocked', false), colsRunL: cols('Running', true), colsRev: cols('Review', false, 'Review'),
+      tRun: tk(RUNNING, false), tRunL: tk(RUNNING, true), tBlk: tk(BLOCKED, false),
+      b3Ref: this.b3r,
+      move: MOVE,
+      menuIdle: menu(false), menuBusy: menu(true),
+      profD: prof(false), profL: prof(true),
+      d4: { typed, empty: !typed, val: typed ? 'research' : '', btnBg: typed ? '#FF6B6B' : '#1E1E27', btnFg: typed ? '#14121F' : '#A9A7B8' },
+      d5: { all, one: !all, groups: all ? SR : SR.slice(0, 1).map(g => ({ ...g, p: '2 CHATS · DEFAULT' })), sa: all ? 'transparent' : '#17161F', sab: all ? 'transparent' : '#34333F', sac: all ? '#A9A7B8' : '#ECEBF2', sb: all ? '#17161F' : 'transparent', sbb: all ? '#34333F' : 'transparent', sbc: all ? '#ECEBF2' : '#A9A7B8' },
+      kb: KB
+    };
+  }
+}
+</script>
+</body>
+</html>

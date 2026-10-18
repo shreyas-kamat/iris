@@ -231,6 +231,17 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
+  /// Every message of the conversation, oldest first: reads the pages not yet
+  /// loaded. Stops at the first page that fails to load.
+  Future<List<TranscriptItem>> fullTranscript() async {
+    for (var i = 0; i < 200 && !_disposed && value.earlier != null; i++) {
+      final before = value.earlier;
+      await loadEarlier();
+      if (identical(value.earlier, before)) break;
+    }
+    return value.items;
+  }
+
   /// Reads the slash-command catalogue once, the first time it is wanted —
   /// when the person types a slash — rather than with every conversation.
   Future<void> loadCommands() async {
@@ -454,6 +465,46 @@ final class ChatController extends ValueNotifier<ChatState> {
               ? 'Undid the last turn'
               : 'Undid the last turn. Re-attach any files.',
         );
+    }
+  }
+
+  /// Summarises the conversation to free context. Needs a live, idle chat.
+  Future<void> compress() async {
+    final runtimeId = _runtimeId;
+    void say(String message) => onToast?.call(message);
+    if (runtimeId == null) {
+      say('Nothing to compress yet');
+      return;
+    }
+    if (value.running) {
+      say('Stop the reply first to compress.');
+      return;
+    }
+    switch (await _backend.compress(runtimeId)) {
+      case Err(:final failure):
+        if (_disposed) return;
+        say(
+          (failure.rpcError?.isMethodNotFound ?? false)
+              ? "Compress isn't supported on this server."
+              : 'Could not compress: ${describe(failure)}',
+        );
+      case Ok():
+        if (!_disposed) say('Compressed');
+    }
+  }
+
+  /// Renames the conversation. The title changes at once and changes back,
+  /// with a toast, if Hermes refuses.
+  Future<void> rename(String title) async {
+    final id = _storedId;
+    if (id == null) return;
+    final previous = value.title;
+    _update(value.copyWith(title: title));
+    final result = await _backend.rename(id, title);
+    if (_disposed) return;
+    if (result case Err(:final failure)) {
+      _update(value.copyWith(title: previous, clearTitle: previous == null));
+      onToast?.call('Could not rename: ${describe(failure)}');
     }
   }
 
