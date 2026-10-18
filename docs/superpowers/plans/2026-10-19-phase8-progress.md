@@ -7,7 +7,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 
 | Task | Title | Segment | Model | Status | Last commit |
 |---|---|---|---|---|---|
-| 0 | Extend the probe | S1 | Sonnet | todo | |
+| 0 | Extend the probe | S1 | Sonnet | blocked | |
 | 1 | Voice capabilities, catalogue, backend, `VoiceSubmit` | S1 | Sonnet | todo | |
 | 2 | Providers, device prefs and call spans | S1 | Sonnet | todo | |
 | 3 | `IrisVoiceOrb` | S1 | Sonnet | todo | |
@@ -38,3 +38,13 @@ the next model.
 - Spec `8671b83`, probe `bb9adf2`; plan, run book, this log and `/phase8` added on `feat/phase8-voice` (cut from
   `main` at `f4bdcc4`).
 - Open items: none. Next: Task 0, Step 1.
+
+### Task 0 — blocked — 2026-10-19 — Sonnet 5.5
+- Step 1 is written and `flutter analyze` is clean, but it is uncommitted in `test/live/phase8_probe_live_test.dart`: it adds
+  a second test (`include_defaults=false`, both leases, silent-WAV transcribe, speak-stream, transcribe-stream, a throwaway
+  `voice_turn` submit plus interrupt) and a failure-kind reason on the link assertion.
+- Step 2 not run: `~/.iris-live.json` exists, but the link is `blocked` with a `tls` failure (the pre-existing probe test fails
+  the same way). `curl https://hermes.shreyaskamat.in/` gets "Connection was reset" and no certificate comes back, so the
+  server is unreachable from this machine, not a certificate problem on our side.
+- Needs the user: get the server reachable (VPN, network, Cloudflare Access or the host being down), then re-run `/phase8`.
+- Next: Task 0, Step 2.
