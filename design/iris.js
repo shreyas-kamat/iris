@@ -12,10 +12,12 @@
     listening: { col: '#FF8AD8', dot: .15, pulse: .12, pf: 1.1, ring: .37, w: .038, arc: 1,   seg: 0, spin: .5,  wob: .11, glow: .9,  sat: 0, track: 0,   alpha: 1 },
     success:   { col: '#6EE787', dot: .17, pulse: .03, pf: .6, ring: .38, w: .045, arc: 1,   seg: 0, spin: 0,   wob: 0,   glow: 1,   sat: 0, track: 0,   alpha: 1 },
     failed:    { col: '#FF6B6B', dot: .15, pulse: .04, pf: .8, ring: .37, w: .042, arc: .84, seg: 0, spin: 0,   wob: 0,   glow: .6,  sat: 0, track: .1,  alpha: 1 },
+    needs:     { col: '#FF8A5C', dot: .15, pulse: .14, pf: .9, ring: .37, w: .04, arc: 1, seg: 2, spin: .35, wob: 0, glow: .85, sat: 0, track: .1, alpha: 1 },
     offline:   { col: '#6B6A78', dot: .11, pulse: 0,   pf: .5, ring: .35, w: .026, arc: 1,   seg: 12, spin: .1, wob: 0,   glow: 0,   sat: 0, track: 0,   alpha: .6 }
   };
   const keys = ['dot', 'pulse', 'pf', 'ring', 'w', 'arc', 'seg', 'spin', 'wob', 'glow', 'sat', 'track', 'alpha'];
-  const tgt = s => { const p = S[s] || S.idle; return { ...p, rgb: hex(p.col) }; };
+  const L = { idle: '#4F3FCF', rest: '#625F7C', thinking: '#6544D9', loading: '#0B6FA3', tool: '#8A5000', streaming: '#00735E', listening: '#B0307F', success: '#1D7A34', failed: '#C0312D', offline: '#646372', needs: '#B5410F' };
+  const tgt = (s, light) => { const p = S[s] || S.idle; return { ...p, rgb: hex(light && L[s] ? L[s] : p.col) }; };
 
   class IrisOrb extends HTMLElement {
     static get observedAttributes() { return ['state', 'size', 'glow']; }
@@ -47,10 +49,13 @@
     }
     frame(now) {
       const dt = Math.min(.05, (now - this.last) / 1000); this.last = now; this.t += dt;
-      const T = tgt(this.getAttribute('state')), C = this.cur, k = Math.min(1, dt * 5);
+      const T = tgt(this.getAttribute('state'), this.getAttribute('theme') === 'light'), C = this.cur, k = Math.min(1, dt * 5);
       keys.forEach(key => C[key] += (T[key] - C[key]) * k);
       C.rgb = C.rgb.map((v, i) => v + (T.rgb[i] - v) * k);
       C.seg = T.seg; // discrete
+      const sa = this.getAttribute('still');
+      const still = (sa !== null && sa !== 'false') || document.documentElement.hasAttribute('data-iris-still');
+      if (still) { C.pulse = 0; C.wob = 0; C.spin = 0; this.shake = 0; this.burst = 0; }
       this.rot += C.spin * dt;
       this.shake = Math.max(0, this.shake - dt * 1.6); this.burst = Math.max(0, this.burst - dt * 1.1);
       const glowOn = this.getAttribute('glow') !== 'off';
@@ -65,7 +70,7 @@
         ctx.fillStyle = gr; ctx.fillRect(0, 0, s, s);
       }
       const R = s * C.ring, W = Math.max(1, s * C.w);
-      const amp = C.wob + (this.getAttribute('state') === 'listening' ? (Math.sin(t * 7.3) * .5 + Math.sin(t * 3.1) * .5) * .03 : 0);
+      const amp = still ? 0 : C.wob + (this.getAttribute('state') === 'listening' ? (Math.sin(t * 7.3) * .5 + Math.sin(t * 3.1) * .5) * .03 : 0);
       const rad = a => R * (1 + amp * Math.sin(a * 5 + t * 3.2) * Math.sin(a * 3 - t * 2.1));
       ctx.lineCap = 'round'; ctx.lineWidth = W;
       if (C.track > .01) { ctx.strokeStyle = col(C.track); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke(); }
@@ -91,7 +96,7 @@
       } else {
         stroke(this.getAttribute('state') === 'failed' ? -Math.PI / 2 + full * (1 - C.arc) / 2 + Math.PI : base, full * C.arc, this.getAttribute('state') !== 'failed');
       }
-      if (C.sat > .02) {
+      if (C.sat > .02 && !still) {
         const a = this.rot * 1.9, sr = R + W * 2.2;
         ctx.fillStyle = col(C.sat); ctx.beginPath(); ctx.arc(cx + Math.cos(a) * sr, cy + Math.sin(a) * sr, W * .7, 0, full); ctx.fill();
       }
