@@ -15,6 +15,7 @@ import '../chat/chat_controller.dart';
 import 'audio/audio_out.dart';
 import 'audio/audio_route.dart';
 import 'audio/mic_capture.dart';
+import 'call_service.dart';
 import 'chained_engine.dart';
 import 'gpt_live_engine.dart';
 import 'live_channel.dart';
@@ -204,9 +205,11 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     required AudioRoute route,
     String server = defaultServerName,
     LivePeer Function()? livePeer,
+    CallService? service,
     DateTime Function() clock = DateTime.now,
   }) : _backend = backend,
        _route = route,
+       _service = service,
        _clock = clock,
        super(
          VoiceCallState(
@@ -238,7 +241,10 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
             server: server,
           );
     _speaker = settings.speaker;
+    addListener(_syncNotice);
   }
+
+  static const _noticeTitle = 'Talking with Iris';
 
   /// A link down for this long ends the call.
   static const reconnectBudget = Duration(seconds: 30);
@@ -247,6 +253,7 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
 
   final ChatBackend _backend;
   final AudioRoute _route;
+  final CallService? _service;
   final DateTime Function() _clock;
   late final _Host _host;
   late final CallEngine _engine;
@@ -262,6 +269,11 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
   Timer? _lost;
   StreamSubscription<RouteInfo>? _routeSub;
   StreamSubscription<bool>? _linkSub;
+  StreamSubscription<InterruptionKind>? _interruptSub;
+  StreamSubscription<void>? _noisySub;
+  StreamSubscription<CallAction>? _actionSub;
+  bool _serviceOn = false;
+  CallNotice? _notice;
 
   ValueNotifier<double> get _level => value.level as ValueNotifier<double>;
 
@@ -277,6 +289,16 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
       if (!_over) value = value.copyWith(route: info);
     });
     _linkSub = _backend.liveChanges.listen(_onLink);
+    // A phone call or the assistant takes the audio: pause, and leave Resume
+    // to the person, even when the interruption ends.
+    _interruptSub = _route.interruptions.listen((kind) {
+      if (kind == InterruptionKind.began) {
+        unawaited(pause(PauseReason.phoneCall));
+      }
+    });
+    _noisySub = _route.becameNoisy.listen(
+      (_) => unawaited(pause(PauseReason.unplugged)),
+    );
     _routeActive = true;
     await _route.activate();
     await _route.setSpeaker(on: _speaker);
@@ -291,7 +313,44 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
       return;
     }
     value = value.copyWith(clearStep: true);
+    final service = _service;
+    if (service != null) {
+      _actionSub = service.actions.listen(_onAction);
+      final notice = _notice = _currentNotice();
+      _serviceOn = true;
+      await service.start(notice);
+      if (_over) return;
+    }
     await _engine.start();
+  }
+
+  CallNotice _currentNotice() => CallNotice(
+    title: _noticeTitle,
+    text: noticeText(value.mode, workingFor: value.workingFor),
+    muted: value.muted,
+    elapsed: value.elapsed,
+  );
+
+  /// The notification follows the call, re-sent only when what it says
+  /// changes.
+  void _syncNotice() {
+    final service = _service;
+    if (service == null || !_serviceOn || _over) return;
+    final notice = _currentNotice();
+    if (notice == _notice) return;
+    _notice = notice;
+    unawaited(service.update(notice));
+  }
+
+  void _onAction(CallAction action) {
+    switch (action) {
+      case CallAction.mute:
+        unawaited(setMuted(muted: true));
+      case CallAction.unmute:
+        unawaited(setMuted(muted: false));
+      case CallAction.end:
+        unawaited(end());
+    }
   }
 
   /// Hangs up. Safe to call more than once, and while [begin] is running.
@@ -319,6 +378,13 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     await _engine.end();
     unawaited(_linkSub?.cancel());
     unawaited(_routeSub?.cancel());
+    unawaited(_interruptSub?.cancel());
+    unawaited(_noisySub?.cancel());
+    unawaited(_actionSub?.cancel());
+    if (_serviceOn) {
+      _serviceOn = false;
+      await _service?.stop();
+    }
     if (_routeActive) {
       _routeActive = false;
       await _route.deactivate();

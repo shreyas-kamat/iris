@@ -14,6 +14,7 @@ import 'package:iris/data/voice/voice_catalog.dart';
 import 'package:iris/features/voice/audio/audio_out.dart';
 import 'package:iris/features/voice/audio/audio_route.dart';
 import 'package:iris/features/voice/audio/mic_capture.dart';
+import 'package:iris/features/voice/call_service.dart';
 import 'package:iris/features/voice/live_channel.dart';
 import 'package:iris/features/voice/mic_permission.dart';
 
@@ -467,4 +468,39 @@ final class FakeLivePeer implements LivePeer {
 
   /// The types of what was sent.
   List<String?> get sentTypes => [for (final e in sent) e['type'] as String?];
+}
+
+/// A [CallService] that records its notices; a test presses its buttons.
+final class FakeCallService implements CallService {
+  final List<CallNotice> starts = [];
+  final List<CallNotice> updates = [];
+  int stops = 0;
+  bool running = false;
+  final _actions = StreamController<CallAction>.broadcast();
+
+  CallNotice? get current =>
+      updates.isNotEmpty ? updates.last : (starts.isEmpty ? null : starts.last);
+
+  @override
+  Future<void> start(CallNotice notice) async {
+    starts.add(notice);
+    running = true;
+  }
+
+  @override
+  Future<void> update(CallNotice notice) async {
+    if (running) updates.add(notice);
+  }
+
+  @override
+  Future<void> stop() async {
+    if (!running) return;
+    stops++;
+    running = false;
+  }
+
+  @override
+  Stream<CallAction> get actions => _actions.stream;
+
+  void press(CallAction action) => _actions.add(action);
 }
