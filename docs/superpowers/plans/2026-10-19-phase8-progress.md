@@ -21,7 +21,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 11 | Voice screen | S3 | Sonnet | done | e889b2e |
 | 12 | Approvals and questions by voice | S3 | Sonnet | done | b45efca |
 | 13 | Captions and the call divider | S3 | Sonnet | done | 3020af7 |
-| 14 | Voice settings and the picker | S3 | Sonnet | doing | |
+| 14 | Voice settings and the picker | S3 | Sonnet | done | d930aa7 |
 | 15 | Demo scripted call | S4 | Haiku | todo | |
 | 16 | Goldens, privacy policy, release notes | S4 | Haiku | todo | |
 | 17 | Live tests | S5 | Sonnet | todo | |
@@ -193,5 +193,15 @@ the next model.
 - Decisions for later tasks: `callMarks(spans, itemCount)`, `VoiceCallDivider.start/end`, `callLengthLabel`, `callEndedClock` are in `lib/features/chat/voice_call_divider.dart`; `CaptionsLayer` is in `lib/features/voice/captions_layer.dart`.
 - Next: Task 14, Step 1
 
-### Task 14 — doing — 2026-10-19 — Sonnet 5.5
-- Started. Next: Step 1.
+### Task 14 — Voice settings and the picker — done — 2026-10-19 — Sonnet 5.5
+- Commits: d930aa7 feat(phase8): voice settings and the server voice picker
+- Verified: `flutter test test/features/voice_settings_test.dart` → `All tests passed!` (12); full `flutter test --exclude-tags live` → `All tests passed!` (1489 passed, 4 skipped); `flutter analyze` → `No issues found!`
+- Packages: none
+- Deviations: (1) The 200% text test covers the voice section on its own: the whole Settings screen already overflows by 210 px at 200% under the test font before this task (checked with voice off), which is not this task's to fix; worth a look in the final review. (2) The section re-reads the server's voice setup when Settings opens (`ref.invalidate(voiceCapabilitiesProvider)` in a microtask) and after a successful write. (3) A server voice list comes from `voiceChoicesProvider` (Iris's own list for edge, OpenAI and GPT-Live; the server's for ElevenLabs; none otherwise). (4) The picker closes as soon as a voice is tapped; the current voice stays checked until the write succeeds and the setup is read again. (5) `voiceLabel(id)` is now public in `voice_catalog.dart`.
+- Decisions for later tasks: `VoiceSettingsSection` sits between Agent and Appearance in `settings_screen.dart`. Task 15's demo backend should answer `capabilities()` with a chained setup that has voices (edge) so this section shows in demo mode.
+- Next: Task 15, Step 1
+
+### Segment S3 complete — 2026-10-19
+- Tasks 11–14 are done and logged (last commit d930aa7). Branch `feat/phase8-voice`. Full `flutter test --exclude-tags live` passes (1489, 4 skipped); `flutter analyze` is clean.
+- Next segment: S4 (tasks 15–16), planned for **Haiku**; first task: Task 15, Demo scripted call.
+- Open items: on a device (Task 18), as listed under S2, plus: the screen-awake lock, the foreground notification's buttons against the call screen's controls, hold-to-talk on a real touch screen, and how the call screen's captions and cards read on a small phone. iOS still needs `PERMISSION_MICROPHONE=1` in the Podfile (Task 4 note). Task 19 should look at the pre-existing Settings overflow at 200% text.
