@@ -184,6 +184,14 @@ final class ChainedEngine implements CallEngine {
   /// The leases were taken, and are given back at the end.
   bool _leased = false;
 
+  // What the agent is waiting on, asked aloud and answered by voice or tap.
+  CallDecision? _decision;
+  bool _askedAgain = false;
+  bool _asideSpeaking = false;
+  SpeakStream? _aside;
+  StreamSubscription<SpeakFrame>? _asideSub;
+  Completer<void>? _asideDone;
+
   @override
   Future<Result<void>> preflight(void Function(PreflightStep step) onStep) {
     _leased = true;
@@ -200,8 +208,11 @@ final class ChainedEngine implements CallEngine {
     if (_phase != _Phase.idle) return;
     _style = _host.state.style;
     _events = _backend.events.listen(_onEvent);
+    _chat.addListener(_onChatState);
     _outLevel = _out.level.listen((level) {
-      if (_phase == _Phase.speaking) _host.level.value = level;
+      if (_phase == _Phase.speaking || _asideSpeaking) {
+        _host.level.value = level;
+      }
     });
     await _listen();
   }
@@ -210,6 +221,11 @@ final class ChainedEngine implements CallEngine {
 
   CallMode get _phaseMode => switch (_phase) {
     _Phase.idle => CallMode.connecting,
+    _
+        when _decision != null &&
+            _phase != _Phase.paused &&
+            _phase != _Phase.ended =>
+      CallMode.needs,
     _Phase.listening =>
       _muted
           ? CallMode.muted
@@ -236,11 +252,11 @@ final class ChainedEngine implements CallEngine {
 
   // ------------------------------------------------------------ listening
 
-  Future<void> _listen() async {
+  Future<void> _listen({bool keepClock = false}) async {
     if (_phase == _Phase.ended) return;
     _phase = _Phase.listening;
     _resetTake();
-    _host.markWorking(null);
+    if (!keepClock) _host.markWorking(null);
     _host.level.value = 0;
     _refresh();
     if (_muted || _linkDown || _style == CallStyle.pushToTalk) {
@@ -440,6 +456,8 @@ final class ChainedEngine implements CallEngine {
           await _listen();
         } else if (isStopPhrase(text, _tuning.stopPhrases)) {
           await _host.finish();
+        } else if (_decision != null) {
+          await _decide(text);
         } else {
           await _submit(text);
         }
@@ -791,6 +809,227 @@ final class ChainedEngine implements CallEngine {
     if (_phase == _Phase.listening) _refresh();
   }
 
+  // ------------------------------------------------------------ decisions
+
+  /// The chat is where requests live: they are read from its state, so a tap
+  /// on the card, a spoken answer and a withdrawal all end the same way.
+  void _onChatState() {
+    if (_phase == _Phase.ended || _phase == _Phase.idle) return;
+    final pending = CallDecision.pendingIn(_chat.value);
+    final current = _decision;
+    if (pending == null) {
+      if (current != null) unawaited(_clearDecision());
+      return;
+    }
+    if (current != null && pending.sameAs(current)) return;
+    // Only a turn the call started is waiting on the person.
+    if (!_turnActive ||
+        (_phase != _Phase.working && _phase != _Phase.speaking)) {
+      return;
+    }
+    unawaited(_beginDecision(pending));
+  }
+
+  /// Stops whatever Iris was saying, asks [decision] aloud, then listens for
+  /// the answer.
+  Future<void> _beginDecision(CallDecision decision) async {
+    _decision = decision;
+    _askedAgain = false;
+    // The reply's speech stops mattering: the agent waits on this answer.
+    _gen++;
+    final speak = _speak;
+    _speak = null;
+    _speakOpening = false;
+    _speakFailed = false;
+    _pendingText.clear();
+    _pendingDone = false;
+    _audioStarted = false;
+    _barge = null;
+    unawaited(_speakSub?.cancel());
+    _speakSub = null;
+    _host
+      ..update((s) => s.copyWith(decision: decision))
+      ..level.value = 0;
+    _refresh();
+    await _thinking.stop();
+    if (speak != null) unawaited(speak.stop());
+    await Future.wait([_out.stop(), _closeMic()]);
+    if (_decision == null || _phase == _Phase.ended) return;
+    await _say(decision.prompt);
+    if (_decision == null || _phase == _Phase.ended) return;
+    await _listen(keepClock: true);
+  }
+
+  /// Speaks [text] on its own speak stream, apart from the reply's. The
+  /// words are also shown as Iris's caption.
+  Future<void> _say(String text) async {
+    final gen = _gen;
+    _lastSpoken = text;
+    _host.update(
+      (s) => s.copyWith(
+        transcript: [
+          ...s.transcript,
+          Caption(you: false, text: text),
+        ],
+      ),
+    );
+    _asideSpeaking = true;
+    var played = false;
+    final opened = await _voice.openSocket(_speakRoute);
+    if (gen != _gen || _phase == _Phase.ended) {
+      if (opened case Ok(value: final socket)) await socket.close();
+      _asideSpeaking = false;
+      return;
+    }
+    if (opened case Ok(value: final socket)) {
+      final speak = _aside = SpeakStream(socket);
+      final done = _asideDone = Completer<void>();
+      var chain = Future<void>.value();
+      _asideSub = speak.frames.listen((frame) {
+        chain = chain
+            .then((_) async {
+              if (gen != _gen || done.isCompleted) return;
+              switch (frame) {
+                case SpeakStart(:final sampleRate):
+                  _rate = sampleRate;
+                  await _out.startPcm(sampleRate);
+                  played = true;
+                case SpeakPcm(:final pcm):
+                  if (played) _out.addPcm(pcm);
+                case SpeakEnd():
+                  if (played) await _out.endPcm();
+                  if (!done.isCompleted) done.complete();
+                case SpeakFallback():
+                  if (played) await _out.endPcm();
+                  played = false;
+                  if (!done.isCompleted) done.complete();
+              }
+            })
+            .catchError((Object error, StackTrace stack) {
+              _log.error('aside frame failed', cause: error, stackTrace: stack);
+            });
+      });
+      speak
+        ..add(text)
+        ..done();
+      await done.future;
+      _aside = null;
+      unawaited(_asideSub?.cancel());
+      _asideSub = null;
+      _asideDone = null;
+    }
+    if (gen != _gen || _phase == _Phase.ended) {
+      _asideSpeaking = false;
+      return;
+    }
+    if (!played) {
+      // No stream: the whole prompt as one clip.
+      final audio = await _voice.speakOnce(text);
+      if (gen == _gen && audio is Ok<SpokenAudio>) {
+        await _out.playFile(audio.value.bytes, audio.value.mime);
+      }
+    }
+    _asideSpeaking = false;
+  }
+
+  /// Stops an aside that is under way.
+  void _cancelAside() {
+    final speak = _aside;
+    _aside = null;
+    unawaited(_asideSub?.cancel());
+    _asideSub = null;
+    final done = _asideDone;
+    _asideDone = null;
+    if (done != null && !done.isCompleted) done.complete();
+    if (speak != null) unawaited(speak.stop());
+    if (_asideSpeaking) {
+      _asideSpeaking = false;
+      unawaited(_out.stop());
+    }
+  }
+
+  /// The request was answered (by tap, by voice or elsewhere) or withdrawn.
+  Future<void> _clearDecision() async {
+    _decision = null;
+    _gen++;
+    _cancelAside();
+    _resetTake();
+    _host.update((s) => s.copyWith(clearDecision: true));
+    if (_turnActive &&
+        (_phase == _Phase.listening ||
+            _phase == _Phase.holding ||
+            _phase == _Phase.transcribing)) {
+      _phase = _Phase.working;
+    }
+    _refresh();
+    if (_phase == _Phase.working) await _closeMic();
+  }
+
+  void _commitYou(String text) {
+    _host.update((s) {
+      final list = [...s.transcript];
+      if (_partialShown && list.isNotEmpty) {
+        list[list.length - 1] = Caption(you: true, text: text);
+      } else {
+        list.add(Caption(you: true, text: text));
+      }
+      return s.copyWith(transcript: list);
+    });
+    _partialShown = false;
+  }
+
+  /// What the person said while a request was waiting.
+  Future<void> _decide(String heard) async {
+    final decision = _decision;
+    if (decision == null) return;
+    _commitYou(heard);
+    switch (decision) {
+      case ApprovalDecision(:final request):
+        final verdict = matchApproval(heard);
+        if (verdict == null) {
+          await _unclear(decision);
+          return;
+        }
+        await _chat.approve(
+          request,
+          verdict == SpokenVerdict.deny ? 'deny' : decision.approveChoice,
+        );
+      case QuestionDecision(:final request, :final question):
+        final label = matchChoice(heard, [
+          for (final choice in question.choices) choice.label,
+        ]);
+        final chosen = [
+          for (final choice in question.choices)
+            if (choice.label == label) choice.value,
+        ];
+        await _chat.answer(
+          request,
+          question,
+          chosen.isEmpty ? heard : chosen.first,
+        );
+    }
+  }
+
+  /// Not an answer: asked once more, then the call waits for a tap or a
+  /// clearer word without speaking again.
+  Future<void> _unclear(CallDecision decision) async {
+    if (_askedAgain) {
+      await _listen(keepClock: true);
+      return;
+    }
+    _askedAgain = true;
+    _phase = _Phase.working;
+    _refresh();
+    await _say(
+      decision is ApprovalDecision
+          ? "Sorry, I didn't catch that. Say approve or deny."
+          : "Sorry, I didn't catch that. What's your answer?",
+    );
+    if (_decision != null && _phase != _Phase.ended) {
+      await _listen(keepClock: true);
+    }
+  }
+
   // ------------------------------------------------------------- controls
 
   @override
@@ -891,6 +1130,11 @@ final class ChainedEngine implements CallEngine {
     }
     _phase = _Phase.working;
     _refresh();
+    final waiting = _decision;
+    if (waiting != null) {
+      await _beginDecision(waiting);
+      return;
+    }
     final owed = _reply.toString();
     if (owed.trim().isNotEmpty) {
       _pendingText
@@ -934,6 +1178,8 @@ final class ChainedEngine implements CallEngine {
       unawaited(_voice.lease(speech: true, active: false));
     }
     _turnActive = false;
+    _chat.removeListener(_onChatState);
+    _cancelAside();
     unawaited(_events?.cancel());
     unawaited(_outLevel?.cancel());
     final speak = _speak;

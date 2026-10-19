@@ -9,9 +9,11 @@ import 'package:flutter/foundation.dart';
 import '../../app/voice_providers.dart';
 import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
+import '../../data/chat/chat_models.dart';
 import '../../data/voice/voice_backend.dart';
 import '../../data/voice/voice_capabilities.dart';
 import '../chat/chat_controller.dart';
+import '../chat/chat_state.dart';
 import 'audio/audio_out.dart';
 import 'audio/audio_route.dart';
 import 'audio/mic_capture.dart';
@@ -20,6 +22,7 @@ import 'chained_engine.dart';
 import 'gpt_live_engine.dart';
 import 'live_channel.dart';
 import 'preflight.dart';
+import 'spoken.dart';
 
 enum CallMode {
   connecting,
@@ -68,6 +71,76 @@ final class Caption {
   int get hashCode => Object.hash(you, text, spoken);
 }
 
+/// What the agent is waiting for the person to decide: an approval (B9a) or
+/// a clarifying question (B9b).
+sealed class CallDecision {
+  const CallDecision();
+
+  /// What Iris asks aloud.
+  String get prompt;
+
+  /// The first thing waiting in [state], approvals before questions.
+  static CallDecision? pendingIn(ChatState state) {
+    if (state.approvals.isNotEmpty) {
+      return ApprovalDecision(state.approvals.first);
+    }
+    for (final request in state.questions) {
+      if (request.questions.isNotEmpty) {
+        return QuestionDecision(request, request.questions.first);
+      }
+    }
+    return null;
+  }
+
+  /// Whether this is the same request as [other], however often it is re-read.
+  bool sameAs(CallDecision? other);
+}
+
+final class ApprovalDecision extends CallDecision {
+  const ApprovalDecision(this.request);
+
+  final ApprovalRequest request;
+
+  /// The command to read, its first line only.
+  String get command {
+    final line = request.command.trim().split('\n').first.trim();
+    return line.isEmpty ? request.description.trim() : line;
+  }
+
+  @override
+  String get prompt =>
+      command.isEmpty ? 'Shall I go ahead?' : 'Shall I run $command?';
+
+  /// The answer that approves: the first choice that is not a refusal.
+  String get approveChoice => request.choices.firstWhere(
+    (choice) => choice != 'deny',
+    orElse: () => 'once',
+  );
+
+  @override
+  bool sameAs(CallDecision? other) =>
+      other is ApprovalDecision &&
+      other.request.queueId == request.queueId &&
+      other.request.serverRequestId == request.serverRequestId &&
+      other.request.command == request.command;
+}
+
+final class QuestionDecision extends CallDecision {
+  const QuestionDecision(this.request, this.question);
+
+  final ClarifyRequest request;
+  final ClarifyQuestion question;
+
+  @override
+  String get prompt => question.text;
+
+  @override
+  bool sameAs(CallDecision? other) =>
+      other is QuestionDecision &&
+      other.request.requestId == request.requestId &&
+      other.question.id == question.id;
+}
+
 @immutable
 final class VoiceCallState {
   const VoiceCallState({
@@ -86,6 +159,7 @@ final class VoiceCallState {
     this.transcript = const [],
     this.paused,
     this.heldTake = false,
+    this.decision,
   });
 
   final CallMode mode;
@@ -118,6 +192,9 @@ final class VoiceCallState {
   /// A take whose transcription failed is kept for Try again.
   final bool heldTake;
 
+  /// What the agent is waiting on, while [mode] is needs.
+  final CallDecision? decision;
+
   bool get isOver => mode == CallMode.ended || mode == CallMode.error;
 
   VoiceCallState copyWith({
@@ -139,6 +216,8 @@ final class VoiceCallState {
     PauseReason? paused,
     bool clearPaused = false,
     bool? heldTake,
+    CallDecision? decision,
+    bool clearDecision = false,
   }) => VoiceCallState(
     mode: mode ?? this.mode,
     level: level,
@@ -155,6 +234,7 @@ final class VoiceCallState {
     route: route ?? this.route,
     paused: clearPaused ? null : paused ?? this.paused,
     heldTake: heldTake ?? this.heldTake,
+    decision: clearDecision ? null : decision ?? this.decision,
   );
 }
 
@@ -207,7 +287,8 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     LivePeer Function()? livePeer,
     CallService? service,
     DateTime Function() clock = DateTime.now,
-  }) : _backend = backend,
+  }) : _chat = chat,
+       _backend = backend,
        engine = capabilities.engine,
        _route = route,
        _service = service,
@@ -263,6 +344,7 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
 
   static const _lostCopy = 'The call ended unexpectedly.';
 
+  final ChatController _chat;
   final ChatBackend _backend;
   final AudioRoute _route;
   final CallService? _service;
@@ -470,6 +552,22 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     if (_over) return;
     await _engine.retryHeld();
   }
+
+  /// Answers an approval by tap or by voice: the call watches the chat, so
+  /// the card clears when the answer lands.
+  Future<void> approve(ApprovalRequest request, SpokenVerdict verdict) {
+    final choice = verdict == SpokenVerdict.deny
+        ? 'deny'
+        : ApprovalDecision(request).approveChoice;
+    return _chat.approve(request, choice);
+  }
+
+  /// Answers [question] with [answer], a choice's value or free words.
+  Future<void> answerQuestion(
+    ClarifyRequest request,
+    ClarifyQuestion question,
+    String answer,
+  ) => _chat.answer(request, question, answer);
 
   @override
   void dispose() {

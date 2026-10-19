@@ -16,6 +16,7 @@ import '../../data/voice/voice_backend.dart';
 import '../chat/chat_controller.dart';
 import 'live_channel.dart';
 import 'preflight.dart';
+import 'spoken.dart';
 import 'voice_call.dart';
 
 /// The chat's last [turns] messages in Hermes Desktop's history shape.
@@ -132,6 +133,12 @@ final class GptLiveEngine implements CallEngine {
   bool _hearing = false;
   bool _speaking = false;
 
+  // What the agent is waiting on. The question is asked as commentary, and
+  // the next words heard are the answer.
+  CallDecision? _decision;
+  bool _askedAgain = false;
+  int _decisionFrom = 0;
+
   final _lines = <_Line>[];
   final _delegations = <String>{};
   bool _turnActive = false;
@@ -195,6 +202,7 @@ final class GptLiveEngine implements CallEngine {
     _style = _host.state.style;
     _levelSub = peer.remoteLevel.listen(_onLevel);
     _chatSub = _backend.events.listen(_onChat);
+    _chat.addListener(_onChatState);
     await _applyMic();
     _refresh();
   }
@@ -206,6 +214,7 @@ final class GptLiveEngine implements CallEngine {
     if (_phase == _Phase.idle) return CallMode.connecting;
     if (_phase == _Phase.paused) return CallMode.paused;
     if (_linkDown) return CallMode.reconnecting;
+    if (_decision != null) return CallMode.needs;
     if (_speaking) return CallMode.speaking;
     if (_turnActive) {
       return _host.state.tool != null ? CallMode.tool : CallMode.thinking;
@@ -246,6 +255,7 @@ final class GptLiveEngine implements CallEngine {
         _hearingTimer = Timer(_hearingFor, () {
           _hearing = false;
           _refresh();
+          if (_decision != null) unawaited(_decide());
         });
         _refresh();
       case 'session.output_transcript.delta':
@@ -410,6 +420,80 @@ final class GptLiveEngine implements CallEngine {
     }
   }
 
+  // ------------------------------------------------------------ decisions
+
+  /// The chat is where requests live; a tap, a spoken answer and a
+  /// withdrawal all end the same way, by the request leaving its state.
+  void _onChatState() {
+    if (_phase == _Phase.ended || _phase == _Phase.idle) return;
+    final pending = CallDecision.pendingIn(_chat.value);
+    final current = _decision;
+    if (pending == null) {
+      if (current != null) {
+        _decision = null;
+        _host.update((s) => s.copyWith(clearDecision: true));
+        _refresh();
+      }
+      return;
+    }
+    if (current != null && pending.sameAs(current)) return;
+    if (!_turnActive || _phase != _Phase.live) return;
+    _decision = pending;
+    _askedAgain = false;
+    // What is said from here on is the answer, not part of the request.
+    _lines.add(_Line('system', _host.now));
+    _decisionFrom = _lines.length;
+    _host.update((s) => s.copyWith(decision: pending));
+    _refresh();
+    _commentary(pending.prompt);
+  }
+
+  /// The words heard since the question was asked.
+  Future<void> _decide() async {
+    final decision = _decision;
+    if (decision == null || _decisionFrom > _lines.length) return;
+    final heard = [
+      for (final line in _lines.skip(_decisionFrom))
+        if (line.role == 'user') line.text.toString().trim(),
+    ].where((text) => text.isNotEmpty).join(' ');
+    if (heard.isEmpty) return;
+    switch (decision) {
+      case ApprovalDecision(:final request):
+        final verdict = matchApproval(heard);
+        if (verdict == null) {
+          _unclear('Sorry, I didn\'t catch that. Say approve or deny.');
+          return;
+        }
+        await _chat.approve(
+          request,
+          verdict == SpokenVerdict.deny ? 'deny' : decision.approveChoice,
+        );
+      case QuestionDecision(:final request, :final question):
+        final label = matchChoice(heard, [
+          for (final choice in question.choices) choice.label,
+        ]);
+        final chosen = [
+          for (final choice in question.choices)
+            if (choice.label == label) choice.value,
+        ];
+        await _chat.answer(
+          request,
+          question,
+          chosen.isEmpty ? heard : chosen.first,
+        );
+    }
+  }
+
+  /// Not an answer: asked once more, then left to a tap or a clearer word.
+  void _unclear(String again) {
+    // The words heard so far are spent; the next ones are a new try.
+    _lines.add(_Line('system', _host.now));
+    _decisionFrom = _lines.length;
+    if (_askedAgain) return;
+    _askedAgain = true;
+    _commentary(again);
+  }
+
   void _endTurn() {
     _turnActive = false;
     _reply.clear();
@@ -484,6 +568,7 @@ final class GptLiveEngine implements CallEngine {
     if (_phase == _Phase.ended) return;
     _phase = _Phase.ended;
     _hearingTimer?.cancel();
+    _chat.removeListener(_onChatState);
     unawaited(_liveSub?.cancel());
     unawaited(_levelSub?.cancel());
     unawaited(_chatSub?.cancel());

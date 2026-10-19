@@ -47,3 +47,75 @@ bool _same(List<String> run, List<String> within, int at) {
 /// [text] without its code blocks, which are read on the screen, not aloud.
 /// Empty when nothing is left to say.
 String speakable(String text) => text.replaceAll(_fence, '').trim();
+
+/// How an approval was answered by voice.
+enum SpokenVerdict { approve, deny }
+
+const _approveWords = {
+  'approve',
+  'approved',
+  'yes',
+  'yeah',
+  'yep',
+  'yup',
+  'ok',
+  'okay',
+  'allow',
+  'proceed',
+  'confirm',
+  'affirmative',
+};
+
+const _approvePhrases = ['go ahead', 'do it', 'run it', 'go for it'];
+
+const _denyWords = {
+  'deny',
+  'denied',
+  'no',
+  'nope',
+  'nah',
+  'dont',
+  'cancel',
+  'reject',
+  'refuse',
+  'negative',
+  'never',
+};
+
+/// An answer longer than this is a remark, not a verdict.
+const _longestVerdict = 8;
+
+/// Whether [heard] approves or denies: "approve", "yes", "go ahead", or
+/// "deny", "no", "don't". A refusal anywhere wins over a yes, because acting
+/// on a misheard yes costs more than asking again. Anything else, or a long
+/// remark, is null.
+SpokenVerdict? matchApproval(String heard) {
+  final words = _words(heard);
+  if (words.isEmpty || words.length > _longestVerdict) return null;
+  if (words.any(_denyWords.contains)) return SpokenVerdict.deny;
+  final joined = words.join(' ');
+  if (words.any(_approveWords.contains) ||
+      _approvePhrases.any(joined.contains)) {
+    return SpokenVerdict.approve;
+  }
+  return null;
+}
+
+/// The one of [choices] that [heard] names, by its words, or null when it
+/// names none or more than one ("the second one" is not a choice).
+String? matchChoice(String heard, List<String> choices) {
+  final said = _words(heard);
+  if (said.isEmpty) return null;
+  final found = <String>[];
+  for (final choice in choices) {
+    final words = _words(choice);
+    if (words.isEmpty || words.length > said.length) continue;
+    for (var at = 0; at + words.length <= said.length; at++) {
+      if (_same(words, said, at)) {
+        found.add(choice);
+        break;
+      }
+    }
+  }
+  return found.length == 1 ? found.single : null;
+}

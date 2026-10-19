@@ -14,9 +14,11 @@ import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import 'screen_awake.dart';
+import 'spoken.dart';
 import 'tool_trail.dart';
 import 'voice_call.dart';
 import 'voice_controls.dart';
+import 'voice_decision_card.dart';
 
 /// How the call screen was left.
 enum VoiceCallExit {
@@ -128,11 +130,23 @@ CallCopy callCopy(
       'Your mic is off.',
       'Iris can’t hear you. Replies still play.',
     ),
-    CallMode.needs => const CallCopy(
-      'NEEDS YOUR OK',
-      'Iris is waiting for you.',
-      'Answer in the chat, or say what you’d like.',
-    ),
+    CallMode.needs => switch (state.decision) {
+      final ApprovalDecision approval => CallCopy(
+        'NEEDS YOUR OK',
+        approval.prompt,
+        'Say “approve” or “deny”, or tap.',
+      ),
+      final QuestionDecision question => CallCopy(
+        'IRIS ASKS',
+        question.prompt,
+        'Say your answer, or tap one.',
+      ),
+      null => const CallCopy(
+        'NEEDS YOUR OK',
+        'Iris is waiting for you.',
+        'Answer in the chat, or say what you’d like.',
+      ),
+    },
     CallMode.reconnecting => CallCopy(
       'RECONNECTING · ${callClock(reconnectingFor)}',
       'Connection lost.',
@@ -308,6 +322,22 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 ? _lastHeadset
                 : null,
             onRetry: () => unawaited(widget.call.retryHeld()),
+            onApprove: (verdict) {
+              if (state.decision case final ApprovalDecision approval) {
+                unawaited(widget.call.approve(approval.request, verdict));
+              }
+            },
+            onAnswer: (answer) {
+              if (state.decision case final QuestionDecision question) {
+                unawaited(
+                  widget.call.answerQuestion(
+                    question.request,
+                    question.question,
+                    answer,
+                  ),
+                );
+              }
+            },
           ),
         ),
         if (holdable)
@@ -479,12 +509,16 @@ class _Stage extends StatelessWidget {
     required this.copy,
     required this.routeWas,
     required this.onRetry,
+    required this.onApprove,
+    required this.onAnswer,
   });
 
   final VoiceCallState state;
   final CallCopy copy;
   final String? routeWas;
   final VoidCallback onRetry;
+  final void Function(SpokenVerdict verdict) onApprove;
+  final void Function(String answer) onAnswer;
 
   @override
   Widget build(BuildContext context) {
@@ -550,6 +584,15 @@ class _Stage extends StatelessWidget {
                           color: palette.inkMuted,
                         ),
                       ),
+                    ),
+                  ],
+                  if (state.mode == CallMode.needs &&
+                      state.decision != null) ...[
+                    const SizedBox(height: IrisSpace.lg),
+                    VoiceDecisionCard(
+                      decision: state.decision!,
+                      onApprove: onApprove,
+                      onAnswer: onAnswer,
                     ),
                   ],
                   if (state.mode == CallMode.interrupted) ...[
