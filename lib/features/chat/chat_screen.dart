@@ -507,7 +507,9 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _startCall() async {
     final host = widget.voice;
     if (host == null || _call != null) return;
-    if (await ensureMicAccess(context) == MicAccess.denied) return;
+    // A scripted call (demo) never opens the microphone, so it asks for none.
+    final scripted = host.parts(host.settings).scripted != null;
+    if (!scripted && await ensureMicAccess(context) == MicAccess.denied) return;
     if (!mounted || _call != null) return;
     var again = true;
     while (again && mounted) {
@@ -523,6 +525,7 @@ class _ChatScreenState extends State<ChatScreen> {
         route: parts.route,
         server: host.server,
         livePeer: parts.livePeer,
+        scripted: parts.scripted,
         service: parts.service,
       );
       final startedAt = DateTime.now();

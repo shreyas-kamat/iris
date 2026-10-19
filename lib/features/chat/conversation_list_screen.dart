@@ -28,6 +28,7 @@ import '../../data/rpc/dashboard_session.dart';
 import '../../data/rpc/rpc_frame.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
+import '../../demo/demo_voice.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -275,6 +276,7 @@ class _ConversationListScreenState
           ref.read(voiceCallSpansWriterProvider).add(id, span),
       settings: ref.watch(voiceSettingsProvider),
       server: server == null ? defaultServerName : _hostOf(server.baseUrl),
+      parts: ref.watch(demoModeProvider) ? demoCallParts : CallParts.platform,
     );
   }
 

@@ -13,6 +13,7 @@ import 'call_service.dart';
 import 'live_channel.dart';
 import 'preflight.dart';
 import 'screen_awake.dart';
+import 'voice_call.dart';
 
 /// The platform seams one call runs on: the microphone, playback, the audio
 /// session, the foreground service and the screen lock.
@@ -24,6 +25,7 @@ final class CallParts {
     required this.awake,
     this.service,
     this.livePeer,
+    this.scripted,
   });
 
   /// The real ones. The route and playback share the speaker choice, because
@@ -45,6 +47,10 @@ final class CallParts {
   final ScreenAwake awake;
   final CallService? service;
   final LivePeer Function()? livePeer;
+
+  /// Replaces the real engine for a scripted call (demo mode). Null for a
+  /// real call.
+  final CallEngine Function(CallHost host)? scripted;
 }
 
 final class VoiceHost {

@@ -8,15 +8,16 @@ import '../data/prefs/preferences_store.dart';
 import '../data/voice/voice_backend.dart';
 import '../data/voice/voice_capabilities.dart';
 import '../demo/demo_mode.dart';
+import '../demo/demo_voice.dart';
 import 'preferences.dart';
 import 'providers.dart';
 
 /// The voice backend for the active server, scoped to the active profile.
-/// Null until the link exists. Demo mode has none until its scripted call
-/// lands.
+/// Null until the link exists. Demo mode has its own, which plays a scripted
+/// call and talks to no server.
 final activeVoiceProvider = FutureProvider<VoiceBackend?>((ref) async {
   final profile = ref.watch(activeProfileProvider);
-  if (ref.watch(demoModeProvider)) return null;
+  if (ref.watch(demoModeProvider)) return DemoVoiceBackend();
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
   return DashboardVoice(session, profile: profile);

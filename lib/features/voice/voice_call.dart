@@ -300,6 +300,7 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     required AudioRoute route,
     this.server = defaultServerName,
     LivePeer Function()? livePeer,
+    CallEngine Function(CallHost host)? scripted,
     CallService? service,
     DateTime Function() clock = DateTime.now,
   }) : _chat = chat,
@@ -318,7 +319,9 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
          ),
        ) {
     _host = _Host(this);
-    _engine = capabilities.engine == VoiceEngine.gptLive
+    _engine = scripted != null
+        ? scripted(_host)
+        : capabilities.engine == VoiceEngine.gptLive
         ? GptLiveEngine(
             _host,
             chat: chat,

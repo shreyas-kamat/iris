@@ -14,6 +14,7 @@ import 'package:iris/data/prefs/preferences_store.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/data/voice/voice_capabilities.dart';
 import 'package:iris/demo/demo_mode.dart';
+import 'package:iris/demo/demo_voice.dart';
 
 import '../support/fake_http.dart';
 import '../support/fake_wire_socket.dart';
@@ -118,15 +119,22 @@ void main() {
       expect(http.requests, isEmpty);
     });
 
-    test('demo mode has no voice backend yet', () async {
-      final demo = makeContainer(
-        extra: [demoModeProvider.overrideWithValue(true)],
-      );
-      final sub = demo.listen(activeVoiceProvider, (_, _) {});
-      addTearDown(sub.close);
+    test(
+      'demo mode has a scripted voice backend that reaches no server',
+      () async {
+        final demo = makeContainer(
+          extra: [demoModeProvider.overrideWithValue(true)],
+        );
+        final sub = demo.listen(activeVoiceProvider, (_, _) {});
+        addTearDown(sub.close);
 
-      expect(await demo.read(activeVoiceProvider.future), isNull);
-    });
+        final backend = await demo.read(activeVoiceProvider.future);
+        expect(backend, isA<DemoVoiceBackend>());
+        final caps = await demo.read(voiceCapabilitiesProvider.future);
+        expect(caps.voiceMode, isTrue);
+        expect(caps.engine, VoiceEngine.chained);
+      },
+    );
   });
 
   group('settings', () {
