@@ -22,8 +22,8 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 12 | Approvals and questions by voice | S3 | Sonnet | done | b45efca |
 | 13 | Captions and the call divider | S3 | Sonnet | done | 3020af7 |
 | 14 | Voice settings and the picker | S3 | Sonnet | done | d930aa7 |
-| 15 | Demo scripted call | S4 | Haiku | todo | |
-| 16 | Goldens, privacy policy, release notes | S4 | Haiku | todo | |
+| 15 | Demo scripted call | S4 | Haiku | done | 83480a3 |
+| 16 | Goldens, privacy policy, release notes | S4 | Haiku | doing | |
 | 17 | Live tests | S5 | Sonnet | todo | |
 | 18 | Device pass | S5 | Sonnet | todo | |
 | 19 | Final review | S6 | Opus | todo | |
@@ -205,3 +205,11 @@ the next model.
 - Tasks 11–14 are done and logged (last commit d930aa7). Branch `feat/phase8-voice`. Full `flutter test --exclude-tags live` passes (1489, 4 skipped); `flutter analyze` is clean.
 - Next segment: S4 (tasks 15–16), planned for **Haiku**; first task: Task 15, Demo scripted call.
 - Open items: on a device (Task 18), as listed under S2, plus: the screen-awake lock, the foreground notification's buttons against the call screen's controls, hold-to-talk on a real touch screen, and how the call screen's captions and cards read on a small phone. iOS still needs `PERMISSION_MICROPHONE=1` in the Podfile (Task 4 note). Task 19 should look at the pre-existing Settings overflow at 200% text.
+
+### Task 15 — Demo scripted call — done — 2026-10-19 — Haiku 5.5
+- Commits: 83480a3 feat(phase8): a scripted voice call in demo mode
+- Verified: `flutter test test/demo/demo_voice_test.dart` → 2 passed (failed to compile before Step 3, as Step 2 expects); `flutter test test/app/voice_providers_test.dart` → `All tests passed!` (14); `flutter test --exclude-tags live` → `All tests passed!` (1491 passed, 4 skipped); `flutter analyze` → `No issues found!`
+- Packages: none
+- Deviations: (1) The plan's `DemoCallEngine` is plugged in through a new optional `scripted` on `CallParts` and `VoiceCall`, so a real call is untouched; `demoCallParts(settings)` builds the demo seams (the mic stub throws if opened). (2) The demo call's chat-side `ensureMicAccess` is skipped for a scripted call (chat_screen.dart), so demo never asks for the microphone. (3) The `DemoVoiceBackend` answers as a chained Edge setup with the built-in voice list; a voice picked in Settings is kept for the session only. (4) `voice_providers_test.dart`: the old "demo mode has no voice backend yet" test is replaced by one asserting the demo backend. (5) `demo_flow_test.dart` "a new demo chat offers the scripted prompts": with voice on, the first-run voice tags sit over the prompt chips for 8 s, so the test now waits 9 s before tapping a prompt (without the wait the tap lands on the tags). This changes an existing test; the reason is the new UI, not a relaxed assertion. (6) The scripted call auto-advances the question card after 2.5 s (no tap is answered), by design for the demo.
+- Decisions for later tasks: `DemoCallEngine` script is `start()`'s `_at(...)` timeline (about 9 s, then listening); demo level is simulated in `_drive`. `demoCallParts` is in `lib/demo/demo_voice.dart`; `CallParts.scripted` is the hook. Task 16's demo goldens can use the demo voice button in a new demo chat.
+- Next: Task 16, Step 1
