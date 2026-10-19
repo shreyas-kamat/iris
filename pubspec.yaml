@@ -58,6 +58,7 @@ dependencies:
   audio_session: 0.2.4
   flutter_pcm_sound: 3.3.3
   just_audio: 0.10.6
+  flutter_webrtc: 1.6.2+hotfix.3
 
 dev_dependencies:
   flutter_test:

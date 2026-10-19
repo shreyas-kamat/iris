@@ -14,6 +14,7 @@ import 'package:iris/data/voice/voice_catalog.dart';
 import 'package:iris/features/voice/audio/audio_out.dart';
 import 'package:iris/features/voice/audio/audio_route.dart';
 import 'package:iris/features/voice/audio/mic_capture.dart';
+import 'package:iris/features/voice/live_channel.dart';
 import 'package:iris/features/voice/mic_permission.dart';
 
 /// An [AudioSocket] a test drives: it records what the client sends and lets
@@ -129,6 +130,10 @@ final class FakeVoiceBackend implements VoiceBackend {
     return capabilitiesResult;
   }
 
+  /// The SDP offers and histories sent to GPT-Live, in order.
+  final List<String> offers = [];
+  final List<List<Map<String, Object?>>> histories = [];
+
   /// Held by a test to keep a transcription in flight.
   Completer<void>? transcribeGate;
 
@@ -175,6 +180,8 @@ final class FakeVoiceBackend implements VoiceBackend {
     List<Map<String, Object?>> history,
   ) async {
     calls.add('gptLive');
+    offers.add(sdp);
+    histories.add(history);
     return gptLiveResult;
   }
 
@@ -403,4 +410,61 @@ final class FakeAudioRoute implements AudioRoute {
     headset = name;
     if (active) _route.add(current);
   }
+}
+
+/// A [LivePeer] whose data channel a test drives. By default the server
+/// says `session.started` as soon as the answer is applied.
+final class FakeLivePeer implements LivePeer {
+  FakeLivePeer({this.autoStart = true});
+
+  bool autoStart;
+  String offerSdp = 'v=0\r\no=offer\r\n';
+  String? answered;
+  bool micOn = false;
+  bool closed = false;
+
+  /// Every event sent on the data channel, in order.
+  final List<Map<String, Object?>> sent = [];
+
+  final _events = StreamController<Json>.broadcast();
+  final _level = StreamController<double>.broadcast();
+
+  @override
+  Future<String> offer() async => offerSdp;
+
+  @override
+  Future<void> answer(String sdp) async {
+    answered = sdp;
+    if (autoStart) serverSends({'type': 'session.started'});
+  }
+
+  @override
+  Stream<Json> get events => _events.stream;
+
+  @override
+  void send(Map<String, Object?> event) {
+    if (!closed) sent.add(event);
+  }
+
+  @override
+  Stream<double> get remoteLevel => _level.stream;
+
+  @override
+  Future<void> setMicEnabled({required bool on}) async => micOn = on;
+
+  @override
+  Future<void> close() async {
+    closed = true;
+    micOn = false;
+  }
+
+  void serverSends(Map<String, Object?> event) {
+    if (!_events.isClosed) _events.add(Json.of(event));
+  }
+
+  /// The remote track's audio level.
+  void level(double value) => _level.add(value);
+
+  /// The types of what was sent.
+  List<String?> get sentTypes => [for (final e in sent) e['type'] as String?];
 }

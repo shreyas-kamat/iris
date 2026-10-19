@@ -16,6 +16,8 @@ import 'audio/audio_out.dart';
 import 'audio/audio_route.dart';
 import 'audio/mic_capture.dart';
 import 'chained_engine.dart';
+import 'gpt_live_engine.dart';
+import 'live_channel.dart';
 import 'preflight.dart';
 
 enum CallMode {
@@ -201,6 +203,7 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     required AudioOut out,
     required AudioRoute route,
     String server = defaultServerName,
+    LivePeer Function()? livePeer,
     DateTime Function() clock = DateTime.now,
   }) : _backend = backend,
        _route = route,
@@ -215,18 +218,25 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
          ),
        ) {
     _host = _Host(this);
-    // GPT-Live gets its own engine in Task 9; until then every call is
-    // chained.
-    _engine = ChainedEngine(
-      _host,
-      chat: chat,
-      backend: backend,
-      voice: voice,
-      capabilities: capabilities,
-      mic: mic,
-      out: out,
-      server: server,
-    );
+    _engine = capabilities.engine == VoiceEngine.gptLive
+        ? GptLiveEngine(
+            _host,
+            chat: chat,
+            backend: backend,
+            voice: voice,
+            peer: livePeer ?? WebRtcLivePeer.new,
+            server: server,
+          )
+        : ChainedEngine(
+            _host,
+            chat: chat,
+            backend: backend,
+            voice: voice,
+            capabilities: capabilities,
+            mic: mic,
+            out: out,
+            server: server,
+          );
     _speaker = settings.speaker;
   }
 
