@@ -20,8 +20,8 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 10 | Background, notification, interruptions | S2 | Opus | done | 533d138 |
 | 11 | Voice screen | S3 | Sonnet | done | e889b2e |
 | 12 | Approvals and questions by voice | S3 | Sonnet | done | b45efca |
-| 13 | Captions and the call divider | S3 | Sonnet | doing | |
-| 14 | Voice settings and the picker | S3 | Sonnet | todo | |
+| 13 | Captions and the call divider | S3 | Sonnet | done | 3020af7 |
+| 14 | Voice settings and the picker | S3 | Sonnet | doing | |
 | 15 | Demo scripted call | S4 | Haiku | todo | |
 | 16 | Goldens, privacy policy, release notes | S4 | Haiku | todo | |
 | 17 | Live tests | S5 | Sonnet | todo | |
@@ -185,5 +185,13 @@ the next model.
 - Decisions for later tasks: `ChainedEngine._listen({keepClock})` keeps the working clock across a decision. A `needs` mode with no decision shows a generic line. Task 13 can read `Caption`s the engine adds for the prompt and the spoken answer. Pause then Resume while a card is up asks again.
 - Next: Task 13, Step 1
 
-### Task 13 — doing — 2026-10-19 — Sonnet 5.5
+### Task 13 — Captions and the call divider — done — 2026-10-19 — Sonnet 5.5
+- Commits: 3020af7 feat(phase8): live captions and the voice divider
+- Verified: `flutter test test/features/captions_test.dart` → `All tests passed!` (14); `flutter test test/features test/app test/data test/demo test/design --exclude-tags live` → `All tests passed!` (1453); `flutter analyze` → `No issues found!`
+- Packages: none
+- Deviations: (1) `VoiceCallSpan` gained an optional `toIndex` (stored as `t`; older records have none), because "after the span's last item" cannot be found from a start index alone; the chat records `toIndex` when the call ends, and a span with none ends where the next call or the transcript does. A call that produced no messages, or lies past the transcript, draws no divider. (2) `Caption` gained `heard` (characters of the text Iris has started saying; null = all). The chained engine sets it to the reply length when the audio starts, leaves later text muted until the playback ends or the reply is spoken in full, and a barge-in leaves the unsaid rest muted. GPT-Live captions are all ink. (3) The captions layer replaces the big orb only while the call is live: not while connecting, paused, ended or showing an approval or question card. (4) Divider text is lowercase mono ("voice · 4 min", "voice · 40 s", "call ended 4:12"), as the design shows, so it does not use `IrisLabel`, which uppercases. (5) Indices come from the loaded transcript, so loading earlier messages after a call shifts nothing in the record but can mis-place the divider; the spans are device-local and this is a known limit.
+- Decisions for later tasks: `callMarks(spans, itemCount)`, `VoiceCallDivider.start/end`, `callLengthLabel`, `callEndedClock` are in `lib/features/chat/voice_call_divider.dart`; `CaptionsLayer` is in `lib/features/voice/captions_layer.dart`.
+- Next: Task 14, Step 1
+
+### Task 14 — doing — 2026-10-19 — Sonnet 5.5
 - Started. Next: Step 1.
