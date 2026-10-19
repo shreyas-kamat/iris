@@ -17,6 +17,7 @@ import 'package:iris/features/voice/audio/mic_capture.dart';
 import 'package:iris/features/voice/call_service.dart';
 import 'package:iris/features/voice/live_channel.dart';
 import 'package:iris/features/voice/mic_permission.dart';
+import 'package:iris/features/voice/screen_awake.dart';
 
 /// An [AudioSocket] a test drives: it records what the client sends and lets
 /// the test push frames back.
@@ -503,4 +504,19 @@ final class FakeCallService implements CallService {
   Stream<CallAction> get actions => _actions.stream;
 
   void press(CallAction action) => _actions.add(action);
+}
+
+/// A [ScreenAwake] that counts how often the screen was held and released.
+final class FakeScreenAwake implements ScreenAwake {
+  int holds = 0;
+  int releases = 0;
+
+  /// The screen is being kept awake right now.
+  bool get held => holds > releases;
+
+  @override
+  Future<void> hold() async => holds++;
+
+  @override
+  Future<void> release() async => releases++;
 }

@@ -203,11 +203,12 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
     required MicCapture mic,
     required AudioOut out,
     required AudioRoute route,
-    String server = defaultServerName,
+    this.server = defaultServerName,
     LivePeer Function()? livePeer,
     CallService? service,
     DateTime Function() clock = DateTime.now,
   }) : _backend = backend,
+       engine = capabilities.engine,
        _route = route,
        _service = service,
        _clock = clock,
@@ -245,6 +246,17 @@ final class VoiceCall extends ValueNotifier<VoiceCallState> {
   }
 
   static const _noticeTitle = 'Talking with Iris';
+
+  /// Which engine runs this call.
+  final VoiceEngine engine;
+
+  /// The server's name, for the header.
+  final String server;
+
+  /// The call screen's header (B1 to B10b).
+  String get title => engine == VoiceEngine.gptLive
+      ? 'VOICE · GPT-LIVE · OPENAI'
+      : 'VOICE · ${server.toUpperCase()}';
 
   /// A link down for this long ends the call.
   static const reconnectBudget = Duration(seconds: 30);

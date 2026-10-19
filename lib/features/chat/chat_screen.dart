@@ -25,6 +25,8 @@ import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import '../voice/mic_permission_sheet.dart';
+import '../voice/voice_call.dart';
+import '../voice/voice_call_screen.dart';
 import '../voice/voice_host.dart';
 import 'attachment_picker.dart';
 import 'branched_header.dart';
@@ -149,6 +151,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final _text = TextEditingController();
   bool _unarchived = false;
 
+  /// The open voice call, if there is one.
+  VoiceCall? _call;
+
   @override
   void initState() {
     super.initState();
@@ -176,6 +181,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _clock?.cancel();
     _missedTimer?.cancel();
     unawaited(_recorder.cancel());
+    unawaited(_call?.end());
     _chat.dispose();
     _text.dispose();
     super.dispose();
@@ -494,11 +500,63 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  /// The voice button. Asks for the microphone the way dictation does; the
-  /// call screen itself opens from here once it exists.
+  /// The voice button. Asks for the microphone the way dictation does, then
+  /// opens the call screen. "Call again" on that screen starts the next call
+  /// from here, so only one call exists at a time.
   Future<void> _startCall() async {
+    final host = widget.voice;
+    if (host == null || _call != null) return;
     if (await ensureMicAccess(context) == MicAccess.denied) return;
-    if (!mounted) return;
+    if (!mounted || _call != null) return;
+    var again = true;
+    while (again && mounted) {
+      final parts = host.parts(host.settings);
+      final call = _call = VoiceCall(
+        chat: _chat,
+        backend: widget.backend,
+        voice: host.backend,
+        capabilities: host.capabilities,
+        settings: host.settings,
+        mic: parts.mic,
+        out: parts.out,
+        route: parts.route,
+        server: host.server,
+        livePeer: parts.livePeer,
+        service: parts.service,
+      );
+      final startedAt = DateTime.now();
+      final fromIndex = _chat.value.items.length;
+      var listened = false;
+      void watch() {
+        final mode = call.value.mode;
+        if (mode != CallMode.connecting &&
+            mode != CallMode.error &&
+            mode != CallMode.ended) {
+          listened = true;
+        }
+      }
+
+      call.addListener(watch);
+      unawaited(call.begin());
+      if (!mounted) break;
+      final exit = await openVoiceCall(context, call: call, awake: parts.awake);
+      call.removeListener(watch);
+      _call = null;
+      await call.end();
+      call.dispose();
+      final storedId = _chat.conversationId;
+      if (listened && storedId != null) {
+        host.onCallEnded(
+          storedId,
+          VoiceCallSpan(
+            startedAt: startedAt,
+            endedAt: DateTime.now(),
+            fromIndex: fromIndex,
+          ),
+        );
+      }
+      again = exit == VoiceCallExit.again;
+    }
   }
 
   Future<void> _stopDictation() async {

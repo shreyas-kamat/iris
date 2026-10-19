@@ -46,6 +46,7 @@ import '../home/usage_strip.dart';
 import '../scheduled/scheduled_tab.dart';
 import '../settings/settings_screen.dart';
 import '../tasks/tasks_tab.dart';
+import '../voice/preflight.dart' show defaultServerName;
 import '../voice/voice_host.dart';
 import 'archived_screen.dart';
 import 'branched_header.dart';
@@ -260,6 +261,7 @@ class _ConversationListScreenState
   VoiceHost? _voiceHost(WidgetRef ref, String? storedId) {
     final backend = ref.watch(activeVoiceProvider).value;
     final capabilities = ref.watch(voiceCapabilitiesProvider).value;
+    final server = ref.watch(activeServerProvider);
     if (backend == null || capabilities == null || !capabilities.voiceMode) {
       return null;
     }
@@ -271,6 +273,8 @@ class _ConversationListScreenState
           : ref.watch(voiceCallSpansProvider(storedId)),
       onCallEnded: (id, span) =>
           ref.read(voiceCallSpansWriterProvider).add(id, span),
+      settings: ref.watch(voiceSettingsProvider),
+      server: server == null ? defaultServerName : _hostOf(server.baseUrl),
     );
   }
 

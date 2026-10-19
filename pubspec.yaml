@@ -60,6 +60,7 @@ dependencies:
   just_audio: 0.10.6
   flutter_webrtc: 1.6.2+hotfix.3
   flutter_foreground_task: 10.0.0
+  wakelock_plus: 1.7.0
 
 dev_dependencies:
   flutter_test:
