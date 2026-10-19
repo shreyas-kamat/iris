@@ -88,6 +88,8 @@ String? voiceConfigKey(VoiceEngine engine, String ttsProvider) {
 }
 
 /// "marin" → "Marin"; "en-US-AriaNeural" → "Aria".
+String voiceLabel(String id) => _label(id);
+
 String _label(String id) {
   var name = id;
   final locale = RegExp('^[a-z]{2}-[A-Z]{2}-').firstMatch(name);
