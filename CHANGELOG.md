@@ -7,6 +7,12 @@ All notable changes to Iris are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Voice mode: a live voice call from any chat, with the voice orb as the microphone. Chained servers run
+  speech-to-text, the agent and text-to-speech; GPT-Live servers talk through OpenAI's realtime model. A call
+  starts only after its parts answer, with live captions, approvals and questions answered by voice, and
+  push-to-talk or hands-free. Calls keep going in the background, with a notification to mute or end them.
+  Settings chooses the call style, speaker and captions, and the server's voice.
+- The demo plays a scripted voice call.
 - Replies render TeX maths (inline and display, AMS environments, physics notation, SI units and chemistry),
   GitHub alerts, footnotes, emoji shortcodes and table alignment.
 - Images in Markdown show a placeholder and load only when tapped.

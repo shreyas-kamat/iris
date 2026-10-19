@@ -26,6 +26,9 @@ There is an offline demo if you want a look first.
   view; chats that are replying right now show under Live.
 - **Passwords and connections.** Unlock the password manager, enter a one-time code, or save a login when
   Hermes asks; connect connectors and MCP servers from a card in the chat.
+- **Voice.** Talk to your agent in a live call from any chat: hands-free or push to talk, with captions,
+  approvals and questions answered by voice, and calls that keep going in the background. Works with chained
+  servers and GPT-Live.
 - **Scheduled and Tasks.** On servers that have them, home gets tabs for cron jobs (pause, run now, create,
   edit, delete, past runs) and the Kanban board (columns, task detail, move and create tasks).
 - **Chat menu.** Rename, pin, branch, archive, compress, undo, export as Markdown, session info and delete,
