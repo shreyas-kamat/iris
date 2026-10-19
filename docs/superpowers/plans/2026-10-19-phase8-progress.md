@@ -23,7 +23,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 13 | Captions and the call divider | S3 | Sonnet | done | 3020af7 |
 | 14 | Voice settings and the picker | S3 | Sonnet | done | d930aa7 |
 | 15 | Demo scripted call | S4 | Haiku | done | 83480a3 |
-| 16 | Goldens, privacy policy, release notes | S4 | Haiku | doing | |
+| 16 | Goldens, privacy policy, release notes | S4 | Haiku | done | 13e6be8 |
 | 17 | Live tests | S5 | Sonnet | todo | |
 | 18 | Device pass | S5 | Sonnet | todo | |
 | 19 | Final review | S6 | Opus | todo | |
@@ -213,3 +213,16 @@ the next model.
 - Deviations: (1) The plan's `DemoCallEngine` is plugged in through a new optional `scripted` on `CallParts` and `VoiceCall`, so a real call is untouched; `demoCallParts(settings)` builds the demo seams (the mic stub throws if opened). (2) The demo call's chat-side `ensureMicAccess` is skipped for a scripted call (chat_screen.dart), so demo never asks for the microphone. (3) The `DemoVoiceBackend` answers as a chained Edge setup with the built-in voice list; a voice picked in Settings is kept for the session only. (4) `voice_providers_test.dart`: the old "demo mode has no voice backend yet" test is replaced by one asserting the demo backend. (5) `demo_flow_test.dart` "a new demo chat offers the scripted prompts": with voice on, the first-run voice tags sit over the prompt chips for 8 s, so the test now waits 9 s before tapping a prompt (without the wait the tap lands on the tags). This changes an existing test; the reason is the new UI, not a relaxed assertion. (6) The scripted call auto-advances the question card after 2.5 s (no tap is answered), by design for the demo.
 - Decisions for later tasks: `DemoCallEngine` script is `start()`'s `_at(...)` timeline (about 9 s, then listening); demo level is simulated in `_drive`. `demoCallParts` is in `lib/demo/demo_voice.dart`; `CallParts.scripted` is the hook. Task 16's demo goldens can use the demo voice button in a new demo chat.
 - Next: Task 16, Step 1
+
+### Task 16 — Goldens, privacy policy, release notes, CHANGELOG, README — done — 2026-10-19 — Haiku 5.5
+- Commits: 13e6be8 docs(phase8): goldens, privacy policy and release notes for voice
+- Verified: `flutter test test/design/voice_golden_test.dart --update-goldens` → 12 PNGs written, each opened and checked; `flutter test test/design/voice_golden_test.dart` → `All tests passed!` (12, on repeat runs); `flutter test --exclude-tags live` → `All tests passed!` (1503, 4 skipped); `flutter analyze` → `No issues found!`; `npm run build` in `site-src` → built.
+- Packages: none
+- Deviations: (1) The privacy page is `site-src/src/pages/Privacy.tsx`, the site's source. The plan's `site/privacy-policy` does not exist in the repo (`docs/site-deploy.md` says `site/` is built from `site-src`). Effective date set to 19 October 2026. (2) Goldens: B3 listening, B6 tool running, B9a approval card, C1 captions on, E1a the Settings screen with its voice section, each dark and light; B3·RM and B6·RM are the reduced-motion frames (dark). O1 is covered by the gallery goldens from Task 3. (3) B3 and B6 are rendered with motion off: animated frames differed by about 1% of pixels between runs, so the golden would be flaky. The reduced-motion frames therefore match them. (4) Release notes: a Phase 8 section in `docs/release.md` (Android permissions, iOS background audio and the Podfile `PERMISSION_MICROPHONE=1`, data safety, device checks left for Task 18); CHANGELOG and README entries.
+- Decisions for later tasks: `test/design/voice_golden_test.dart` renders the call screen through `VoiceCallScreen` with fakes; the frame helper there is separate from the screens golden file. Task 18's device checks are listed at the end of the Phase 8 section in `docs/release.md`.
+- Next: Task 17, Step 1 (segment S5, Sonnet).
+
+### Segment S4 complete — 2026-10-19
+- Tasks 15–16 are done and logged (last commit 13e6be8). Branch `feat/phase8-voice`. Full `flutter test --exclude-tags live` passes (1503, 4 skipped); `flutter analyze` is clean.
+- Next segment: S5 (tasks 17–18), needs **Sonnet** for Task 17, Live tests. Task 17 writes the server's voice back to itself on a throwaway conversation; ask the user first and wait for a yes in the chat.
+- Open items: on a device (Task 18), as listed under S2 and S3, plus the iOS `PERMISSION_MICROPHONE=1` Podfile line, and whether `ChatBackend` demo voice reads well on a phone (Task 15 is in demo mode only).
