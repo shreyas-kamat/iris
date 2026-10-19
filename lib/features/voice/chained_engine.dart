@@ -165,6 +165,9 @@ final class ChainedEngine implements CallEngine {
   final _reply = StringBuffer();
   bool _replyComplete = false;
   int? _irisCaption;
+
+  /// How much of the reply has started playing; null once it all has.
+  int? _heardChars = 0;
   SpeakStream? _speak;
   StreamSubscription<SpeakFrame>? _speakSub;
   Future<void> _frames = Future.value();
@@ -513,6 +516,7 @@ final class ChainedEngine implements CallEngine {
 
   void _resetReply() {
     _reply.clear();
+    _heardChars = 0;
     _replyComplete = false;
     _irisCaption = null;
     _speak = null;
@@ -588,11 +592,14 @@ final class ChainedEngine implements CallEngine {
     _host.update((s) {
       final list = [...s.transcript];
       final at = _irisCaption;
+      final heard = _heardChars?.clamp(0, text.length);
       if (at == null || at >= list.length) {
         _irisCaption = list.length;
-        list.add(Caption(you: false, text: text, spoken: spoken ?? true));
+        list.add(
+          Caption(you: false, text: text, spoken: spoken ?? true, heard: heard),
+        );
       } else {
-        list[at] = list[at].withText(text, spoken: spoken);
+        list[at] = list[at].withText(text, spoken: spoken, heard: heard);
       }
       return s.copyWith(transcript: list);
     });
@@ -705,6 +712,9 @@ final class ChainedEngine implements CallEngine {
   void _beginPlayback() {
     _phase = _Phase.speaking;
     _audioStarted = true;
+    // What was sent so far is being said now; later text waits its turn.
+    _heardChars = _reply.length;
+    _showReply();
     _host.markWorking(null);
     final barge = BargeInDetector(_tuning);
     final from = _micTime - _floorWindow;
@@ -740,7 +750,8 @@ final class ChainedEngine implements CallEngine {
 
   Future<void> _finishReply({required bool spoken}) async {
     _lastSpoken = _reply.toString();
-    if (!spoken) _showReply(spoken: false);
+    _heardChars = null;
+    _showReply(spoken: spoken ? null : false);
     _turnActive = false;
     _barge = null;
     _speak = null;

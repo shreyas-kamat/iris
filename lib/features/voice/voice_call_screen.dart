@@ -13,6 +13,7 @@ import '../../design/components/primitives.dart';
 import '../../design/platform/platform_feel.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
+import 'captions_layer.dart';
 import 'screen_awake.dart';
 import 'spoken.dart';
 import 'tool_trail.dart';
@@ -527,6 +528,41 @@ class _Stage extends StatelessWidget {
     final mode = _orbMode(state);
     final size = MediaQuery.sizeOf(context).width < _narrow ? 168.0 : 232.0;
     final accent = palette.voiceOrbColor(mode);
+
+    // With captions on, the orb shrinks to make room for the words. A card
+    // waiting on an answer, a stopped call and a paused one need the room.
+    if (state.captions &&
+        state.decision == null &&
+        !const {
+          CallMode.connecting,
+          CallMode.error,
+          CallMode.ended,
+          CallMode.paused,
+        }.contains(state.mode)) {
+      return Column(
+        children: [
+          const SizedBox(height: IrisSpace.xs),
+          IrisVoiceOrb(
+            mode: mode,
+            size: 104,
+            level: state.level,
+            semanticLabel: copy.status,
+          ),
+          const SizedBox(height: IrisSpace.xs),
+          Text(
+            copy.status,
+            textAlign: TextAlign.center,
+            style: type.codeSmall.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 11 * .14,
+              color: accent,
+            ),
+          ),
+          Expanded(child: CaptionsLayer(captions: state.transcript)),
+        ],
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, box) => SingleChildScrollView(

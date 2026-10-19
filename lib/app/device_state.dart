@@ -237,6 +237,7 @@ final class VoiceCallSpan {
     required this.startedAt,
     required this.endedAt,
     required this.fromIndex,
+    this.toIndex,
   });
 
   /// The spans in a stored value, oldest first. A value that is not a list
@@ -258,12 +259,15 @@ final class VoiceCallSpan {
     final start = entry['s'];
     final end = entry['e'];
     final index = entry['i'];
+    final through = entry['t'];
     if (start is! int || end is! int || index is! int) return null;
     if (end < start || index < 0) return null;
     return VoiceCallSpan(
       startedAt: DateTime.fromMillisecondsSinceEpoch(start),
       endedAt: DateTime.fromMillisecondsSinceEpoch(end),
       fromIndex: index,
+      // Older records have none; a damaged one is the same as none.
+      toIndex: through is int && through >= index ? through : null,
     );
   }
 
@@ -273,6 +277,7 @@ final class VoiceCallSpan {
         's': span.startedAt.millisecondsSinceEpoch,
         'e': span.endedAt.millisecondsSinceEpoch,
         'i': span.fromIndex,
+        't': ?span.toIndex,
       },
   ]);
 
@@ -282,6 +287,11 @@ final class VoiceCallSpan {
   /// The index of the first message the call produced.
   final int fromIndex;
 
+  /// One past the last message it produced; null for a record made before
+  /// this was kept, which then ends where the next call or the transcript
+  /// does.
+  final int? toIndex;
+
   Duration get length => endedAt.difference(startedAt);
 
   @override
@@ -289,10 +299,11 @@ final class VoiceCallSpan {
       other is VoiceCallSpan &&
       other.startedAt == startedAt &&
       other.endedAt == endedAt &&
-      other.fromIndex == fromIndex;
+      other.fromIndex == fromIndex &&
+      other.toIndex == toIndex;
 
   @override
-  int get hashCode => Object.hash(startedAt, endedAt, fromIndex);
+  int get hashCode => Object.hash(startedAt, endedAt, fromIndex, toIndex);
 }
 
 /// The voice calls made in the conversation `storedId` in the active

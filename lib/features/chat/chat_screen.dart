@@ -45,6 +45,7 @@ import 'model_sheet.dart';
 import 'queue_tray.dart';
 import 'session_info_sheet.dart';
 import 'transcript_view.dart';
+import 'voice_call_divider.dart';
 import 'voice_recorder.dart';
 
 /// The orb state for what the agent is doing.
@@ -552,6 +553,7 @@ class _ChatScreenState extends State<ChatScreen> {
             startedAt: startedAt,
             endedAt: DateTime.now(),
             fromIndex: fromIndex,
+            toIndex: _chat.value.items.length,
           ),
         );
       }
@@ -878,6 +880,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         final hasEarlier = state.earlier != null;
         final dividerAt = _dividerAfter(items, widget.branch);
+        final calls = callMarks(widget.voice?.spans ?? const [], items.length);
         final liveState = agentStateFor(state.turn);
         // Reversed, so the newest entry sits at the bottom and new output
         // appears where the eye already is; the way to earlier messages is
@@ -898,7 +901,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               );
             }
-            final item = items[items.length - 1 - index];
+            final at = items.length - 1 - index;
+            final item = items[at];
             // Only the turn still arriving carries the live state. Every other
             // entry is finished and rests.
             final live = item is AssistantTurn && item.streaming
@@ -913,6 +917,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Where a voice call began.
+                    if (calls.starts[at] case final span?)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 22),
+                        child: VoiceCallDivider.start(span),
+                      ),
                     TranscriptEntry(
                       item,
                       live: live,
@@ -926,8 +936,14 @@ class _ChatScreenState extends State<ChatScreen> {
                       onHold: (rect) => unawaited(_hold(state, item, rect)),
                       key: ValueKey(item.id),
                     ),
+                    // Where the call ended.
+                    if (calls.ends[at] case final span?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 22),
+                        child: VoiceCallDivider.end(span),
+                      ),
                     // Where the copy ended and this chat began.
-                    if (items.length - 1 - index == dividerAt)
+                    if (at == dividerAt)
                       Padding(
                         padding: const EdgeInsets.only(top: 22),
                         child: BranchedDivider(

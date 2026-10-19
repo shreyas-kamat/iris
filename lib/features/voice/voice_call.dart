@@ -48,7 +48,12 @@ enum PauseReason { phoneCall, unplugged }
 /// One line of the call's transcript.
 @immutable
 final class Caption {
-  const Caption({required this.you, required this.text, this.spoken = true});
+  const Caption({
+    required this.you,
+    required this.text,
+    this.spoken = true,
+    this.heard,
+  });
 
   /// Said by the person, not Iris.
   final bool you;
@@ -57,18 +62,28 @@ final class Caption {
   /// Iris said it aloud (false for a reply with nothing speakable).
   final bool spoken;
 
-  Caption withText(String text, {bool? spoken}) =>
-      Caption(you: you, text: text, spoken: spoken ?? this.spoken);
+  /// How many characters of [text] Iris has started saying; the rest waits.
+  /// Null means all of it.
+  final int? heard;
+
+  /// This line with new [text]; [heard] is set as given (null for all).
+  Caption withText(String text, {bool? spoken, int? heard}) => Caption(
+    you: you,
+    text: text,
+    spoken: spoken ?? this.spoken,
+    heard: heard,
+  );
 
   @override
   bool operator ==(Object other) =>
       other is Caption &&
       other.you == you &&
       other.text == text &&
-      other.spoken == spoken;
+      other.spoken == spoken &&
+      other.heard == heard;
 
   @override
-  int get hashCode => Object.hash(you, text, spoken);
+  int get hashCode => Object.hash(you, text, spoken, heard);
 }
 
 /// What the agent is waiting for the person to decide: an approval (B9a) or
