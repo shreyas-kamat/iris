@@ -17,7 +17,7 @@ Update the table when a status changes; append journal entries at the bottom, ne
 | 7 | `VoiceCall` and the chained engine | S2 | Opus | done | 589cc9e |
 | 8 | Preflight | S2 | Opus | done | 36ed7b3 |
 | 9 | GPT-Live engine | S2 | Opus | done | ed642ba |
-| 10 | Background, notification, interruptions | S2 | Opus | todo | |
+| 10 | Background, notification, interruptions | S2 | Opus | done | 533d138 |
 | 11 | Voice screen | S3 | Sonnet | todo | |
 | 12 | Approvals and questions by voice | S3 | Sonnet | todo | |
 | 13 | Captions and the call divider | S3 | Sonnet | todo | |
@@ -155,3 +155,16 @@ the next model.
 - Unverified until a GPT-Live server is tried (Task 18): the field names `delta`/`text` on transcript deltas, `text` on `session.commentary.append`, `error.message`; the remote level comes from `getStats()` `inbound-rtp` `audioLevel` every 100 ms; `flutter_webrtc` manages Android audio itself and may fight `PlatformAudioRoute` (speaker switching), to be checked on the phone.
 - Decisions for later tasks: `liveHistory`, `chunkForCommentary` in `gpt_live_engine.dart`; `LivePeer`, `WebRtcLivePeer` in `live_channel.dart`; `FakeLivePeer` (autoStart, `sent`, `sentTypes`, `micOn`, `answered`, `closed`, `serverSends`, `level`). GPT-Live captions are the input/output transcript lines. Task 12's spoken prompt for GPT-Live goes through the same commentary path.
 - Next: Task 10, Step 1
+
+### Task 10 — Background, notification and interruptions — done — 2026-10-19 — Opus 5.5
+- Commits: 533d138 feat(phase8): calls keep going in the background
+- Verified: `flutter test test/features/call_service_test.dart` → `All tests passed!` (13); `flutter build apk --release` → `Built build\app\outputs\flutter-apk\app-release.apk (107.0MB)`; `aapt dump permissions` lists FOREGROUND_SERVICE, FOREGROUND_SERVICE_MICROPHONE, POST_NOTIFICATIONS, WAKE_LOCK, MODIFY_AUDIO_SETTINGS, BLUETOOTH_CONNECT (plus the plugins' ACCESS_NETWORK_STATE and BLUETOOTH maxSdk 30); `flutter analyze` → `No issues found!`; full `flutter test --exclude-tags live` → `All tests passed!` (1395, 4 skipped).
+- Packages: flutter_foreground_task **10.0.0** (2026-07-15). 11.x needs a newer Flutter SDK than this repo's 3.41.6 and does not resolve. Its Gradle build uses Kotlin 1.9 and prints "incompatible version of Kotlin" `e:` lines in the release build, but the build succeeds.
+- Deviations: (1) `RECEIVE_BOOT_COMPLETED`, which the plugin's own manifest adds for auto-start on boot, is removed with `tools:node="remove"`: a call never restarts after a reboot. (2) `VoiceCall` gained `CallService? service`; the service starts only after the preflight passes and before the engine listens, and stops on every end path (End, stop phrase, error, the 30 s link loss, dispose); a failed check never starts it. (3) `CallNotice` equality ignores `elapsed`, so the clock alone never re-sends the notification. (4) `noticeText` also covers the other modes: connecting "Connecting", interrupted "Hearing you", needs "Needs you", error/ended "Call ended"; times of an hour or more read h:mm:ss. (5) iOS: `ForegroundCallService` does nothing there (the `audio` background mode keeps the call; the system shows its mic indicator). (6) The notification permission is asked once per app run, on the first call's service start; a refusal only hides the notification. (7) Interruptions and becoming-noisy are handled in `VoiceCall` for both engines.
+- Decisions for later tasks: Task 11 passes `ForegroundCallService()` as `service` (and `PlatformAudioRoute`, `RecordMicCapture`, `PlatformAudioOut(afterSetup: route.reapply)`). `FakeCallService` (`starts`, `updates`, `stops`, `running`, `current`, `press(CallAction)`). The notification's buttons are Mute/Unmute and End; tapping it launches the app. The service's isolate only forwards button ids (`startCallTask`, top-level, `vm:entry-point`).
+- Next: Task 11, Step 1
+
+### Segment S2 complete — 2026-10-19
+- Tasks 6–10 are done and logged (last commit 533d138). Branch `feat/phase8-voice`.
+- Next segment: S3 (tasks 11–14), planned for **Sonnet**; first task: Task 11, Voice screen.
+- Open items: on a device (Task 18), check earpiece routing, the echo canceller during playback, the iOS session after `flutter_pcm_sound` setup, `flutter_webrtc` and `PlatformAudioRoute` together, and the GPT-Live field names logged in Task 9. iOS still needs `PERMISSION_MICROPHONE=1` in the Podfile (Task 4 note).
