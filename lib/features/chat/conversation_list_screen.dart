@@ -91,8 +91,9 @@ class _ConversationListScreenState
   /// hero once it is scrolled far enough away.
   double _heroHeight = 140;
 
-  /// Whether the segmented control is drawn this build. With tabs, the control
-  /// takes the greeting's place, so there is no hero to snap.
+  /// Whether the segmented control is drawn this build. With tabs, the hero
+  /// sits above the control rather than in the list, so there is nothing in
+  /// the list to snap.
   bool _hasTabs = false;
 
   /// The query the server is asked, settled 200 ms after the last keystroke.
@@ -621,6 +622,21 @@ class _ConversationListScreenState
       });
     }
 
+    final hero = KeyedSubtree(
+      key: _heroKey,
+      child: _Hero(
+        orbState: orbState,
+        linkState: linkState,
+        headline: headlineText,
+        host: server == null ? '' : _hostOf(server.baseUrl),
+        total: conversations.value == null
+            ? null
+            : conversations.value!.total - _gone.length,
+        now: now,
+        onGateway: openGateway,
+      ),
+    );
+    
     final sessions = NotificationListener<ScrollEndNotification>(
       onNotification: _snap,
       child: _ConversationList(
@@ -630,26 +646,13 @@ class _ConversationListScreenState
         fetchedPins: _fetchedPins,
         top: [
           // Fades as it scrolls under the bar, where the compact link
-          // takes over.
+          // takes over. With tabs it sits above them instead.
           if (!hasTabs)
             ValueListenableBuilder<double>(
               valueListenable: _collapse,
               builder: (context, t, child) =>
                   Opacity(opacity: (1 - t * 1.4).clamp(0.0, 1.0), child: child),
-              child: KeyedSubtree(
-                key: _heroKey,
-                child: _Hero(
-                  orbState: orbState,
-                  linkState: linkState,
-                  headline: headlineText,
-                  host: server == null ? '' : _hostOf(server.baseUrl),
-                  total: conversations.value == null
-                      ? null
-                      : conversations.value!.total - _gone.length,
-                  now: now,
-                  onGateway: openGateway,
-                ),
-              ),
+              child: hero,
             ),
           const UsageStrip(),
         ],
@@ -702,7 +705,7 @@ class _ConversationListScreenState
     return IrisScaffold(
       header: _HomeBar(
         demo: ref.watch(demoModeProvider),
-        collapse: hasTabs ? const AlwaysStoppedAnimation<double>(1) : _collapse,
+        collapse: _collapse,
         profile: profile,
         // The pill only opens something when there is a choice to make.
         onProfile: profiles.length > 1
@@ -719,6 +722,23 @@ class _ConversationListScreenState
       ),
       body: Column(
         children: [
+          // The hero folds away as the Sessions rows scroll; the other tabs keep it
+          // open.
+          if (hasTabs)
+            ValueListenableBuilder<double>(
+              valueListenable: _collapse,
+              builder: (context, t, child) => ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: 1 - t,
+                  child: Opacity(
+                    opacity: (1 - t * 1.4).clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                ),
+              ),
+              child: hero,
+            ),
           if (hasTabs)
             Padding(
               padding: EdgeInsets.fromLTRB(
@@ -734,6 +754,8 @@ class _ConversationListScreenState
                 onChanged: (value) {
                   unawaited(IrisHaptics.selection());
                   _searchFocus.unfocus();
+                  // Each visit to a tab starts with the hero open.
+                  if (value != tab) _collapse.value = 0;
                   ref.read(homeTabProvider.notifier).select(value);
                 },
               ),
