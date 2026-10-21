@@ -174,6 +174,17 @@ void main() {
     await tester.tap(find.text('Blocked').first);
     await settle(tester);
     expect(find.text('NEEDS INPUT'), findsOneWidget);
+    // The hero takes room above the tabs, so the detail starts below the fold.
+    await tester.scrollUntilVisible(
+      find.text('CAPABILITY'),
+      100,
+      scrollable: find
+          .ancestor(
+            of: find.text('NEEDS INPUT'),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(find.text('CAPABILITY'), findsOneWidget);
     handle.dispose();
   });

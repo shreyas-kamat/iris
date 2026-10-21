@@ -636,8 +636,7 @@ class _ConversationListScreenState
         onGateway: openGateway,
       ),
     );
-    final heroShown = hasTabs && tab == HomeTab.sessions;
-
+    
     final sessions = NotificationListener<ScrollEndNotification>(
       onNotification: _snap,
       child: _ConversationList(
@@ -706,10 +705,7 @@ class _ConversationListScreenState
     return IrisScaffold(
       header: _HomeBar(
         demo: ref.watch(demoModeProvider),
-        // Off the Sessions tab there is no hero, so the link stays compact.
-        collapse: hasTabs && tab != HomeTab.sessions
-            ? const AlwaysStoppedAnimation<double>(1)
-            : _collapse,
+        collapse: _collapse,
         profile: profile,
         // The pill only opens something when there is a choice to make.
         onProfile: profiles.length > 1
@@ -726,8 +722,9 @@ class _ConversationListScreenState
       ),
       body: Column(
         children: [
-          // The hero folds away as the rows scroll, leaving the tabs.
-          if (heroShown)
+          // The hero folds away as the Sessions rows scroll; the other tabs keep it
+          // open.
+          if (hasTabs)
             ValueListenableBuilder<double>(
               valueListenable: _collapse,
               builder: (context, t, child) => ClipRect(
@@ -757,7 +754,7 @@ class _ConversationListScreenState
                 onChanged: (value) {
                   unawaited(IrisHaptics.selection());
                   _searchFocus.unfocus();
-                  // Each visit to Sessions starts at the top, hero open.
+                  // Each visit to a tab starts with the hero open.
                   if (value != tab) _collapse.value = 0;
                   ref.read(homeTabProvider.notifier).select(value);
                 },
