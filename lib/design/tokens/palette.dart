@@ -82,6 +82,48 @@ enum AgentState {
   };
 }
 
+/// What the voice orb is doing during a call. The colour names it, as
+/// [AgentState] does for the agent; the two are kept apart because a call has
+/// states a run does not (hearing you, muted, interrupted) and the voice
+/// colours are the design's own.
+enum VoiceOrbMode {
+  /// Between calls, or a call that has not begun.
+  idle,
+
+  /// Warming up: checks running before the call opens.
+  connecting,
+
+  /// The call is open and waiting for you to speak.
+  listening,
+
+  /// You are speaking.
+  hearing,
+
+  /// The agent is working on your request.
+  thinking,
+
+  /// The agent is running a tool.
+  tool,
+
+  /// The agent is speaking.
+  speaking,
+
+  /// You spoke over the agent.
+  interrupted,
+
+  /// The microphone is off.
+  muted,
+
+  /// The call failed.
+  error,
+
+  /// The agent is waiting for an answer from you.
+  needs,
+
+  /// The link is down.
+  offline,
+}
+
 /// Resolved colours for one skin in one brightness.
 ///
 /// Widgets read roles, never ramps: a component asking for `palette.line` keeps
@@ -248,6 +290,25 @@ final class IrisPalette {
     AgentState.offline => _stateColor(isDark, 0xFF6B6A78, 0xFF74737F),
     AgentState.rest => _stateColor(isDark, 0xFF8E89AE, 0xFF6F6A90),
     AgentState.waiting => _stateColor(isDark, 0xFFFF8A5C, 0xFFC2501C),
+  };
+
+  /// The voice orb's colour for [mode]: the design's `DK` and `LT` tables from
+  /// `design/iris-voice.js`, unchanged. Interrupted has no colour of its own;
+  /// it is the moment the orb turns from speaking to hearing, so it takes
+  /// hearing's.
+  Color voiceOrbColor(VoiceOrbMode mode) => switch (mode) {
+    VoiceOrbMode.idle => _stateColor(isDark, 0xFFC9C3FF, 0xFF4F3FCF),
+    VoiceOrbMode.connecting => _stateColor(isDark, 0xFF5CC8FF, 0xFF0B6FA3),
+    VoiceOrbMode.listening ||
+    VoiceOrbMode.hearing ||
+    VoiceOrbMode.interrupted => _stateColor(isDark, 0xFFFF8AD8, 0xFFB0307F),
+    VoiceOrbMode.thinking => _stateColor(isDark, 0xFF9B7BFF, 0xFF6544D9),
+    VoiceOrbMode.tool => _stateColor(isDark, 0xFFFFB547, 0xFF8A5000),
+    VoiceOrbMode.speaking => _stateColor(isDark, 0xFF4FE3C1, 0xFF00735E),
+    VoiceOrbMode.muted ||
+    VoiceOrbMode.offline => _stateColor(isDark, 0xFF8A8898, 0xFF646372),
+    VoiceOrbMode.error => _stateColor(isDark, 0xFFFF6B6B, 0xFFC0312D),
+    VoiceOrbMode.needs => _stateColor(isDark, 0xFFFF8A5C, 0xFFB5410F),
   };
 
   static Color _stateColor(bool dark, int darkArgb, int lightArgb) =>

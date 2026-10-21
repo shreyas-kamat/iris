@@ -16,6 +16,7 @@ import 'package:iris/data/chat/connection_models.dart';
 final class FakeChatBackend implements ChatBackend {
   final _events = StreamController<ChatEvent>.broadcast();
   final _reconnects = StreamController<void>.broadcast();
+  final _live = StreamController<bool>.broadcast();
 
   Result<List<ConversationSummary>> conversationsResult = const Ok([]);
 
@@ -89,6 +90,9 @@ final class FakeChatBackend implements ChatBackend {
   final List<Result<ModelOptions>> modelOptionsQueue = [];
 
   Result<SubmitOutcome> submitOutcome = const Ok(SubmitOutcome.started);
+
+  /// Answered first, in order, before [submitResult] and [submitOutcome].
+  final List<Result<SubmitOutcome>> submitQueue = [];
   Result<void> deleteResult = const Ok(null);
   Result<int> undoResult = const Ok(1);
   Result<NewConversation> branchResult = const Ok(
@@ -106,6 +110,9 @@ final class FakeChatBackend implements ChatBackend {
 
   /// `(runtimeId, text, queued)` for every submit.
   final List<(String, String, bool)> submits = [];
+
+  /// The `voice` argument of every submit, parallel to [submits].
+  final List<VoiceSubmit?> voiceSubmits = [];
   final List<String> deletes = [];
   final List<String> undos = [];
   final List<String> branches = [];
@@ -134,10 +141,23 @@ final class FakeChatBackend implements ChatBackend {
   /// Announces that the live link came back after a drop.
   void reconnect() => _reconnects.add(null);
 
+  /// The live link dropped.
+  void linkDown() => _live.add(false);
+
+  /// The live link is back: [liveChanges] says so, then [reconnected].
+  void linkUp() {
+    _live.add(true);
+    reconnect();
+  }
+
   Future<void> close() async {
     await _events.close();
     await _reconnects.close();
+    await _live.close();
   }
+
+  @override
+  Stream<bool> get liveChanges => _live.stream;
 
   @override
   Stream<ChatEvent> get events => _events.stream;
@@ -194,9 +214,12 @@ final class FakeChatBackend implements ChatBackend {
     String runtimeId,
     String text, {
     bool queued = false,
+    VoiceSubmit? voice,
   }) async {
     submitted.add((runtimeId, text));
     submits.add((runtimeId, text, queued));
+    voiceSubmits.add(voice);
+    if (submitQueue.isNotEmpty) return submitQueue.removeAt(0);
     return switch (submitResult) {
       Err(:final failure) => Err(failure),
       Ok() => submitOutcome,

@@ -227,3 +227,130 @@ final class BranchRecords {
         .set(scope, PreferenceKeys.branch(childId), null);
   }
 }
+
+/// A voice call inside one conversation: when it ran and the message index
+/// where its turns begin, so the transcript can draw a "voice · 4 min"
+/// divider. Hermes does not mark voice rows, so this lives on the device.
+@immutable
+final class VoiceCallSpan {
+  const VoiceCallSpan({
+    required this.startedAt,
+    required this.endedAt,
+    required this.fromIndex,
+    this.toIndex,
+  });
+
+  /// The spans in a stored value, oldest first. A value that is not a list
+  /// is empty, and an entry that is not a well-formed span is skipped, so one
+  /// damaged call never hides the others.
+  static List<VoiceCallSpan> decodeList(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return [for (final entry in decoded) ?_decode(entry)];
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  static VoiceCallSpan? _decode(Object? entry) {
+    if (entry is! Map) return null;
+    final start = entry['s'];
+    final end = entry['e'];
+    final index = entry['i'];
+    final through = entry['t'];
+    if (start is! int || end is! int || index is! int) return null;
+    if (end < start || index < 0) return null;
+    return VoiceCallSpan(
+      startedAt: DateTime.fromMillisecondsSinceEpoch(start),
+      endedAt: DateTime.fromMillisecondsSinceEpoch(end),
+      fromIndex: index,
+      // Older records have none; a damaged one is the same as none.
+      toIndex: through is int && through >= index ? through : null,
+    );
+  }
+
+  static String encodeList(List<VoiceCallSpan> spans) => jsonEncode([
+    for (final span in spans)
+      {
+        's': span.startedAt.millisecondsSinceEpoch,
+        'e': span.endedAt.millisecondsSinceEpoch,
+        'i': span.fromIndex,
+        't': ?span.toIndex,
+      },
+  ]);
+
+  final DateTime startedAt;
+  final DateTime endedAt;
+
+  /// The index of the first message the call produced.
+  final int fromIndex;
+
+  /// One past the last message it produced; null for a record made before
+  /// this was kept, which then ends where the next call or the transcript
+  /// does.
+  final int? toIndex;
+
+  Duration get length => endedAt.difference(startedAt);
+
+  @override
+  bool operator ==(Object other) =>
+      other is VoiceCallSpan &&
+      other.startedAt == startedAt &&
+      other.endedAt == endedAt &&
+      other.fromIndex == fromIndex &&
+      other.toIndex == toIndex;
+
+  @override
+  int get hashCode => Object.hash(startedAt, endedAt, fromIndex, toIndex);
+}
+
+/// The voice calls made in the conversation `storedId` in the active
+/// profile, oldest first.
+final voiceCallSpansProvider = Provider.family<List<VoiceCallSpan>, String>((
+  ref,
+  storedId,
+) {
+  final scope = _profileScope(ref);
+  if (scope == null) return const [];
+  return VoiceCallSpan.decodeList(
+    ref.watch(preferencesProvider)[(
+      scope,
+      PreferenceKeys.voiceCalls(storedId),
+    )],
+  );
+});
+
+final voiceCallSpansWriterProvider = Provider<VoiceCallSpans>(
+  VoiceCallSpans.new,
+);
+
+/// Records finished voice calls for the active profile.
+final class VoiceCallSpans {
+  VoiceCallSpans(this._ref);
+
+  final Ref _ref;
+
+  /// A conversation keeps its newest calls only.
+  static const limit = 20;
+
+  void add(String storedId, VoiceCallSpan span) {
+    final scope = _profileScope(_ref, watch: false);
+    if (scope == null) return;
+    final key = PreferenceKeys.voiceCalls(storedId);
+    final kept = [
+      ...VoiceCallSpan.decodeList(_ref.read(preferencesProvider)[(scope, key)]),
+      span,
+    ];
+    _ref
+        .read(preferencesProvider.notifier)
+        .set(
+          scope,
+          key,
+          VoiceCallSpan.encodeList(
+            kept.length > limit ? kept.sublist(kept.length - limit) : kept,
+          ),
+        );
+  }
+}

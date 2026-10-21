@@ -9,11 +9,14 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-
+import '../../app/preferences.dart';
+import '../../app/scope.dart';
 import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/prefs/preferences_store.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
+import '../../design/components/iris_voice_orb.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/send_glyph.dart';
 import '../../design/platform/platform_feel.dart';
@@ -46,6 +49,9 @@ class Composer extends StatelessWidget {
     this.onMic,
     this.onStopRecording,
     this.onCancelRecording,
+    this.maxRecording = const Duration(minutes: 2),
+    this.voiceMode = false,
+    this.onVoice,
     this.onContext,
     this.busyMode = BusyMode.interrupt,
     super.key,
@@ -104,6 +110,17 @@ class Composer extends StatelessWidget {
   final VoidCallback? onStopRecording;
   final VoidCallback? onCancelRecording;
 
+  /// How long a clip may run; the server's `voice.max_recording_seconds`.
+  /// Shown beside the clock, and enforced by the caller.
+  final Duration maxRecording;
+
+  /// The server offers a live call: while the field is empty the action slot
+  /// holds the voice button, and the first-run tags may show.
+  final bool voiceMode;
+
+  /// Starts a call. Used with [voiceMode].
+  final VoidCallback? onVoice;
+
   /// At most this many suggestions show, so they never hide the transcript.
   static const suggestions = 5;
 
@@ -154,6 +171,15 @@ class Composer extends StatelessWidget {
         final border = running
             ? palette.colorFor(state).withValues(alpha: .33)
             : palette.line;
+        final showVoice =
+            voiceMode &&
+            onVoice != null &&
+            !running &&
+            !canSend &&
+            attachments.isEmpty;
+        // Dictation sits left of the action, whatever the action is. It
+        // steps aside while a reply runs, where the action is Stop.
+        final showMic = onMic != null && !running && recording == null;
         return Padding(
           // The scaffold already clears the home indicator and the keyboard,
           // so only the gutter and a little air are added here.
@@ -197,9 +223,12 @@ class Composer extends StatelessWidget {
                   ),
                 ),
               if (matching.isNotEmpty) const SizedBox(height: IrisSpace.xs),
+              if (showVoice && showMic && !transcribing)
+                _VoiceTags(key: const ValueKey('voice-tags')),
               if (recording != null || transcribing)
                 _RecordingBar(
                   elapsed: recording,
+                  maxRecording: maxRecording,
                   transcribing: transcribing,
                   level: level,
                   onStop: onStopRecording ?? () {},
@@ -313,8 +342,15 @@ class Composer extends StatelessWidget {
                               ],
                             ),
                           ),
-                          // Send and Stop share one slot, so the action changes
-                          // in place rather than the row reflowing.
+                          if (showMic) ...[
+                            _MicButton(
+                              key: const ValueKey('mic'),
+                              onTap: enabled ? onMic : null,
+                            ),
+                            const SizedBox(width: IrisSpace.xs),
+                          ],
+                          // Send, Stop and Talk share one slot, so the action
+                          // changes in place rather than the row reflowing.
                           AnimatedSwitcher(
                             duration: context.reduceMotion
                                 ? Duration.zero
@@ -362,10 +398,10 @@ class Composer extends StatelessWidget {
                                     state: state,
                                     onTap: onStop,
                                   )
-                                : !canSend && onMic != null && recording == null
-                                ? _MicButton(
-                                    key: const ValueKey('mic'),
-                                    onTap: enabled ? onMic : null,
+                                : showVoice
+                                ? _VoiceButton(
+                                    key: const ValueKey('voice'),
+                                    onTap: enabled ? onVoice : null,
                                   )
                                 : _SendButton(
                                     key: const ValueKey('send'),
@@ -708,13 +744,15 @@ class ContextStrip extends StatelessWidget {
 }
 
 /// The composer while dictating (frame B9): a 72 high bar. Cancel on the left,
-/// a listening orb whose wobble is the live level, the time, and Stop. While
-/// the clip is being turned into text the orb thinks and the Stop slot stays
-/// empty, so nothing shifts. Reduced motion: the orb holds still and the level
-/// shows as ring weight in three steps, at most four times a second.
+/// the voice orb in listening (pink) that turns to hearing as the level rises,
+/// the clock against the server's cap, and Stop. While the clip is being turned
+/// into text the orb thinks and the Stop slot stays empty, so nothing shifts.
+/// Reduced motion: the orb draws its still outlines, which follow the level in
+/// three bands, at most four times a second.
 class _RecordingBar extends StatefulWidget {
   const _RecordingBar({
     required this.elapsed,
+    required this.maxRecording,
     required this.transcribing,
     required this.level,
     required this.onStop,
@@ -722,6 +760,7 @@ class _RecordingBar extends StatefulWidget {
   });
 
   final Duration? elapsed;
+  final Duration maxRecording;
   final bool transcribing;
   final Stream<double>? level;
   final VoidCallback onStop;
@@ -732,6 +771,10 @@ class _RecordingBar extends StatefulWidget {
 }
 
 class _RecordingBarState extends State<_RecordingBar> {
+  /// Above this the person is taken to be speaking (frame B9: listening
+  /// below, hearing above).
+  static const _speaking = .3;
+
   final _level = ValueNotifier<double>(0);
   StreamSubscription<double>? _sub;
   DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
@@ -772,15 +815,18 @@ class _RecordingBarState extends State<_RecordingBar> {
     super.dispose();
   }
 
+  static String _clock(Duration d) =>
+      '${d.inSeconds ~/ 60}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final theme = context.iris;
     final palette = theme.palette;
-    final listening = palette.colorFor(AgentState.loading);
-    final reduced = _reduced = context.reduceMotion;
-    final seconds = widget.elapsed?.inSeconds ?? 0;
+    final listening = palette.voiceOrbColor(VoiceOrbMode.listening);
+    _reduced = context.reduceMotion;
     final clock =
-        '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+        '${_clock(widget.elapsed ?? Duration.zero)} / '
+        '${_clock(widget.maxRecording)}';
     return Container(
       key: const ValueKey('recording-bar'),
       height: 72,
@@ -798,21 +844,26 @@ class _RecordingBarState extends State<_RecordingBar> {
           if (widget.transcribing)
             const SizedBox(width: 44)
           else
-            IrisPressable(
-              onTap: widget.onCancel,
-              semanticLabel: 'Cancel recording',
-              child: SizedBox(
-                height: 44,
-                child: Center(
-                  child: ExcludeSemantics(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: IrisSpace.sm,
-                      ),
-                      child: Text(
-                        'Cancel',
-                        style: theme.typography.label.copyWith(
-                          color: palette.inkMuted,
+            Flexible(
+              child: IrisPressable(
+                onTap: widget.onCancel,
+                semanticLabel: 'Cancel recording',
+                child: SizedBox(
+                  height: 44,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: ExcludeSemantics(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: IrisSpace.sm,
+                        ),
+                        child: Text(
+                          'Cancel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.typography.label.copyWith(
+                            color: palette.inkMuted,
+                          ),
                         ),
                       ),
                     ),
@@ -822,56 +873,35 @@ class _RecordingBarState extends State<_RecordingBar> {
             ),
           const Spacer(),
           if (widget.transcribing)
-            Semantics(
-              label: 'Transcribing',
-              excludeSemantics: true,
-              child: const IrisOrb(
-                state: AgentState.thinking,
-                size: 56,
-                glow: false,
-              ),
+            const IrisVoiceOrb(
+              mode: VoiceOrbMode.thinking,
+              size: 46,
+              semanticLabel: 'Transcribing',
             )
           else
-            ExcludeSemantics(
-              child: ValueListenableBuilder<double>(
-                valueListenable: _level,
-                builder: (context, level, _) => AnimatedScale(
-                  key: const ValueKey('level-orb'),
-                  scale: reduced ? 1 : 1 + .15 * level,
-                  duration: reduced
-                      ? Duration.zero
-                      : const Duration(milliseconds: 100),
-                  child: DecoratedBox(
-                    position: DecorationPosition.foreground,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: reduced
-                          ? Border.all(
-                              color: listening,
-                              width: level < .2
-                                  ? 1
-                                  : level < .6
-                                  ? 2
-                                  : 3.5,
-                            )
-                          : null,
-                    ),
-                    child: const IrisOrb(
-                      state: AgentState.loading,
-                      size: 56,
-                      glow: false,
-                    ),
-                  ),
-                ),
+            ValueListenableBuilder<double>(
+              valueListenable: _level,
+              builder: (context, level, _) => IrisVoiceOrb(
+                mode: level >= _speaking
+                    ? VoiceOrbMode.hearing
+                    : VoiceOrbMode.listening,
+                size: 46,
+                level: _level,
+                semanticLabel: 'Recording',
               ),
             ),
           if (!widget.transcribing) ...[
             const SizedBox(width: IrisSpace.sm),
-            Text(
-              clock,
-              style: theme.typography.codeSmall.copyWith(
-                fontSize: 12,
-                color: listening,
+            Flexible(
+              flex: 2,
+              child: Text(
+                clock,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.typography.codeSmall.copyWith(
+                  fontSize: 12,
+                  color: listening,
+                ),
               ),
             ),
           ],
@@ -906,6 +936,7 @@ class _RecordingBarState extends State<_RecordingBar> {
   }
 }
 
+/// Dictate (frame A2): an outlined mic on a tinted rounded square.
 class _MicButton extends StatelessWidget {
   const _MicButton({required this.onTap, super.key});
 
@@ -914,19 +945,172 @@ class _MicButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.iris.palette;
-    return IrisPressable(
-      onTap: onTap,
-      semanticLabel: 'Dictate',
-      ensureTapTarget: false,
-      child: Container(
-        width: 44,
-        height: 44,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: palette.accentQuiet,
-          shape: BoxShape.circle,
+    return Opacity(
+      opacity: onTap == null ? .4 : 1,
+      child: IrisPressable(
+        onTap: onTap,
+        semanticLabel: 'Dictate',
+        ensureTapTarget: false,
+        child: Container(
+          width: 44,
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: palette.accentQuiet,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Icon(Icons.mic_none, size: 22, color: palette.accent),
         ),
-        child: Icon(Icons.mic_none, size: 22, color: palette.accent),
+      ),
+    );
+  }
+}
+
+/// Talk hands-free (frame A2): a filled accent circle with a waveform glyph.
+class _VoiceButton extends StatelessWidget {
+  const _VoiceButton({required this.onTap, super.key});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.iris.palette;
+    return Opacity(
+      opacity: onTap == null ? .4 : 1,
+      child: IrisPressable(
+        onTap: onTap,
+        semanticLabel: 'Talk hands-free',
+        ensureTapTarget: false,
+        child: Container(
+          width: 44,
+          height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: palette.accent,
+            shape: BoxShape.circle,
+          ),
+          child: ExcludeSemantics(
+            child: Icon(Icons.graphic_eq, size: 22, color: palette.accentInk),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The first-run tags that name the two buttons (frame A2). Shown once per
+/// install: the first time they appear they are marked seen, and they go by
+/// themselves after a few seconds.
+///
+/// Without a provider scope (a bare test) there is nowhere to remember, so
+/// nothing is shown.
+class _VoiceTags extends StatefulWidget {
+  const _VoiceTags({super.key});
+
+  @override
+  State<_VoiceTags> createState() => _VoiceTagsState();
+}
+
+class _VoiceTagsState extends State<_VoiceTags> {
+  static const _lifetime = Duration(seconds: 8);
+
+  bool _visible = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    final container = maybeProviderContainer(context);
+    if (container == null) return;
+    final seen =
+        container.read(preferencesProvider)[(
+          '',
+          PreferenceKeys.voiceTagsSeen,
+        )] ==
+        'true';
+    if (seen) return;
+    _visible = true;
+    // Written after the first frame, so building the tags never changes state
+    // that something else is watching.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      container
+          .read(preferencesProvider.notifier)
+          .set('', PreferenceKeys.voiceTagsSeen, 'true');
+    });
+    _timer = Timer(_lifetime, () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_visible) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: IrisSpace.sm),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: const [
+            // The carets point down at the buttons: the mic is the second
+            // from the right, the voice button the first.
+            _Tag('Tap to dictate', caretFromRight: 73),
+            SizedBox(height: IrisSpace.xs),
+            _Tag('Talk hands-free', caretFromRight: 23),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag(this.text, {required this.caretFromRight});
+
+  final String text;
+  final double caretFromRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    // Ink on the page ground: the tag is the one inverted thing on screen.
+    return Semantics(
+      label: text,
+      excludeSemantics: true,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: palette.ink,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              text,
+              style: context.type.label.copyWith(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: palette.canvas,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -4,
+            right: caretFromRight,
+            child: Transform.rotate(
+              angle: .785398,
+              child: Container(width: 10, height: 10, color: palette.ink),
+            ),
+          ),
+        ],
       ),
     );
   }

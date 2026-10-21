@@ -66,8 +66,24 @@ and no data collected).
   speech-to-text and is not kept. Android declares `RECORD_AUDIO`; iOS has a microphone usage string.
 - **Photos and files.** Chosen through the system picker, so Android needs no storage permission; iOS has a
   photo library usage string.
-- Nothing else: no camera, location, contacts or notifications. QR pairing was dropped
+- Nothing else: no camera, location or contacts. Notifications only for an ongoing voice call's own notification. QR pairing was dropped
   for 1.0 because no screen used it; if it returns, the camera permission and its usage string come
   back with it, along with the privacy policy and support wording.
 
 Phase 6 adds none: deleting, pinning, branching and the prompts use the existing network permission only.
+
+## Phase 8: voice
+
+- **Android permissions added:** `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MICROPHONE` (a call keeps running
+  in the background), `POST_NOTIFICATIONS` (the call's notification, asked once), `WAKE_LOCK` (the call screen
+  keeps the screen on), `MODIFY_AUDIO_SETTINGS` (the speaker and earpiece), and `BLUETOOTH_CONNECT` (headsets).
+  `RECEIVE_BOOT_COMPLETED` from the foreground-service plugin is removed: a call never restarts after a reboot.
+- **iOS:** the `audio` background mode. The microphone usage string already exists. `permission_handler` needs
+  `PERMISSION_MICROPHONE=1` in the Podfile's `GCC_PREPROCESSOR_DEFINITIONS`, or it reports the microphone as
+  denied; add it when the iOS project is first built.
+- **Data safety:** audio. Voice and dictation clips go to the user's own server and are not collected or stored
+  by Iris. For GPT-Live calls, the audio goes from the phone to OpenAI; the work and history stay on the server.
+- **Privacy policy:** the voice paragraphs in `site-src/src/pages/Privacy.tsx` (effective 19 October 2026).
+- Still to check on a device (Phase 8 Task 18): earpiece routing, echo cancellation during playback, the iOS
+  audio session after playback setup, and `flutter_webrtc` with the audio route for GPT-Live.
+

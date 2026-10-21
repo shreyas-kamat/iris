@@ -721,6 +721,31 @@ enum ReasoningEffort {
       };
 }
 
+/// How a turn spoken in a voice call is marked to the server. Each field
+/// is sent only when set, so an older Hermes sees the same request as a typed
+/// message.
+final class VoiceSubmit {
+  const VoiceSubmit({
+    this.voiceTurn = false,
+    this.interrupted = false,
+    this.surface,
+    this.voiceContext,
+  });
+
+  /// The words came from the microphone: the server replies for the ear
+  /// (chained calls run on `auxiliary.voice_chat`).
+  final bool voiceTurn;
+
+  /// The person barged in on the previous spoken reply.
+  final bool interrupted;
+
+  /// `voice-live` for a GPT-Live call.
+  final String? surface;
+
+  /// The recent spoken transcript, for a GPT-Live call.
+  final String? voiceContext;
+}
+
 /// What `prompt.submit` did with a message.
 enum SubmitOutcome {
   /// A new turn began.

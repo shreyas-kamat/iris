@@ -65,6 +65,8 @@ void main() {
     await tester.tap(find.bySemanticsLabel('New conversation'));
     await settle(tester);
     expect(find.text('Check disk space on my server'), findsOneWidget);
+    // The first-run voice tags sit over the prompts for 8 s; let them clear.
+    await tester.pump(const Duration(seconds: 9));
     await tester.tap(find.text("Summarise this week's GitHub issues"));
     for (var i = 0; i < 60; i++) {
       await tester.pump(const Duration(milliseconds: 200));
@@ -172,6 +174,17 @@ void main() {
     await tester.tap(find.text('Blocked').first);
     await settle(tester);
     expect(find.text('NEEDS INPUT'), findsOneWidget);
+    // The hero takes room above the tabs, so the detail starts below the fold.
+    await tester.scrollUntilVisible(
+      find.text('CAPABILITY'),
+      100,
+      scrollable: find
+          .ancestor(
+            of: find.text('NEEDS INPUT'),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(find.text('CAPABILITY'), findsOneWidget);
     handle.dispose();
   });

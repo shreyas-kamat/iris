@@ -40,6 +40,26 @@ abstract final class PreferenceKeys {
 
   /// Per server: hosts whose Markdown images load without a tap.
   static const imageHosts = 'images.hosts';
+
+  /// App-wide: how a call listens, `handsFree` or `pushToTalk`.
+  static const voiceStyle = 'voice.style';
+
+  /// App-wide: `false` when calls start on the earpiece, not the speaker.
+  static const voiceSpeaker = 'voice.speaker';
+
+  /// App-wide: `true` when live captions are on.
+  static const voiceCaptions = 'voice.captions';
+
+  /// App-wide: `true` once the first-run voice tags have been shown.
+  static const voiceTagsSeen = 'voice.tagsSeen';
+
+  /// App-wide: `true` once the microphone primer has been shown and the
+  /// system prompt asked for, so a later refusal opens Settings instead.
+  static const voiceMicAsked = 'voice.micAsked';
+
+  /// Per `<server>/<profile>`: `voiceCalls.<id>` → a JSON list of the voice
+  /// calls made in one conversation, oldest first.
+  static String voiceCalls(String id) => 'voiceCalls.$id';
 }
 
 abstract interface class PreferencesStore {

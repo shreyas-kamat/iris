@@ -24,6 +24,10 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../voice/mic_permission_sheet.dart';
+import '../voice/voice_call.dart';
+import '../voice/voice_call_screen.dart';
+import '../voice/voice_host.dart';
 import 'attachment_picker.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
@@ -41,6 +45,7 @@ import 'model_sheet.dart';
 import 'queue_tray.dart';
 import 'session_info_sheet.dart';
 import 'transcript_view.dart';
+import 'voice_call_divider.dart';
 import 'voice_recorder.dart';
 
 /// The orb state for what the agent is doing.
@@ -89,6 +94,7 @@ class ChatScreen extends StatefulWidget {
     this.suggestions,
     this.pickFiles,
     this.recorder,
+    this.voice,
     this.branch,
     this.onBranched,
     this.menu,
@@ -103,6 +109,10 @@ class ChatScreen extends StatefulWidget {
 
   /// Records dictation. Tests pass a fake; null uses the microphone.
   final VoiceRecorder? recorder;
+
+  /// What voice needs from the app: null where there is no voice (the
+  /// server has none, or the host screen does not offer it).
+  final VoiceHost? voice;
 
   /// Where this chat was branched from, when it was.
   final BranchRecord? branch;
@@ -142,6 +152,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final _text = TextEditingController();
   bool _unarchived = false;
 
+  /// The open voice call, if there is one.
+  VoiceCall? _call;
+
   @override
   void initState() {
     super.initState();
@@ -169,6 +182,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _clock?.cancel();
     _missedTimer?.cancel();
     unawaited(_recorder.cancel());
+    unawaited(_call?.end());
     _chat.dispose();
     _text.dispose();
     super.dispose();
@@ -447,7 +461,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Attachment> _draft = [];
 
   late final VoiceRecorder _recorder = widget.recorder ?? RecordVoiceRecorder();
-  static const _maxRecording = Duration(minutes: 2);
+
+  /// The server's cap on a clip; two minutes when it has not said.
+  Duration get _maxRecording =>
+      widget.voice?.capabilities.tuning.maxRecording ??
+      const Duration(minutes: 2);
   Duration? _recording;
   bool _transcribing = false;
   Timer? _clock;
@@ -459,6 +477,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _startDictation() async {
     _missedTimer?.cancel();
     if (_missed) setState(() => _missed = false);
+    if (await ensureMicAccess(context) == MicAccess.denied) return;
+    if (!mounted) return;
     if (!await _recorder.start()) {
       if (mounted) {
         showIrisToast(
@@ -479,6 +499,69 @@ class _ChatScreenState extends State<ChatScreen> {
         setState(() => _recording = next);
       }
     });
+  }
+
+  /// The voice button. Asks for the microphone the way dictation does, then
+  /// opens the call screen. "Call again" on that screen starts the next call
+  /// from here, so only one call exists at a time.
+  Future<void> _startCall() async {
+    final host = widget.voice;
+    if (host == null || _call != null) return;
+    // A scripted call (demo) never opens the microphone, so it asks for none.
+    final scripted = host.parts(host.settings).scripted != null;
+    if (!scripted && await ensureMicAccess(context) == MicAccess.denied) return;
+    if (!mounted || _call != null) return;
+    var again = true;
+    while (again && mounted) {
+      final parts = host.parts(host.settings);
+      final call = _call = VoiceCall(
+        chat: _chat,
+        backend: widget.backend,
+        voice: host.backend,
+        capabilities: host.capabilities,
+        settings: host.settings,
+        mic: parts.mic,
+        out: parts.out,
+        route: parts.route,
+        server: host.server,
+        livePeer: parts.livePeer,
+        scripted: parts.scripted,
+        service: parts.service,
+      );
+      final startedAt = DateTime.now();
+      final fromIndex = _chat.value.items.length;
+      var listened = false;
+      void watch() {
+        final mode = call.value.mode;
+        if (mode != CallMode.connecting &&
+            mode != CallMode.error &&
+            mode != CallMode.ended) {
+          listened = true;
+        }
+      }
+
+      call.addListener(watch);
+      unawaited(call.begin());
+      if (!mounted) break;
+      final exit = await openVoiceCall(context, call: call, awake: parts.awake);
+      call.removeListener(watch);
+      _call = null;
+      await call.end();
+      call.dispose();
+      final storedId = _chat.conversationId;
+      if (listened && storedId != null) {
+        host.onCallEnded(
+          storedId,
+          VoiceCallSpan(
+            startedAt: startedAt,
+            endedAt: DateTime.now(),
+            fromIndex: fromIndex,
+            toIndex: _chat.value.items.length,
+          ),
+        );
+      }
+      again = exit == VoiceCallExit.again;
+    }
   }
 
   Future<void> _stopDictation() async {
@@ -664,6 +747,11 @@ class _ChatScreenState extends State<ChatScreen> {
             level: _recording == null ? null : _recorder.level,
             transcribing: _transcribing,
             onMic: () => unawaited(_startDictation()),
+            maxRecording: _maxRecording,
+            voiceMode: widget.voice?.capabilities.voiceMode ?? false,
+            onVoice: widget.voice?.capabilities.voiceMode ?? false
+                ? () => unawaited(_startCall())
+                : null,
             onStopRecording: () => unawaited(_stopDictation()),
             onCancelRecording: () => unawaited(_cancelDictation()),
             onContext: state.context == null
@@ -795,6 +883,7 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         final hasEarlier = state.earlier != null;
         final dividerAt = _dividerAfter(items, widget.branch);
+        final calls = callMarks(widget.voice?.spans ?? const [], items.length);
         final liveState = agentStateFor(state.turn);
         // Reversed, so the newest entry sits at the bottom and new output
         // appears where the eye already is; the way to earlier messages is
@@ -815,7 +904,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               );
             }
-            final item = items[items.length - 1 - index];
+            final at = items.length - 1 - index;
+            final item = items[at];
             // Only the turn still arriving carries the live state. Every other
             // entry is finished and rests.
             final live = item is AssistantTurn && item.streaming
@@ -830,6 +920,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Where a voice call began.
+                    if (calls.starts[at] case final span?)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 22),
+                        child: VoiceCallDivider.start(span),
+                      ),
                     TranscriptEntry(
                       item,
                       live: live,
@@ -843,8 +939,14 @@ class _ChatScreenState extends State<ChatScreen> {
                       onHold: (rect) => unawaited(_hold(state, item, rect)),
                       key: ValueKey(item.id),
                     ),
+                    // Where the call ended.
+                    if (calls.ends[at] case final span?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 22),
+                        child: VoiceCallDivider.end(span),
+                      ),
                     // Where the copy ended and this chat began.
-                    if (items.length - 1 - index == dividerAt)
+                    if (at == dividerAt)
                       Padding(
                         padding: const EdgeInsets.only(top: 22),
                         child: BranchedDivider(

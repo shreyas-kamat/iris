@@ -19,6 +19,7 @@ import '../../app/automation_providers.dart';
 import '../../app/device_state.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
+import '../../app/voice_providers.dart';
 import '../../core/failure.dart';
 import '../../core/result.dart';
 import '../../data/chat/chat_backend.dart';
@@ -27,6 +28,7 @@ import '../../data/rpc/dashboard_session.dart';
 import '../../data/rpc/rpc_frame.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
+import '../../demo/demo_voice.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/primitives.dart';
@@ -45,6 +47,8 @@ import '../home/usage_strip.dart';
 import '../scheduled/scheduled_tab.dart';
 import '../settings/settings_screen.dart';
 import '../tasks/tasks_tab.dart';
+import '../voice/preflight.dart' show defaultServerName;
+import '../voice/voice_host.dart';
 import 'archived_screen.dart';
 import 'branched_header.dart';
 import 'chat_controller.dart';
@@ -87,8 +91,9 @@ class _ConversationListScreenState
   /// hero once it is scrolled far enough away.
   double _heroHeight = 140;
 
-  /// Whether the segmented control is drawn this build. With tabs, the control
-  /// takes the greeting's place, so there is no hero to snap.
+  /// Whether the segmented control is drawn this build. With tabs, the hero
+  /// sits above the control rather than in the list, so there is nothing in
+  /// the list to snap.
   bool _hasTabs = false;
 
   /// The query the server is asked, settled 200 ms after the last keystroke.
@@ -216,21 +221,26 @@ class _ConversationListScreenState
   }) async {
     await Navigator.of(context).push(
       IrisPageRoute<void>(
-        builder: (_) => ChatScreen(
-          suggestions: ref.read(demoModeProvider)
-              ? [for (final script in demoScripts) script.prompt]
-              : null,
-          backend: chat,
-          conversationId: conversation?.id,
-          title: conversation?.title,
-          branch:
-              branch ??
-              (conversation == null
-                  ? null
-                  : ref.read(branchRecordProvider(conversation.id))),
-          onBranched: (childId, record) =>
-              ref.read(branchRecordsProvider).save(childId, record),
-          menu: conversation == null ? null : _menuHooks(chat, conversation),
+        // A consumer, so the voice button appears when the capability read
+        // lands even if the chat opened before it did.
+        builder: (_) => Consumer(
+          builder: (context, ref, _) => ChatScreen(
+            suggestions: ref.read(demoModeProvider)
+                ? [for (final script in demoScripts) script.prompt]
+                : null,
+            backend: chat,
+            voice: _voiceHost(ref, conversation?.id),
+            conversationId: conversation?.id,
+            title: conversation?.title,
+            branch:
+                branch ??
+                (conversation == null
+                    ? null
+                    : ref.read(branchRecordProvider(conversation.id))),
+            onBranched: (childId, record) =>
+                ref.read(branchRecordsProvider).save(childId, record),
+            menu: conversation == null ? null : _menuHooks(chat, conversation),
+          ),
         ),
       ),
     );
@@ -245,6 +255,30 @@ class _ConversationListScreenState
         ..invalidate(conversationsProvider)
         ..invalidate(usageOptionsProvider);
     });
+  }
+
+  /// Voice for a chat, once the server's capabilities have been read and say
+  /// there is something to offer. Null otherwise, so nothing is drawn that
+  /// might then fail.
+  VoiceHost? _voiceHost(WidgetRef ref, String? storedId) {
+    final backend = ref.watch(activeVoiceProvider).value;
+    final capabilities = ref.watch(voiceCapabilitiesProvider).value;
+    final server = ref.watch(activeServerProvider);
+    if (backend == null || capabilities == null || !capabilities.voiceMode) {
+      return null;
+    }
+    return VoiceHost(
+      backend: backend,
+      capabilities: capabilities,
+      spans: storedId == null
+          ? const []
+          : ref.watch(voiceCallSpansProvider(storedId)),
+      onCallEnded: (id, span) =>
+          ref.read(voiceCallSpansWriterProvider).add(id, span),
+      settings: ref.watch(voiceSettingsProvider),
+      server: server == null ? defaultServerName : _hostOf(server.baseUrl),
+      parts: ref.watch(demoModeProvider) ? demoCallParts : CallParts.platform,
+    );
   }
 
   /// What the chat's ⋯ menu asks home to do: pin, archive and delete are the
@@ -588,6 +622,21 @@ class _ConversationListScreenState
       });
     }
 
+    final hero = KeyedSubtree(
+      key: _heroKey,
+      child: _Hero(
+        orbState: orbState,
+        linkState: linkState,
+        headline: headlineText,
+        host: server == null ? '' : _hostOf(server.baseUrl),
+        total: conversations.value == null
+            ? null
+            : conversations.value!.total - _gone.length,
+        now: now,
+        onGateway: openGateway,
+      ),
+    );
+    
     final sessions = NotificationListener<ScrollEndNotification>(
       onNotification: _snap,
       child: _ConversationList(
@@ -597,26 +646,13 @@ class _ConversationListScreenState
         fetchedPins: _fetchedPins,
         top: [
           // Fades as it scrolls under the bar, where the compact link
-          // takes over.
+          // takes over. With tabs it sits above them instead.
           if (!hasTabs)
             ValueListenableBuilder<double>(
               valueListenable: _collapse,
               builder: (context, t, child) =>
                   Opacity(opacity: (1 - t * 1.4).clamp(0.0, 1.0), child: child),
-              child: KeyedSubtree(
-                key: _heroKey,
-                child: _Hero(
-                  orbState: orbState,
-                  linkState: linkState,
-                  headline: headlineText,
-                  host: server == null ? '' : _hostOf(server.baseUrl),
-                  total: conversations.value == null
-                      ? null
-                      : conversations.value!.total - _gone.length,
-                  now: now,
-                  onGateway: openGateway,
-                ),
-              ),
+              child: hero,
             ),
           const UsageStrip(),
         ],
@@ -669,7 +705,7 @@ class _ConversationListScreenState
     return IrisScaffold(
       header: _HomeBar(
         demo: ref.watch(demoModeProvider),
-        collapse: hasTabs ? const AlwaysStoppedAnimation<double>(1) : _collapse,
+        collapse: _collapse,
         profile: profile,
         // The pill only opens something when there is a choice to make.
         onProfile: profiles.length > 1
@@ -686,6 +722,23 @@ class _ConversationListScreenState
       ),
       body: Column(
         children: [
+          // The hero folds away as the Sessions rows scroll; the other tabs keep it
+          // open.
+          if (hasTabs)
+            ValueListenableBuilder<double>(
+              valueListenable: _collapse,
+              builder: (context, t, child) => ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: 1 - t,
+                  child: Opacity(
+                    opacity: (1 - t * 1.4).clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                ),
+              ),
+              child: hero,
+            ),
           if (hasTabs)
             Padding(
               padding: EdgeInsets.fromLTRB(
@@ -701,6 +754,8 @@ class _ConversationListScreenState
                 onChanged: (value) {
                   unawaited(IrisHaptics.selection());
                   _searchFocus.unfocus();
+                  // Each visit to a tab starts with the hero open.
+                  if (value != tab) _collapse.value = 0;
                   ref.read(homeTabProvider.notifier).select(value);
                 },
               ),

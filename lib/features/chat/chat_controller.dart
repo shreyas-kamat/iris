@@ -119,6 +119,14 @@ final class ChatController extends ValueNotifier<ChatState> {
   /// can reach it.
   bool get isLive => _runtimeId != null;
 
+  /// The live session this chat is attached to; it changes on a reconnect.
+  String? get runtimeId => _runtimeId;
+
+  /// This server refused the voice fields of a submit (an older Hermes), so
+  /// voice turns now go as plain prompts.
+  bool get voiceFieldsRefused => _voiceFieldsRefused;
+  bool _voiceFieldsRefused = false;
+
   /// Starts following events, then reads the transcript and attaches to it.
   Future<void> open() async {
     _subscription ??= _backend.events.listen(_onEvent);
@@ -147,18 +155,40 @@ final class ChatController extends ValueNotifier<ChatState> {
         // why sending may not work.
         _update(value.withError(describe(failure)));
       case Ok(value: final resumed):
-        _runtimeId = resumed.runtimeId;
-        var next = value.copyWith(
-          turn: resumed.running ? TurnPhase.thinking : null,
-          model: resumed.model,
-          provider: resumed.provider,
-          context: resumed.context,
-        );
-        for (final event in resumed.pending) {
-          next = next.apply(event);
-        }
-        _update(next);
-        unawaited(_loadBusyMode());
+        _attach(resumed);
+    }
+  }
+
+  void _attach(ResumedConversation resumed) {
+    _runtimeId = resumed.runtimeId;
+    var next = value.copyWith(
+      turn: resumed.running ? TurnPhase.thinking : null,
+      model: resumed.model,
+      provider: resumed.provider,
+      context: resumed.context,
+    );
+    for (final event in resumed.pending) {
+      next = next.apply(event);
+    }
+    _update(next);
+    unawaited(_loadBusyMode());
+  }
+
+  /// Attaches for a call: already live, resumed now, or created for a new
+  /// chat. False when it could not be, after saying why in the transcript.
+  Future<bool> ensureLive() async {
+    if (_runtimeId != null) return true;
+    final storedId = _storedId;
+    if (storedId == null) return await _create() != null;
+    final resumed = await _backend.resume(storedId);
+    if (_disposed) return false;
+    switch (resumed) {
+      case Err(:final failure):
+        _update(value.withError(describe(failure)));
+        return false;
+      case Ok(value: final again):
+        _attach(again);
+        return true;
     }
   }
 
@@ -309,6 +339,50 @@ final class ChatController extends ValueNotifier<ChatState> {
       }
     }
     await _submit(runtimeId, promptWithReferences(body, references));
+  }
+
+  /// Sends words heard on a call: the user turn appears as for [send], a new
+  /// chat is created first, and the submit carries [voice]. Never a slash
+  /// command. False when it did not go, after saying why in the transcript.
+  Future<bool> sendVoice(String text, VoiceSubmit voice) async {
+    final body = text.trim();
+    if (body.isEmpty) return false;
+    _update(value.withUserTurn(body));
+    final runtimeId = _runtimeId ?? await _create();
+    if (runtimeId == null || _disposed) return false;
+    var result = await _backend.submit(
+      runtimeId,
+      body,
+      voice: _voiceFieldsRefused ? null : voice,
+    );
+    if (result case Err(
+      :final failure,
+    ) when !_voiceFieldsRefused && _refusesVoiceFields(failure)) {
+      _voiceFieldsRefused = true;
+      result = await _backend.submit(runtimeId, body);
+    }
+    if (_disposed) return false;
+    if (result case Err(:final failure)) {
+      _update(value.withError(describe(failure)));
+      return false;
+    }
+    return true;
+  }
+
+  /// An older Hermes names the field it does not know: "unexpected keyword
+  /// argument 'voice_turn'".
+  static bool _refusesVoiceFields(IrisFailure failure) {
+    final message = failure.rpcError?.message.toLowerCase() ?? '';
+    const fields = ['voice_turn', 'voice_context', 'surface', 'interrupted'];
+    const refusals = [
+      'unexpected',
+      'unknown',
+      'unrecognized',
+      'unrecognised',
+      'not allowed',
+      'extra',
+    ];
+    return fields.any(message.contains) && refusals.any(message.contains);
   }
 
   /// The user and assistant text in [items], oldest first. Tool calls,
