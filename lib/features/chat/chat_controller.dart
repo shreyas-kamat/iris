@@ -132,7 +132,10 @@ final class ChatController extends ValueNotifier<ChatState> {
     _subscription ??= _backend.events.listen(_onEvent);
     _reconnects ??= _backend.reconnected.listen((_) => unawaited(_reattach()));
     final storedId = _storedId;
-    if (storedId == null) return;
+    if (storedId == null) {
+      unawaited(_loadDefaultModel());
+      return;
+    }
     _update(
       ChatState(
         title: value.title,
@@ -157,6 +160,14 @@ final class ChatController extends ValueNotifier<ChatState> {
       case Ok(value: final resumed):
         _attach(resumed);
     }
+  }
+
+  /// A new chat has no session to ask, so the chip shows what the server
+  /// would use until the person picks something else.
+  Future<void> _loadDefaultModel() async {
+    final options = (await _backend.modelOptions()).valueOrNull;
+    if (_disposed || options == null || value.model != null) return;
+    _update(value.copyWith(model: options.model, provider: options.provider));
   }
 
   void _attach(ResumedConversation resumed) {
@@ -1008,12 +1019,11 @@ final class ChatController extends ValueNotifier<ChatState> {
   }) async {
     final runtimeId = _runtimeId;
     if (runtimeId == null) {
-      return const Err(
-        IrisFailure(
-          FailureKind.rejected,
-          message: 'Send a message first: a new conversation has no model yet.',
-        ),
-      );
+      // No session yet: remember the pick and apply it when the first send
+      // creates one.
+      _pendingModel = (model, provider);
+      _update(value.copyWith(model: model, provider: provider));
+      return Ok(ModelSwitch(model: model));
     }
     final result = await _backend.switchModel(
       runtimeId,
@@ -1094,7 +1104,41 @@ final class ChatController extends ValueNotifier<ChatState> {
         return null;
       case Ok(value: final created):
         _storedId = created.storedId;
-        return _runtimeId = created.runtimeId;
+        _runtimeId = created.runtimeId;
+        await _applyPendingModel(created.runtimeId);
+        return created.runtimeId;
+    }
+  }
+
+  (String, String)? _pendingModel;
+
+  /// Applies the model picked before this chat existed. A guarded model can't
+  /// be confirmed after the fact, so that one falls back with a note.
+  Future<void> _applyPendingModel(String runtimeId) async {
+    final pending = _pendingModel;
+    if (pending == null) return;
+    _pendingModel = null;
+    final (model, provider) = pending;
+    final result = await _backend.switchModel(
+      runtimeId,
+      model: model,
+      provider: provider,
+      confirmed: false,
+    );
+    if (_disposed) return;
+    switch (result) {
+      case Err(:final failure):
+        _update(
+          value.withNotice('Could not switch the model: ${describe(failure)}'),
+        );
+      case Ok(value: final change) when change.confirmRequired:
+        _update(
+          value.withNotice(
+            '$model needs confirming. Pick it again to switch.',
+          ),
+        );
+      case Ok():
+        break;
     }
   }
 

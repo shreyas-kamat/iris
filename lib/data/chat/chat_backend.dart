@@ -237,7 +237,12 @@ abstract interface class ChatBackend {
   Future<Result<String>> transcribe(Uint8List wav);
 }
 
-final class DashboardChat implements ChatBackend {
+/// Optional dashboard capability for images referenced by `MEDIA:<path>`.
+abstract interface class MediaImageBackend {
+  Future<Uint8List?> loadMediaImage(String path);
+}
+
+final class DashboardChat implements ChatBackend, MediaImageBackend {
   DashboardChat(this._session, {this.profile = 'default'})
     : _live = _session.state.phase == LinkPhase.live,
       _everLive = _session.state.phase == LinkPhase.live {
@@ -273,6 +278,28 @@ final class DashboardChat implements ChatBackend {
   final String profile;
 
   final DashboardSession _session;
+
+  @override
+  Future<Uint8List?> loadMediaImage(String path) async {
+    final response = await _session.connection.client.get(
+      '/api/media',
+      query: {'path': path},
+    );
+    final dataUrl = response.valueOrNull?['data_url'].stringOrNull;
+    if (dataUrl == null ||
+        !RegExp(
+          r'^data:image/(?:png|jpeg|gif|webp);base64,',
+          caseSensitive: false,
+        ).hasMatch(dataUrl)) {
+      return null;
+    }
+    try {
+      return base64Decode(dataUrl.substring(dataUrl.indexOf(',') + 1));
+    } on FormatException {
+      return null;
+    }
+  }
+
   final _events = StreamController<ChatEvent>.broadcast();
   late final StreamSubscription<RpcEvent> _eventSubscription;
   late final StreamSubscription<RpcServerRequest> _requestSubscription;

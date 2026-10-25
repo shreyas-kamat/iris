@@ -24,6 +24,7 @@ import '../tokens/metrics.dart';
 import '../tokens/motion.dart';
 import '../tokens/palette.dart';
 import 'markdown_image.dart';
+import 'media_image.dart';
 import 'markdown_syntax.dart';
 import 'math.dart';
 import 'primitives.dart';
@@ -32,11 +33,13 @@ class IrisMarkdown extends StatefulWidget {
   const IrisMarkdown(
     this.data, {
     this.onTapLink,
+    this.loadMediaImage,
     this.highlight = true,
     super.key,
   });
 
   final String data;
+  final MediaImageLoader? loadMediaImage;
 
   /// Colour code blocks by language. Off while a reply is still arriving:
   /// re-highlighting on every delta is wasted work, and a block that
@@ -72,19 +75,53 @@ class _IrisMarkdownState extends State<IrisMarkdown> {
   @override
   Widget build(BuildContext context) {
     _clearRecognizers();
-    final nodes = irisDocument().parse(widget.data);
     final renderer = _Renderer(
       context.iris,
       widget.onTapLink,
       _recognizers,
       highlight: widget.highlight,
     );
+    final blocks = <Widget>[];
+    final loader = widget.loadMediaImage;
+    var from = 0;
+    if (loader != null) {
+      for (final match in _mediaLine.allMatches(widget.data)) {
+        final path = _imagePath(match.group(1)!);
+        if (path == null) continue;
+        blocks.addAll(
+          renderer.blocks(
+            irisDocument().parse(widget.data.substring(from, match.start)),
+          ),
+        );
+        blocks.add(MediaImage(path: path, load: loader));
+        from = match.end;
+      }
+    }
+    blocks.addAll(
+      renderer.blocks(irisDocument().parse(widget.data.substring(from))),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: _Renderer.spaced(renderer.blocks(nodes), IrisSpace.sm),
+      children: _Renderer.spaced(blocks, IrisSpace.sm),
     );
   }
+}
+
+final _mediaLine = RegExp(r'^[ \t]*MEDIA:([^\r\n]+)[ \t]*$', multiLine: true);
+final _imageExtension = RegExp(
+  r'\.(?:png|jpe?g|gif|webp)$',
+  caseSensitive: false,
+);
+
+String? _imagePath(String raw) {
+  var path = raw.trim();
+  if (path.length >= 2 &&
+      ((path.startsWith('"') && path.endsWith('"')) ||
+          (path.startsWith("'") && path.endsWith("'")))) {
+    path = path.substring(1, path.length - 1);
+  }
+  return _imageExtension.hasMatch(path) ? path : null;
 }
 
 final class _Renderer {

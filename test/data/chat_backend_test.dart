@@ -63,6 +63,20 @@ void main() {
       {'id': i, 'role': 'user', 'content': 'm$i'},
   ];
 
+  test('loads a generated image through the dashboard media route', () async {
+    http.on(
+      'GET',
+      '/api/media',
+      (_) => FakeReply.json({'data_url': 'data:image/png;base64,AQID'}),
+    );
+    final image = await chat.loadMediaImage('/root/.hermes/cache/dog.png');
+    expect(image, [1, 2, 3]);
+    expect(
+      http.to('/api/media').single.uri.queryParameters['path'],
+      '/root/.hermes/cache/dog.png',
+    );
+  });
+
   group('conversations and profiles', () {
     test(
       'lists conversations over REST for the profile, a page at a time',
@@ -734,10 +748,10 @@ void main() {
         'research',
       ])).valueOrNull!;
       expect(asked.toSet(), {'default', 'research'});
-      expect({for (final h in hits) h.storedId: h.profile}, {
-        'default-1': 'default',
-        'research-1': 'research',
-      });
+      expect(
+        {for (final h in hits) h.storedId: h.profile},
+        {'default-1': 'default', 'research-1': 'research'},
+      );
     });
 
     test('searchAcross survives one profile failing', () async {
