@@ -14,6 +14,7 @@ import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
+import '../../design/components/media_image.dart';
 import '../../design/components/primitives.dart';
 import '../../design/components/sheet.dart';
 import '../../design/components/toast.dart';
@@ -144,6 +145,10 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  MediaImageLoader? get _loadMediaImage => widget.backend is MediaImageBackend
+      ? (widget.backend as MediaImageBackend).loadMediaImage
+      : null;
+
   late final ChatController _chat = ChatController(
     widget.backend,
     conversationId: widget.conversationId,
@@ -736,9 +741,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 : state.effort == null
                 ? state.model
                 : '${state.model} · ${state.effort!.wire}',
-            onModel: _chat.isLive
-                ? () => unawaited(showModelPicker(context, _chat))
-                : null,
+            onModel: () => unawaited(showModelPicker(context, _chat)),
             contextUsage: state.context,
             attachments: _draft,
             onAttach: (source) => unawaited(_attach(source)),
@@ -928,6 +931,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     TranscriptEntry(
                       item,
+                      loadMediaImage: _loadMediaImage,
                       live: live,
                       onRetry: _chat.isLive && !state.running
                           ? () => unawaited(_chat.retry())

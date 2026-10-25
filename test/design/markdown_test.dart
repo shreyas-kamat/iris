@@ -1,6 +1,8 @@
 /// Markdown as the agent writes it, drawn with Iris's type.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -318,6 +320,30 @@ void main() {
       themed(const IrisMarkdown('![x](file:///etc/passwd)')),
     );
     expect(find.byType(MarkdownImage), findsNothing);
+  });
+
+  testWidgets('a generated MEDIA image loads in an assistant reply', (
+    tester,
+  ) async {
+    String? requestedPath;
+    await tester.pumpWidget(
+      themed(
+        IrisMarkdown(
+          'Here is your dog.\n\nMEDIA:/root/.hermes/cache/dog.png',
+          loadMediaImage: (path) async {
+            requestedPath = path;
+        return base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/2ZkAAAAASUVORK5CYII=',
+        );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(requestedPath, '/root/.hermes/cache/dog.png');
+    expect(find.textContaining('Here is your dog.'), findsOneWidget);
+    expect(find.textContaining('MEDIA:'), findsNothing);
+    expect(find.byType(Image), findsOneWidget);
   });
 
   testWidgets('maths renders as maths, inline and display', (tester) async {

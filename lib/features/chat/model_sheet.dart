@@ -27,7 +27,8 @@ Future<void> showModelPicker(BuildContext context, ChatController chat) async {
     builder: (_) => ModelSheet(
       load: chat.modelOptions,
       current: chat.value.model,
-      state: chat,
+      // Effort and fast need a session, which a new chat lacks until it sends.
+      state: chat.isLive ? chat : null,
       onEffort: (effort) => unawaited(chat.setEffort(effort)),
       onFast: (fast) => unawaited(chat.setFast(fast: fast)),
     ),

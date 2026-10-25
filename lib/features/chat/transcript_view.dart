@@ -11,6 +11,7 @@ import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
 import '../../design/components/dashed_border.dart';
 import '../../design/components/iris_orb.dart';
+import '../../design/components/media_image.dart';
 import '../../design/components/markdown.dart';
 import '../../design/components/needs_you_card.dart';
 import '../../design/components/primitives.dart';
@@ -39,6 +40,7 @@ class TranscriptEntry extends StatelessWidget {
     this.onStop,
     this.onHold,
     this.collapsing = false,
+    this.loadMediaImage,
     super.key,
   });
 
@@ -63,6 +65,7 @@ class TranscriptEntry extends StatelessWidget {
 
   /// The entry is part of an undone exchange, folding away.
   final bool collapsing;
+  final MediaImageLoader? loadMediaImage;
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +83,11 @@ class TranscriptEntry extends StatelessWidget {
 
   Widget _entry() => switch (item) {
     final UserTurn turn => _UserBubble(turn),
-    final AssistantTurn turn => _AssistantBlock(turn, live: live),
+    final AssistantTurn turn => _AssistantBlock(
+      turn,
+      live: live,
+      loadMediaImage: loadMediaImage,
+    ),
     final ToolCall call => ToolCard(call),
     final Notice notice when notice.retryable && onRetry != null => _FailedCard(
       notice,
@@ -307,9 +314,10 @@ class _FromQueueTagState extends State<_FromQueueTag> {
 /// The agent's turn: a header with the orb and the live state, the thoughts,
 /// and the reply.
 class _AssistantBlock extends StatelessWidget {
-  const _AssistantBlock(this.turn, {this.live});
+  const _AssistantBlock(this.turn, {this.live, this.loadMediaImage});
 
   final AssistantTurn turn;
+  final MediaImageLoader? loadMediaImage;
 
   /// Non-null only while this turn is the one arriving.
   final AgentState? live;
@@ -373,6 +381,7 @@ class _AssistantBlock extends StatelessWidget {
             opacity: turn.redirected ? .7 : 1,
             child: IrisMarkdown(
               turn.text,
+              loadMediaImage: loadMediaImage,
               highlight: !streaming,
               onTapLink: (href) => href == leaveDemoLink
                   ? leaveDemo(context)

@@ -149,9 +149,9 @@ void main() {
   test('a new chat is created on the first send', () async {
     final controller = controllerFor(id: null);
     await controller.open();
-    expect(backend.calls, isEmpty);
+    expect(backend.calls, ['models']);
     await controller.send('hi');
-    expect(backend.calls, ['create']);
+    expect(backend.calls, ['models', 'create']);
     expect(backend.submitted.single, ('run-new', 'hi'));
     expect(controller.conversationId, 'stored-new');
   });
@@ -328,12 +328,25 @@ void main() {
     );
   });
 
-  test('switching before the conversation exists says why', () async {
+  test('a new chat shows the default model before the first send', () async {
+    backend.modelOptionsResult = const Ok(
+      ModelOptions(model: 'default-m', provider: 'default-p'),
+    );
+    final controller = controllerFor(id: null);
+    await controller.open();
+    await pumpEventQueue();
+    expect(controller.value.model, 'default-m');
+  });
+
+  test('a model picked before the first send is applied on create', () async {
     final controller = controllerFor(id: null);
     await controller.open();
     final result = await controller.switchModel('m', 'p', confirmed: false);
-    expect(result.isErr, isTrue);
+    expect(result.isOk, isTrue);
+    expect(controller.value.model, 'm');
     expect(backend.switches, isEmpty);
+    await controller.send('hi');
+    expect(backend.switches, hasLength(1));
   });
 
   test('slash output is shown and the turn ends', () async {
