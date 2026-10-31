@@ -12,6 +12,7 @@ import '../../core/result.dart';
 import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/voice/voice_capabilities.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/media_image.dart';
@@ -25,6 +26,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../voice/live_audio_consent.dart';
 import '../voice/mic_permission_sheet.dart';
 import '../voice/voice_call.dart';
 import '../voice/voice_call_screen.dart';
@@ -514,6 +516,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (host == null || _call != null) return;
     // A scripted call (demo) never opens the microphone, so it asks for none.
     final scripted = host.parts(host.settings).scripted != null;
+    if (!scripted && host.capabilities.engine == VoiceEngine.gptLive) {
+      if (!await confirmLiveAudio(context) || !mounted) return;
+    }
     if (!scripted && await ensureMicAccess(context) == MicAccess.denied) return;
     if (!mounted || _call != null) return;
     var again = true;

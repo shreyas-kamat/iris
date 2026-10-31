@@ -1,0 +1,1 @@
+hermes,agent,assistant,self hosted,chat,automation,server,voice,private

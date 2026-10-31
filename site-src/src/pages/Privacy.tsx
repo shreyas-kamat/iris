@@ -2,10 +2,10 @@ export function Privacy() {
   return (
     <main className="wrap prose">
 <h1>Privacy Policy</h1>
-  <p className="meta">Effective 19 October 2026</p>
+  <p className="meta">Effective 21 October 2026</p>
 
   <p className="lede">Iris is an app for talking to your own Hermes agent. It connects only to the server
-  you point it at. We run no servers for Iris, so we never receive your conversations, your login or
+  you point it at; GPT-Live voice calls also send audio directly to OpenAI with your permission. We run no servers for Iris, so we never receive your conversations, your login or
   anything else you do in the app.</p>
 
   <h2>Who we are</h2>
@@ -15,7 +15,7 @@ export function Privacy() {
 
   <h2>The short version</h2>
   <ul>
-    <li>Iris sends your messages to <strong>your</strong> Hermes server, and nowhere else.</li>
+    <li>Iris sends your messages to <strong>your</strong> Hermes server. GPT-Live voice calls send audio directly to OpenAI after you agree.</li>
     <li>We collect <strong>no data</strong>. There is no account with us, no analytics, no advertising and no crash reporting in the app.</li>
     <li>Your passwords and access tokens stay in your phone’s secure keystore.</li>
     <li>We do not sell or share data, because we do not have any.</li>
@@ -44,11 +44,12 @@ export function Privacy() {
   terms. Iris has no control over it and we have no access to it.</p>
   <p>If your server is published through Cloudflare, your traffic passes through Cloudflare under your own
   Cloudflare account and its terms. Iris sends the service token only over encrypted (HTTPS) connections.</p>
-  <p>Files, photos and voice recordings you choose to send go only to your own Hermes server. Iris doesn’t keep the
+  <p>Files, photos and dictation recordings you choose to send go to your own Hermes server. Iris doesn’t keep the
   recordings. An image linked in a reply is fetched from its website only when you tap it.</p>
   <p><strong>Voice calls.</strong> In a voice call on a Hermes server, Iris records what you say in short clips and
   sends them to your own server to be turned into text, and it plays back the server’s spoken replies. Your server
   may pass that audio on to the speech providers it is set up to use, under their terms. Iris does not keep the audio.
+  Before a GPT-Live call, Iris asks you to agree to sending audio directly to OpenAI. If you cancel, the call does not start.
   In a GPT-Live call the audio goes directly between your phone and OpenAI over an encrypted connection, while the
   agent’s work and your conversation history stay on your server. OpenAI’s terms apply to that audio.</p>
   <p>If you choose to trust a server that uses a self-signed certificate, Iris accepts that certificate for
@@ -57,7 +58,7 @@ export function Privacy() {
   <h2>Permissions</h2>
   <p>Iris uses the internet to reach your server. On an iPhone, iOS also asks permission to connect to devices on
   your local network, which Iris uses only to reach the server address you entered. Iris asks for the microphone only when you
-  tap the mic to dictate a message, and it reads a photo or file only when you pick one. Iris does not use your
+  dictate a message or start a voice call, and it reads a photo or file only when you pick one. Iris does not use your
   camera, location or contacts.</p>
   <p>For voice calls Iris also uses the microphone while a call listens, keeps the call going in the background with a
   notification that lets you mute or end it (Android asks before showing notifications; if you say no, the call still

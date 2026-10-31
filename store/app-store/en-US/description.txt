@@ -1,0 +1,23 @@
+Your Hermes agent, in your pocket.
+
+Iris is a free, open-source mobile client for your own Hermes dashboard. Your agent, its tools and its history stay on your hardware. Bring a running Hermes server, or explore the built-in offline demo first.
+
+CHAT AND TAKE ACTION
+Stream replies, read Markdown and code, follow tool calls, and approve or deny actions. Answer password and authentication prompts when your agent needs you.
+
+KEEP CONVERSATIONS ORGANIZED
+Search, pin, rename and archive conversations. Switch agent profiles, branch a conversation, and export a chat as Markdown. Servers that support scheduled jobs and tasks also expose those tools in Iris.
+
+DICTATE OR TALK
+Dictate messages and make voice calls on compatible servers. Available speech providers and voices depend on your server. GPT-Live calls send audio directly to OpenAI; other calls use your Hermes server and its configured providers.
+
+CONNECT YOUR WAY
+Connect over local Wi-Fi, Tailscale or a protected HTTPS address. Iris supports dashboard authentication and Cloudflare Access service tokens. Public server addresses require HTTPS.
+
+MAKE IT YOURS
+Choose from ten skins with light and dark appearances, large text and reduced-motion support.
+
+NO IRIS ACCOUNT REQUIRED
+There is no Iris-hosted relay, advertising or analytics. Credentials are stored in the device keychain. You choose the server and the AI providers it uses; their terms and privacy policies apply.
+
+Iris does not include a hosted agent or AI subscription. A compatible Hermes dashboard is required outside the offline demo. Iris is an independent client and is not affiliated with OpenAI or Nous Research.
