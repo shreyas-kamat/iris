@@ -1,20 +1,19 @@
 /// Markdown, drawn with Iris's own type and colour.
 ///
 /// The agent writes Markdown, and a reply should read as typeset text, not as
-/// source. `package:markdown` parses it (GitHub flavour: tables,
-/// strikethrough, autolinks, task lists); this file draws the result from
-/// design-system tokens rather than a generic Markdown theme, so a reply looks
-/// like the rest of the app in every skin. Half-written Markdown — normal
-/// while a reply streams — parses as plain text and never throws.
+/// source. `package:gpt_markdown` parses and lays it out (headings, lists,
+/// task lists, tables, quotes, alerts, citations, LaTeX, links, images); this
+/// file feeds it design-system tokens rather than a generic Markdown theme, so
+/// a reply looks like the rest of the app in every skin, and swaps in Iris's
+/// own code block and tap-to-load image. Half-written Markdown — normal while
+/// a reply streams — never throws.
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:markdown/markdown.dart' as md;
+import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:re_highlight/languages/all.dart';
 import 'package:re_highlight/re_highlight.dart';
 
@@ -25,11 +24,9 @@ import '../tokens/motion.dart';
 import '../tokens/palette.dart';
 import 'markdown_image.dart';
 import 'media_image.dart';
-import 'markdown_syntax.dart';
-import 'math.dart';
 import 'primitives.dart';
 
-class IrisMarkdown extends StatefulWidget {
+class IrisMarkdown extends StatelessWidget {
   const IrisMarkdown(
     this.data, {
     this.onTapLink,
@@ -51,59 +48,55 @@ class IrisMarkdown extends StatefulWidget {
   final ValueChanged<String>? onTapLink;
 
   @override
-  State<IrisMarkdown> createState() => _IrisMarkdownState();
-}
-
-class _IrisMarkdownState extends State<IrisMarkdown> {
-  /// Link taps are gesture recognisers held by text spans. They are made
-  /// afresh on every build, so the previous build's are disposed first.
-  final List<TapGestureRecognizer> _recognizers = [];
-
-  void _clearRecognizers() {
-    for (final recognizer in _recognizers) {
-      recognizer.dispose();
-    }
-    _recognizers.clear();
-  }
-
-  @override
-  void dispose() {
-    _clearRecognizers();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    _clearRecognizers();
-    final renderer = _Renderer(
-      context.iris,
-      widget.onTapLink,
-      _recognizers,
-      highlight: widget.highlight,
-    );
+    final theme = context.iris;
     final blocks = <Widget>[];
-    final loader = widget.loadMediaImage;
+    final loader = loadMediaImage;
     var from = 0;
     if (loader != null) {
-      for (final match in _mediaLine.allMatches(widget.data)) {
+      for (final match in _mediaLine.allMatches(data)) {
         final path = _imagePath(match.group(1)!);
         if (path == null) continue;
-        blocks.addAll(
-          renderer.blocks(
-            irisDocument().parse(widget.data.substring(from, match.start)),
-          ),
-        );
+        _addText(blocks, theme, data.substring(from, match.start));
         blocks.add(MediaImage(path: path, load: loader));
         from = match.end;
       }
     }
-    blocks.addAll(
-      renderer.blocks(irisDocument().parse(widget.data.substring(from))),
+    _addText(blocks, theme, data.substring(from));
+    return GptMarkdownTheme(
+      gptThemeData: _gptTheme(theme),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < blocks.length; i++) ...[
+            if (i > 0) const SizedBox(height: IrisSpace.sm),
+            blocks[i],
+          ],
+        ],
+      ),
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: _Renderer.spaced(blocks, IrisSpace.sm),
+  }
+
+  void _addText(List<Widget> blocks, IrisThemeData theme, String text) {
+    if (text.trim().isEmpty) return;
+    final tap = onTapLink;
+    blocks.add(
+      GptMarkdown(
+        text,
+        style: theme.typography.bodyLarge.copyWith(color: theme.palette.ink),
+        useDollarSignsForLatex: true,
+        isStreaming: false,
+        onLinkTap: tap == null ? null : (url, _) => tap(url),
+        imageBuilder: (context, url, _, _) => MarkdownImage.canShow(url)
+            ? MarkdownImage(url: url)
+            : const SizedBox.shrink(),
+        codeBuilder: (context, language, code, _) => _CodeBlock(
+          code: code.replaceFirst(RegExp(r'\n$'), ''),
+          language: language.trim().isEmpty ? null : language.trim(),
+          highlight: highlight,
+        ),
+      ),
     );
   }
 }
@@ -124,567 +117,93 @@ String? _imagePath(String raw) {
   return _imageExtension.hasMatch(path) ? path : null;
 }
 
-final class _Renderer {
-  _Renderer(
-    this.theme,
-    this.onTapLink,
-    this.recognizers, {
-    required this.highlight,
-  });
+/// Iris's tokens, in the shape `gpt_markdown` reads them.
+GptMarkdownThemeData _gptTheme(IrisThemeData theme) {
+  final palette = theme.palette;
+  final type = theme.typography;
+  final body = type.bodyLarge.copyWith(color: palette.ink);
+  final heading = type.heading.copyWith(color: palette.ink);
+  final title = type.title.copyWith(color: palette.ink);
+  final minor = body.copyWith(fontWeight: FontWeight.w600);
 
-  final bool highlight;
-
-  final IrisThemeData theme;
-  final ValueChanged<String>? onTapLink;
-  final List<TapGestureRecognizer> recognizers;
-
-  static const _blockTags = {
-    'p',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'ul',
-    'ol',
-    'blockquote',
-    'pre',
-    'hr',
-    'table',
-    'div',
-    'section',
-    'math-display',
-  };
-
-  TextStyle get body =>
-      theme.typography.bodyLarge.copyWith(color: theme.palette.ink);
-
-  TextStyle _heading(String tag) => switch (tag) {
-    'h1' || 'h2' => theme.typography.title.copyWith(color: theme.palette.ink),
-    'h3' => theme.typography.heading.copyWith(color: theme.palette.ink),
-    _ => body.copyWith(fontWeight: FontWeight.w600),
-  };
-
-  static List<Widget> spaced(List<Widget> widgets, double gap) => [
-    for (var i = 0; i < widgets.length; i++) ...[
-      if (i > 0) SizedBox(height: gap),
-      widgets[i],
-    ],
-  ];
-
-  List<Widget> blocks(List<md.Node> nodes) => [
-    for (final node in nodes) ?block(node),
-  ];
-
-  Widget? block(md.Node node) {
-    if (node is md.Text) {
-      return node.text.trim().isEmpty ? null : _rich(inline([node], body));
-    }
-    if (node is! md.Element) return null;
-    final image = node.tag == 'p' ? _soleImage(node) : null;
-    if (image != null) {
-      return MarkdownImage(
-        url: image.attributes['src']!,
-        alt: image.attributes['alt'],
-      );
-    }
-    return switch (node.tag) {
-      'h1' ||
-      'h2' ||
-      'h3' ||
-      'h4' ||
-      'h5' ||
-      'h6' => _rich(inline(node.children, _heading(node.tag))),
-      'ul' || 'ol' => list(node),
-      'blockquote' => quote(node),
-      'pre' => code(node),
-      'hr' => Divider(
-        height: IrisSpace.md,
-        thickness: IrisStroke.hairline,
-        color: theme.palette.line,
+  AlertStyle alert(AgentState state) {
+    final color = palette.colorFor(state);
+    return AlertStyle(
+      color: color,
+      backgroundColor: color.withValues(alpha: .10),
+      titleStyle: type.codeSmall.copyWith(
+        fontSize: 11,
+        letterSpacing: 1,
+        color: color,
       ),
-      'table' => table(node),
-      'div' => alert(node),
-      'section' => footnotes(node),
-      mathDisplayTag => IrisMath(node.textContent, display: true, style: body),
-      _ => _rich(inline(node.children, body)),
-    };
-  }
-
-  /// The image a paragraph holds and nothing else, if its source can be shown.
-  static md.Element? _soleImage(md.Element p) {
-    final children = [
-      for (final c in p.children ?? const <md.Node>[])
-        if (c is! md.Text || c.text.trim().isNotEmpty) c,
-    ];
-    if (children.length != 1) return null;
-    final only = children.single;
-    return only is md.Element &&
-            only.tag == 'img' &&
-            MarkdownImage.canShow(only.attributes['src'])
-        ? only
-        : null;
-  }
-
-  Widget _rich(List<InlineSpan> spans) => Text.rich(TextSpan(children: spans));
-
-  List<InlineSpan> inline(
-    List<md.Node>? nodes,
-    TextStyle style, [
-    GestureRecognizer? link,
-  ]) {
-    final spans = <InlineSpan>[];
-    for (final node in nodes ?? const <md.Node>[]) {
-      if (node is md.Text) {
-        spans.add(TextSpan(text: node.text, style: style, recognizer: link));
-      } else if (node is md.Element) {
-        spans.addAll(_element(node, style, link));
-      }
-    }
-    return spans;
-  }
-
-  List<InlineSpan> _element(
-    md.Element node,
-    TextStyle style,
-    GestureRecognizer? link,
-  ) {
-    switch (node.tag) {
-      case 'strong':
-        return inline(
-          node.children,
-          style.copyWith(fontWeight: FontWeight.w600),
-          link,
-        );
-      case 'em':
-        return inline(
-          node.children,
-          style.copyWith(fontStyle: FontStyle.italic),
-          link,
-        );
-      case 'del':
-        return inline(
-          node.children,
-          style.copyWith(decoration: TextDecoration.lineThrough),
-          link,
-        );
-      case 'code':
-        return [
-          TextSpan(
-            text: node.textContent,
-            style: _inlineCode(style),
-            recognizer: link,
-          ),
-        ];
-      case 'a':
-        return inline(
-          node.children,
-          style.copyWith(
-            color: theme.palette.accent,
-            decoration: TextDecoration.underline,
-            decorationColor: theme.palette.accent,
-          ),
-          _link(node.attributes['href']) ?? link,
-        );
-      case 'br':
-        return const [TextSpan(text: '\n')];
-      case 'img':
-        return [
-          TextSpan(
-            text: node.attributes['alt'] ?? 'image',
-            style: style.copyWith(
-              fontStyle: FontStyle.italic,
-              color: theme.palette.inkMuted,
-            ),
-          ),
-        ];
-      case 'input':
-        // A task-list checkbox.
-        return [
-          TextSpan(
-            text: node.attributes.containsKey('checked') ? '☑ ' : '☐ ',
-            style: style,
-          ),
-        ];
-      case 'sup' when node.attributes['class'] == 'footnote-ref':
-        return [
-          TextSpan(
-            text: _superscript(node.textContent),
-            style: theme.typography.codeSmall.copyWith(
-              fontSize: 11,
-              color: theme.palette.accent,
-            ),
-          ),
-        ];
-      case 'sub' || 'sup':
-        return inline(
-          node.children,
-          style.copyWith(
-            fontSize: (style.fontSize ?? 16) * 0.72,
-            fontFeatures: [
-              node.tag == 'sub'
-                  ? const FontFeature.subscripts()
-                  : const FontFeature.superscripts(),
-            ],
-          ),
-          link,
-        );
-      case 'kbd':
-        return [
-          TextSpan(text: ' ${node.textContent} ', style: _inlineCode(style)),
-        ];
-      case 'mark':
-        return inline(
-          node.children,
-          style.copyWith(backgroundColor: theme.palette.accentQuiet),
-          link,
-        );
-      case mathInlineTag || mathDisplayTag:
-        return [
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: IrisMath(
-              node.textContent,
-              display: node.tag == mathDisplayTag,
-              // Inline maths reads a little larger than the words around it.
-              style: style.copyWith(fontSize: (style.fontSize ?? 16) * 1.1),
-            ),
-          ),
-        ];
-      default:
-        return inline(node.children, style, link);
-    }
-  }
-
-  TextStyle _inlineCode(TextStyle around) => theme.typography.code.copyWith(
-    fontSize: (around.fontSize ?? 16) * 0.9,
-    color: theme.palette.ink,
-    backgroundColor: theme.palette.surfaceSunken,
-  );
-
-  GestureRecognizer? _link(String? href) {
-    final tap = onTapLink;
-    if (href == null || href.isEmpty || tap == null) return null;
-    final recognizer = TapGestureRecognizer()..onTap = () => tap(href);
-    recognizers.add(recognizer);
-    return recognizer;
-  }
-
-  static const _alerts = {
-    'note': ('Note', AgentState.loading),
-    'tip': ('Tip', AgentState.done),
-    'important': ('Important', AgentState.thinking),
-    'warning': ('Warning', AgentState.working),
-    'caution': ('Caution', AgentState.failed),
-  };
-
-  /// A GitHub alert: `> [!NOTE]` and its kin. Any other `div` draws its
-  /// children as ordinary blocks.
-  Widget alert(md.Element node) {
-    final kind = RegExp(
-      r'markdown-alert-(\w+)',
-    ).firstMatch(node.attributes['class'] ?? '')?[1];
-    final style = _alerts[kind];
-    final children = [
-      for (final child in node.children ?? const <md.Node>[])
-        if (child is! md.Element ||
-            child.attributes['class'] != 'markdown-alert-title')
-          child,
-    ];
-    if (style == null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: spaced(blocks(children), IrisSpace.sm),
-      );
-    }
-    final (title, state) = style;
-    final color = theme.palette.colorFor(state);
-    return Container(
+      borderRadius: const Radius.circular(14),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .10),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: color.withValues(alpha: .30),
-          width: IrisStroke.hairline,
+    );
+  }
+
+  return GptMarkdownThemeData(
+    brightness: theme.isDark ? Brightness.dark : Brightness.light,
+    h1: title,
+    h2: title,
+    h3: heading,
+    h4: minor,
+    h5: minor,
+    h6: minor,
+    hrLineColor: palette.line,
+    hrLineThickness: IrisStroke.hairline,
+    linkColor: palette.accent,
+    linkHoverColor: palette.accent,
+    autoAddDividerLineAfterH1: false,
+    highlightColor: palette.accentQuiet,
+    styleSheet: GptMarkdownStyleSheet(
+      blockSpacing: IrisSpace.sm,
+      link: LinkStyle(
+        color: palette.accent,
+        decoration: TextDecoration.underline,
+      ),
+      inlineCode: InlineCodeStyle(
+        fontFamily: type.code.fontFamily,
+        fontSizeFactor: .9,
+        color: palette.ink,
+        backgroundColor: palette.surfaceSunken,
+        borderRadius: const Radius.circular(6),
+      ),
+      blockQuote: BlockQuoteStyle(
+        barWidth: IrisStroke.ring,
+        barColor: palette.lineStrong,
+      ),
+      list: ListStyle(
+        bulletColor: palette.inkMuted,
+        markerTextStyle: body.copyWith(color: palette.inkMuted),
+      ),
+      checkbox: CheckboxStyle(
+        checkedColor: palette.accent,
+        uncheckedColor: palette.lineStrong,
+        interactive: false,
+      ),
+      table: TableStyle(
+        borderColor: palette.line,
+        borderWidth: IrisStroke.hairline,
+        headerBackground: palette.surfaceSunken,
+        headerTextStyle: body.copyWith(fontWeight: FontWeight.w600),
+        cellPadding: const EdgeInsets.symmetric(
+          horizontal: IrisSpace.sm,
+          vertical: IrisSpace.xs,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: IrisSpace.xs + 2),
-              Text(
-                title.toUpperCase(),
-                style: theme.typography.codeSmall.copyWith(
-                  fontSize: 11,
-                  letterSpacing: 1,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: IrisSpace.xs),
-          ...spaced(blocks(children), IrisSpace.sm),
-        ],
+      sourceTag: SourceTagStyle(
+        textStyle: type.codeSmall.copyWith(fontSize: 11, color: palette.accent),
       ),
-    );
-  }
-
-  /// The footnotes block GitHub puts at the end: a numbered list, smaller and
-  /// muted, under a hairline. The ↩ back-links go nowhere in an app, so they
-  /// are dropped.
-  Widget footnotes(md.Element node) {
-    final small = theme.typography.body.copyWith(
-      fontSize: 13,
-      height: 1.5,
-      color: theme.palette.inkMuted,
-    );
-    final items = elementsIn(node).where((e) => e.tag == 'li').toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Divider(
-          height: IrisSpace.md,
-          thickness: IrisStroke.hairline,
-          color: theme.palette.line,
-        ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: IrisSpace.xs),
-          child: Text(
-            'NOTES',
-            style: theme.typography.codeSmall.copyWith(
-              fontSize: 10.5,
-              letterSpacing: 1,
-              color: theme.palette.inkMuted,
-            ),
-          ),
-        ),
-        for (final (i, item) in items.indexed)
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(text: '${i + 1}. ', style: small),
-                ...inline(_withoutBackrefs(item.children), small),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  static Iterable<md.Element> elementsIn(md.Element node) sync* {
-    for (final child in node.children ?? const <md.Node>[]) {
-      if (child is md.Element) {
-        yield child;
-        yield* elementsIn(child);
-      }
-    }
-  }
-
-  /// A footnote's content without its ↩ links. Its paragraph is flattened to
-  /// inline nodes so the number and the text share a line.
-  static List<md.Node> _withoutBackrefs(List<md.Node>? nodes) => [
-    for (final node in nodes ?? const <md.Node>[])
-      if (node is md.Element && node.attributes['class'] == 'footnote-backref')
-        ...const <md.Node>[]
-      else if (node is md.Element && node.tag == 'p')
-        ..._withoutBackrefs(node.children)
-      else
-        node,
-  ];
-
-  static String _superscript(String digits) => digits
-      .split('')
-      .map(
-        (d) =>
-            const {
-              '0': '⁰',
-              '1': '¹',
-              '2': '²',
-              '3': '³',
-              '4': '⁴',
-              '5': '⁵',
-              '6': '⁶',
-              '7': '⁷',
-              '8': '⁸',
-              '9': '⁹',
-            }[d] ??
-            d,
-      )
-      .join();
-
-  Widget list(md.Element node) {
-    final ordered = node.tag == 'ol';
-    var number = int.tryParse(node.attributes['start'] ?? '') ?? 1;
-    final rows = <Widget>[];
-    for (final child in node.children ?? const <md.Node>[]) {
-      if (child is! md.Element || child.tag != 'li') continue;
-      rows.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: ordered ? 28 : 18,
-              child: Text(
-                ordered ? '${number++}.' : '•',
-                style: body.copyWith(color: theme.palette.inkMuted),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: spaced(_item(child), IrisSpace.xxs),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: spaced(rows, IrisSpace.xs),
-    );
-  }
-
-  /// A list item's contents. A tight item holds inline nodes directly, a loose
-  /// one holds paragraphs, and either can hold a nested list.
-  List<Widget> _item(md.Element item) {
-    final widgets = <Widget>[];
-    final run = <md.Node>[];
-    void flush() {
-      if (run.isEmpty) return;
-      widgets.add(_rich(inline(List.of(run), body)));
-      run.clear();
-    }
-
-    for (final child in item.children ?? const <md.Node>[]) {
-      if (child is md.Element && _blockTags.contains(child.tag)) {
-        flush();
-        if (block(child) case final widget?) widgets.add(widget);
-      } else {
-        run.add(child);
-      }
-    }
-    flush();
-    return widgets;
-  }
-
-  Widget quote(md.Element node) => DecoratedBox(
-    decoration: BoxDecoration(
-      border: Border(
-        left: BorderSide(
-          color: theme.palette.lineStrong,
-          width: IrisStroke.ring,
-        ),
-      ),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.only(left: IrisSpace.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: spaced(
-          blocks(node.children ?? const <md.Node>[]),
-          IrisSpace.sm,
-        ),
+      image: const ImageStyle(borderRadius: Radius.circular(14)),
+      alert: AlertStyle(
+        note: alert(AgentState.loading),
+        tip: alert(AgentState.done),
+        important: alert(AgentState.thinking),
+        warning: alert(AgentState.working),
+        caution: alert(AgentState.failed),
       ),
     ),
   );
-
-  Widget code(md.Element node) {
-    final text = node.textContent.replaceFirst(RegExp(r'\n$'), '');
-    final language = _languageOf(node);
-    if (language == 'math') {
-      return IrisMath(text, display: true, style: body);
-    }
-    return _CodeBlock(code: text, language: language, highlight: highlight);
-  }
-
-  /// The fence's language, from the `language-xxx` class the parser puts on
-  /// the inner `code` element. Null for an unlabelled fence.
-  static String? _languageOf(md.Element pre) {
-    for (final child in pre.children ?? const <md.Node>[]) {
-      if (child is md.Element && child.tag == 'code') {
-        final cls = child.attributes['class'];
-        if (cls != null && cls.startsWith('language-')) {
-          return cls.substring('language-'.length);
-        }
-      }
-    }
-    return null;
-  }
-
-  Widget table(md.Element node) {
-    final rows = <List<Widget>>[];
-    void collect(md.Element element) {
-      for (final child in element.children ?? const <md.Node>[]) {
-        if (child is! md.Element) continue;
-        if (child.tag == 'tr') {
-          rows.add([
-            for (final cell in child.children ?? const <md.Node>[])
-              if (cell is md.Element)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: IrisSpace.sm,
-                    vertical: IrisSpace.xs,
-                  ),
-                  child: Align(
-                    alignment: switch (cell.attributes['align']) {
-                      'center' => Alignment.center,
-                      'right' => Alignment.centerRight,
-                      _ => Alignment.centerLeft,
-                    },
-                    child: _rich(
-                      inline(
-                        cell.children,
-                        cell.tag == 'th'
-                            ? body.copyWith(fontWeight: FontWeight.w600)
-                            : body,
-                      ),
-                    ),
-                  ),
-                ),
-          ]);
-        } else {
-          collect(child);
-        }
-      }
-    }
-
-    collect(node);
-    if (rows.isEmpty) return const SizedBox.shrink();
-    // A Table needs every row the same length; a ragged table is padded.
-    final width = rows.map((row) => row.length).reduce(math.max);
-    if (width == 0) return const SizedBox.shrink();
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Table(
-        defaultColumnWidth: const IntrinsicColumnWidth(),
-        border: TableBorder.all(
-          color: theme.palette.line,
-          width: IrisStroke.hairline,
-        ),
-        children: [
-          for (final row in rows)
-            TableRow(
-              children: [
-                ...row,
-                for (var i = row.length; i < width; i++)
-                  const SizedBox.shrink(),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 /// The longest block worth highlighting. Past this the parse is slow enough
