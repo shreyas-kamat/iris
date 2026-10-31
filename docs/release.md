@@ -52,11 +52,63 @@ the upload key.
 
 ## iOS
 
-Iris has not been built for iOS yet; every device check so far was on an Android emulator. It
-needs a Mac or a cloud build service, and an Apple Developer account, to build, sign and upload.
-The project is set up for it: bundle ID, icons, `ITSAppUsesNonExemptEncryption = false` (the app
-only uses standard HTTPS), a Local Network usage string, and `PrivacyInfo.xcprivacy` (no tracking
-and no data collected).
+The app supports iPhone and iPad, with a minimum deployment target of iOS 14.
+Use Xcode 26 or later and an iOS 26 SDK or later for App Store uploads (Apple's requirement
+since 28 April 2026). The deployment target is separate from the SDK used to build it.
+
+### Validate locally
+
+```sh
+flutter pub get
+flutter analyze
+flutter test                         # golden baselines are Windows; review Mac rendering differences
+flutter build ipa --release --no-codesign
+```
+
+The last command creates `build/ios/archive/Runner.xcarchive` without signing; it does **not**
+create an uploadable IPA. CI also compiles this unsigned release archive.
+
+### Sign and export
+
+1. Enrol the seller in the Apple Developer Program, accept current agreements, and register the
+   explicit bundle ID `com.iflotech.iris`. The privacy policy currently identifies the App Store
+   seller as Daturo Solutions Pvt Ltd; confirm that this matches the signing organization.
+2. Open `ios/Runner.xcworkspace` in Xcode. Add the developer account in Xcode Settings, then select
+   the seller's Team under Runner → Signing & Capabilities for **all** configurations. Keep
+   automatic signing enabled. Do not use a guessed Team ID or commit signing credentials.
+3. Create the app record in App Store Connect with that bundle ID. Choose its SKU there.
+4. Increment the `+N` in `pubspec.yaml` for each upload (including TestFlight). The first local
+   release candidate remains `1.0.0+1`; check whether build 1 has already been uploaded.
+5. Build the signed distribution export:
+
+   ```sh
+   flutter build ipa --release --export-options-plist=ios/ExportOptions-AppStore.plist
+   ```
+
+6. In Xcode Organizer, validate the archive and inspect its privacy report. Upload the signed
+   export through Organizer or Transporter. Keep the archive and dSYMs for symbolication.
+
+`ios/ExportOptions-AppStore.plist` exports for App Store Connect using automatic signing and
+preserves the explicit build number. A development identity alone does not prove distribution
+signing is ready. Xcode must be able to create or access the seller's distribution certificate
+and provisioning profile. Do not submit the unsigned archive.
+
+### App Store Connect and device checks
+
+The listing draft, review instructions and outstanding release gates are in
+[`../store/app-store/README.md`](../store/app-store/README.md). Complete them before submitting.
+
+Test the **signed release** on a physical iPhone and iPad through TestFlight: microphone
+permission granted/denied, dictation, files/photos, local-network permission and a private HTTP
+server, HTTPS authentication, voice background playback/recording, interruptions, Bluetooth,
+earpiece/speaker routing, and GPT-Live consent/cancellation. Simulator audio cannot establish
+that these work on a device. Confirm permission_handler is built with `PERMISSION_MICROPHONE=1`
+(the Podfile enables it for CocoaPods; the Swift package reads the microphone usage key in Info.plist). Never regenerate Windows golden baselines just to suppress Mac diffs.
+
+Apple references (checked 21 October 2026):
+- https://developer.apple.com/news/upcoming-requirements/?id=04282026a
+- https://developer.apple.com/app-store/review/guidelines/
+- https://developer.apple.com/app-store/app-privacy-details/
 
 ## Permissions the store forms must match
 
@@ -80,7 +132,7 @@ Phase 6 adds none: deleting, pinning, branching and the prompts use the existing
   `RECEIVE_BOOT_COMPLETED` from the foreground-service plugin is removed: a call never restarts after a reboot.
 - **iOS:** the `audio` background mode. The microphone usage string already exists. `permission_handler` needs
   `PERMISSION_MICROPHONE=1` in the Podfile's `GCC_PREPROCESSOR_DEFINITIONS`, or it reports the microphone as
-  denied; add it when the iOS project is first built.
+  denied; the Podfile now enables it.
 - **Data safety:** audio. Voice and dictation clips go to the user's own server and are not collected or stored
   by Iris. For GPT-Live calls, the audio goes from the phone to OpenAI; the work and history stay on the server.
 - **Privacy policy:** the voice paragraphs in `site-src/src/pages/Privacy.tsx` (effective 19 October 2026).

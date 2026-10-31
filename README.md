@@ -76,8 +76,7 @@ flutter test
 flutter run
 ```
 
-Release builds, signing and store assets are covered in [`docs/release.md`](docs/release.md). iOS has not
-been built or run yet; the project is set up for it but needs a Mac.
+Release builds, signing and store assets are covered in [`docs/release.md`](docs/release.md). iOS builds require a Mac with Xcode; signing and App Store submission are described in that guide.
 
 The golden-image tests were generated on Windows. If you work on another platform and a golden differs
 only in text rendering, say so in your pull request rather than regenerating every image.
@@ -106,6 +105,7 @@ lib/
 do not throw. The demo plugs in at that interface, so no screen knows whether it is talking to a server.
 More on the reasoning behind the design is in [`docs/design-language.md`](docs/design-language.md); the
 design specs and implementation plans for each phase are in [`docs/superpowers/`](docs/superpowers/).
+Planned later work is in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Contributing
 

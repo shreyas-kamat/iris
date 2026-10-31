@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Iris does not use the camera. This message is required because the voice-call library (WebRTC) includes camera support.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Iris records what you say and sends it to your Hermes server to dictate and to talk with Iris.</string>
+	<string>Iris uses your microphone for dictation and voice calls. Audio goes to your Hermes server, or directly to OpenAI when you choose GPT-Live.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

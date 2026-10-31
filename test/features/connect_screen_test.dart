@@ -100,6 +100,14 @@ void main() {
   testWidgets('a bare LAN address goes out over http', (tester) async {
     await tester.pumpWidget(harness(mode: ConnectionMode.lan));
     await submitAddress(tester, '192.168.1.20:9119');
+    // Dio schedules work outside the fake clock. Wait for the observable
+    // request rather than assuming a busy release-build machine finishes it
+    // within submitAddress's short delay.
+    await tester.runAsync(() async {
+      for (var i = 0; i < 100 && http.requests.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
     expect(http.requests, isNotEmpty);
     expect(http.requests.first.uri.scheme, 'http');
     expect(http.requests.first.uri.host, '192.168.1.20');

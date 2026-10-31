@@ -115,7 +115,7 @@ class _MicSheet extends StatelessWidget {
                 ? 'Iris can’t hear you because access is blocked. Turn it on '
                       'in Settings to dictate or talk.'
                 : 'Used only while you dictate or talk. Audio goes to your own '
-                      'Hermes server.',
+                      'Hermes server, or directly to OpenAI for GPT-Live calls.',
             textAlign: TextAlign.center,
             style: theme.typography.body.copyWith(
               fontSize: 14.5,

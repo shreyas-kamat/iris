@@ -244,6 +244,13 @@ class SettingsScreen extends ConsumerWidget {
               title: 'About',
               children: [
                 IrisSettingsRow(
+                  label: 'Privacy policy',
+                  sub: 'How Iris handles your data',
+                  onTap: () => unawaited(
+                    openLink('https://iris.shreyaskamat.in/privacy-policy'),
+                  ),
+                ),
+                IrisSettingsRow(
                   label: 'Open source licences',
                   sub: 'Apache-2.0 · © 2026 Shreyas Kamat',
                   onTap: () => showLicensePage(
