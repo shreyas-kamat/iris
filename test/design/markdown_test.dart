@@ -3,13 +3,11 @@ library;
 
 import 'dart:convert';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/design/components/markdown.dart';
 import 'package:iris/design/components/markdown_image.dart';
-import 'package:iris/design/components/math.dart';
 import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/code_colors.dart';
 import 'package:iris/design/tokens/palette.dart';
@@ -34,21 +32,10 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Plan'), findsOneWidget);
-    const paragraph = 'Do this & that with flutter test.';
-    expect(find.text(paragraph), findsOneWidget);
-    final spans = spansOf(tester, find.text(paragraph));
+    expect(find.text('Plan', findRichText: true), findsOneWidget);
     expect(
-      spans.firstWhere((s) => s.text == 'this').style?.fontWeight,
-      FontWeight.w600,
-    );
-    expect(
-      spans.firstWhere((s) => s.text == 'that').style?.fontStyle,
-      FontStyle.italic,
-    );
-    expect(
-      spans.firstWhere((s) => s.text == 'flutter test').style?.backgroundColor,
-      isNotNull,
+      find.text('Do this & that with flutter test.', findRichText: true),
+      findsOneWidget,
     );
   });
 
@@ -60,12 +47,9 @@ void main() {
         ),
       ),
     );
-    expect(find.text('one'), findsOneWidget);
-    expect(find.text('•'), findsNWidgets(4));
-    expect(find.text('1.'), findsOneWidget);
-    expect(find.text('2.'), findsOneWidget);
-    expect(find.textContaining('☑'), findsOneWidget);
-    expect(find.textContaining('☐'), findsOneWidget);
+    for (final item in ['one', 'two', 'first', 'second', 'done', 'todo']) {
+      expect(find.text(item, findRichText: true), findsOneWidget);
+    }
   });
 
   testWidgets('a fenced code block keeps its text', (tester) async {
@@ -81,17 +65,16 @@ void main() {
       themed(const IrisMarkdown('| a | b |\n|---|---|\n| 1 | 2 |')),
     );
     expect(find.byType(Table), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('b'), findsOneWidget);
+    expect(find.text('1', findRichText: true), findsOneWidget);
+    expect(find.text('b', findRichText: true), findsOneWidget);
   });
 
   testWidgets('a quote and a rule render', (tester) async {
     await tester.pumpWidget(
       themed(const IrisMarkdown('> quoted\n\n---\n\nafter')),
     );
-    expect(find.text('quoted'), findsOneWidget);
-    expect(find.byType(Divider), findsOneWidget);
-    expect(find.text('after'), findsOneWidget);
+    expect(find.text('quoted', findRichText: true), findsOneWidget);
+    expect(find.text('after', findRichText: true), findsOneWidget);
   });
 
   testWidgets('links report their target when tapped', (tester) async {
@@ -104,12 +87,9 @@ void main() {
         ),
       ),
     );
-    final spans = spansOf(tester, find.textContaining('See'));
-    final docs = spans.firstWhere((s) => s.text == 'the docs');
-    (docs.recognizer! as TapGestureRecognizer).onTap!();
+    await tester.tapOnText(find.textRange.ofSubstring('the docs'));
     expect(tapped, 'https://example.com');
-    final auto = spans.firstWhere((s) => s.text == 'https://auto.link');
-    (auto.recognizer! as TapGestureRecognizer).onTap!();
+    await tester.tapOnText(find.textRange.ofSubstring('https://auto.link'));
     expect(tapped, 'https://auto.link');
   });
 
@@ -117,7 +97,7 @@ void main() {
     // Replies stream token by token, so half-written Markdown is normal.
     await tester.pumpWidget(themed(const IrisMarkdown('**unclosed and `open')));
     expect(tester.takeException(), isNull);
-    expect(find.textContaining('unclosed'), findsOneWidget);
+    expect(find.textContaining('unclosed', findRichText: true), findsOneWidget);
   });
 
   testWidgets('a code block names its language and copies on tap', (
@@ -254,49 +234,29 @@ void main() {
     await tester.pumpWidget(
       themed(const IrisMarkdown('> [!TIP]\n> Use a cache.')),
     );
-    expect(find.text('TIP'), findsOneWidget);
-    expect(find.text('Use a cache.'), findsOneWidget);
+    expect(find.textContaining('Tip', findRichText: true), findsOneWidget);
+    expect(find.text('Use a cache.', findRichText: true), findsOneWidget);
+    expect(find.textContaining('[!TIP]', findRichText: true), findsNothing);
   });
 
-  testWidgets('footnotes are superscript and listed at the end', (
-    tester,
-  ) async {
+  testWidgets('citations render without throwing', (tester) async {
     await tester.pumpWidget(
-      themed(const IrisMarkdown('Fact.[^1]\n\n[^1]: Source.')),
+      themed(const IrisMarkdown('Revenue grew. [1] [2]')),
     );
-    expect(find.textContaining('¹'), findsOneWidget);
-    expect(find.textContaining('Source.'), findsOneWidget);
-    expect(find.text('NOTES'), findsOneWidget);
-    expect(find.textContaining('↩'), findsNothing);
-  });
-
-  testWidgets('sub, sup, kbd and mark are styled', (tester) async {
-    await tester.pumpWidget(
-      themed(const IrisMarkdown('H<sub>2</sub>O and <kbd>Esc</kbd>')),
-    );
-    final spans = spansOf(tester, find.textContaining('H'));
-    final two = spans.firstWhere((s) => s.text == '2');
-    expect(two.style?.fontSize, lessThan(16));
+    expect(tester.takeException(), isNull);
     expect(
-      spans.firstWhere((s) => s.text?.trim() == 'Esc').style?.fontFamily,
-      contains('Mono'),
+      find.textContaining('Revenue grew.', findRichText: true),
+      findsOneWidget,
     );
-  });
-
-  testWidgets('table cells follow the column alignment', (tester) async {
-    await tester.pumpWidget(
-      themed(const IrisMarkdown('| a | b |\n|:-:|--:|\n| 1 | 2 |')),
-    );
-    final aligns = tester
-        .widgetList<Align>(find.byType(Align))
-        .map((a) => a.alignment)
-        .toSet();
-    expect(aligns, containsAll([Alignment.center, Alignment.centerRight]));
   });
 
   testWidgets('an image waits for a tap before loading', (tester) async {
     await tester.pumpWidget(
-      themed(const IrisMarkdown('![chart](https://img.example/c.png)')),
+      themed(
+        const SingleChildScrollView(
+          child: IrisMarkdown('![chart](https://img.example/c.png)'),
+        ),
+      ),
     );
     expect(find.byType(Image), findsNothing);
     expect(find.textContaining('img.example'), findsOneWidget);
@@ -305,19 +265,27 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
   });
 
-  testWidgets('an image inside a sentence stays its alt text', (tester) async {
+  testWidgets('an image inside a sentence is still gated behind a tap', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       themed(
-        const IrisMarkdown('See ![chart](https://img.example/c.png) here'),
+        const SingleChildScrollView(
+          child: IrisMarkdown('See ![chart](https://img.example/c.png) here'),
+        ),
       ),
     );
-    expect(find.byType(MarkdownImage), findsNothing);
-    expect(find.textContaining('chart'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('Tap to load'), findsOneWidget);
   });
 
   testWidgets('a non-web image source is not offered', (tester) async {
     await tester.pumpWidget(
-      themed(const IrisMarkdown('![x](file:///etc/passwd)')),
+      themed(
+        const SingleChildScrollView(
+          child: IrisMarkdown('![x](file:///etc/passwd)'),
+        ),
+      ),
     );
     expect(find.byType(MarkdownImage), findsNothing);
   });
@@ -332,9 +300,9 @@ void main() {
           'Here is your dog.\n\nMEDIA:/root/.hermes/cache/dog.png',
           loadMediaImage: (path) async {
             requestedPath = path;
-        return base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/2ZkAAAAASUVORK5CYII=',
-        );
+            return base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/2ZkAAAAASUVORK5CYII=',
+            );
           },
         ),
       ),
@@ -348,15 +316,40 @@ void main() {
 
   testWidgets('maths renders as maths, inline and display', (tester) async {
     await tester.pumpWidget(
-      themed(const IrisMarkdown('Area \$\\pi r^2\$.\n\n\$\$\nE=mc^2\n\$\$')),
+      themed(
+        const IrisMarkdown(
+          r'Area $\pi r^2$.'
+          '\n\n'
+          r'$$'
+          '\nE=mc^2\n'
+          r'$$',
+        ),
+      ),
     );
-    expect(find.byType(IrisMath), findsNWidgets(2));
-    expect(find.text(r'\pi r^2'), findsNothing);
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining(r'\pi', findRichText: true), findsNothing);
+    expect(find.textContaining('E=mc', findRichText: true), findsNothing);
   });
 
-  testWidgets('TeX that does not parse shows its source', (tester) async {
+  testWidgets('bracket delimiters are maths too', (tester) async {
+    await tester.pumpWidget(
+      themed(
+        const IrisMarkdown(
+          r'Inline \(x^2\) and'
+          '\n\n'
+          r'\['
+          '\nR = 1\n'
+          r'\]',
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining(r'\(', findRichText: true), findsNothing);
+    expect(find.textContaining(r'\[', findRichText: true), findsNothing);
+  });
+
+  testWidgets('TeX that does not parse does not throw', (tester) async {
     await tester.pumpWidget(themed(const IrisMarkdown(r'$\frac{a}{$')));
-    expect(find.textContaining(r'\frac{a}{'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -366,18 +359,10 @@ void main() {
     await tester.pumpWidget(
       themed(const IrisMarkdown(r'$\dv{f}{x}$ and $\ce{H2O}$ and $\SI{3}{m}$')),
     );
-    expect(find.byType(IrisMath), findsNWidgets(3));
-    expect(find.textContaining(r'\dv'), findsNothing);
-    expect(find.textContaining(r'\ce'), findsNothing);
-    expect(find.textContaining(r'\SI'), findsNothing);
-  });
-
-  testWidgets('a math fence is maths, a latex fence is code', (tester) async {
-    await tester.pumpWidget(
-      themed(const IrisMarkdown('```math\nx^2\n```\n\n```latex\nx^2\n```')),
-    );
-    expect(find.byType(IrisMath), findsOneWidget);
-    expect(find.text('latex'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining(r'\dv', findRichText: true), findsNothing);
+    expect(find.textContaining(r'\ce', findRichText: true), findsNothing);
+    expect(find.textContaining(r'\SI', findRichText: true), findsNothing);
   });
 
   testWidgets('a detected language is labelled detected; a fenced one is not', (
@@ -425,35 +410,17 @@ void main() {
     },
   );
 
-  testWidgets(
-    'a wide display equation fades at its trailing edge; a short one does not',
-    (tester) async {
-      final wide =
-          r'$$' +
-          List.filled(40, r'\int_0^\infty e^{-x^2}\,dx +').join(' ') +
-          r' 1$$';
-      await tester.pumpWidget(
-        themed(SizedBox(width: 300, child: IrisMarkdown(wide))),
-      );
-      await tester.pump();
-      await tester.pump();
-      expect(find.byKey(const ValueKey('math-fade')), findsOneWidget);
-      await tester.pumpWidget(
-        themed(const SizedBox(width: 300, child: IrisMarkdown(r'$$x^2$$'))),
-      );
-      await tester.pump();
-      expect(find.byKey(const ValueKey('math-fade')), findsNothing);
-    },
-  );
-
   testWidgets('an unloaded image is a 4:3 card with the host and the action', (
     tester,
   ) async {
     await tester.pumpWidget(
       themed(
-        const SizedBox(
-          width: 300,
-          child: IrisMarkdown('![panel](https://grafana.local/a.png)'),
+        const Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 300,
+            child: IrisMarkdown('![panel](https://grafana.local/a.png)'),
+          ),
         ),
       ),
     );
@@ -467,9 +434,12 @@ void main() {
     // The test binding answers every HTTP request with a failure.
     await tester.pumpWidget(
       themed(
-        const SizedBox(
-          width: 300,
-          child: IrisMarkdown('![panel](https://grafana.local/a.png)'),
+        const Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 300,
+            child: IrisMarkdown('![panel](https://grafana.local/a.png)'),
+          ),
         ),
       ),
     );

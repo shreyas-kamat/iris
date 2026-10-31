@@ -12,7 +12,10 @@ void main() {
     ImageHostScope(
       hosts: hosts,
       onAllow: onAllow ?? (_) {},
-      child: const SizedBox(width: 300, child: IrisMarkdown(markdown)),
+      child: const Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(width: 300, child: IrisMarkdown(markdown)),
+      ),
     ),
   );
 
@@ -49,7 +52,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      themed(const SizedBox(width: 300, child: IrisMarkdown(markdown))),
+      themed(
+        const Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(width: 300, child: IrisMarkdown(markdown)),
+        ),
+      ),
     );
     await tester.longPress(find.text('Tap to load'));
     await tester.pumpAndSettle();
