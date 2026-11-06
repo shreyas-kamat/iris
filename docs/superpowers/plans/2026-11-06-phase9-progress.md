@@ -11,7 +11,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | `d535765` |
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | done | `c205f14` |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
-| G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `PENDING` |
+| G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | todo | |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
