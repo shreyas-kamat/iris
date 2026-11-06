@@ -30,18 +30,36 @@ Arguments marked with ? are optional. Sub-components can be inline or referenced
 Props typed `ActionExpression` accept one @step, or Action([@steps...]) for several. See the Action section for available steps (@ToAssistant, @OpenUrl, @Set, @Reset, @Ask).
 Props marked `$binding<type>` accept a `$variable` reference for two-way binding.
 
-Stack(children: any[], direction?: "column" | "row", gap?: "s" | "m" | "l") — Lays out children in a column (default) or a row
-Card(children: any[], title?: string) — A titled container with a border
-Section(title: string, children: any[]) — A heading followed by content
-Divider() — A thin line between groups
-Text(value: string, variant?: "body" | "title" | "caption" | "mono") — A run of text
-KeyValue(key: string, value: string) — A label with its value on one line
-Stat(label: string, value: string, delta?: string, trend?: "up" | "down" | "flat") — One big number with a label and an optional change
-StatRow(stats: Stat[]) — A row of Stat components
-StatusPill(label: string, tone?: "neutral" | "good" | "warn" | "bad") — A small coloured status label
-ListRow(title: string, subtitle?: string, trailing?: string) — A row with a title, an optional subtitle and trailing text
-Progress(value: number, label?: string) — A bar showing a value from 0 to 100
-Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary") — A button; without an action it sends its label to the assistant
+### Layout
+Stack(children: any[], direction?: "column" | "row", gap?: "s" | "m" | "l") — Lays out children in a column (default) or a row. Use it as the root of almost every display
+Card(children: any[], title?: string) — A bordered container with an optional title. One card per idea; do not nest cards
+Section(title: string, children: any[]) — A heading followed by content, for grouping without a border
+Divider() — A thin line between groups. Prefer Section to a bare divider
+Tabs(items: Tab[]) — Switches between Tab children, one visible at a time. Keep to 2 to 5 tabs
+Tab(label: string, children: any[]) — One page of a Tabs; the label is the tab title and should be a word or two
+Expander(title: string, children: any[], open?: boolean) — A title that opens to reveal children; use for detail most people will not need
+
+### Text and data
+Text(value: string, variant?: "body" | "title" | "caption" | "mono") — A run of text; title is a heading, caption is small and muted, mono is for ids and paths
+Markdown(value: string) — Formatted text (bold, lists, links, code); use when the content is already Markdown
+KeyValue(key: string, value: string) — A label with its value on one line, for facts such as "Region: eu-west"
+Stat(label: string, value: string, delta?: string, trend?: "up" | "down" | "flat") — One big number with a label and an optional change; keep value short, such as "12" or "98%"
+StatRow(stats: Stat[]) — A row of 2 to 4 Stat components that share the width
+StatusPill(label: string, tone?: "neutral" | "good" | "warn" | "bad") — A small coloured status label; tone says how it feels, so pick it for meaning, not looks
+Table(columns: string[], rows: any[][]) — A grid of text. columns are the headings; each row has one cell per column. Up to about 6 columns
+ListRow(title: string, subtitle?: string, trailing?: string) — A row with a title, an optional second line and trailing text, for lists of things
+Timeline(items: TimelineItem[]) — Events in time order, oldest first, joined by a line
+TimelineItem(title: string, time?: string, detail?: string) — One event on a Timeline; time is shown as given, so write it the way a person would say it
+Checklist(items: ChecklistItem[]) — A read-only list of items that are done or not yet done
+ChecklistItem(label: string, done?: boolean) — One line of a Checklist; done defaults to false
+Progress(value: number, label?: string, style?: "bar" | "ring") — A bar (or ring) showing a value from 0 to 100, not a fraction
+CodeBlock(code: string, language?: string) — Monospaced code with copy; language is a short name such as "dart" or "bash"
+Diff(before: string, after: string) — Two versions of some text, with the changed lines marked. Use for edits, not for general comparison
+Image(url: string, alt: string) — A picture from an allowed image host. alt is required and should describe it for a screen reader
+Link(label: string, url: string) — Text that opens a web address after the person confirms. Use for sources, not for actions
+
+### Actions
+Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary") — A button. Without an action it sends its label to the assistant as the person's next message
 
 ## Built-in Functions
 
@@ -62,7 +80,9 @@ Use @-prefixed built-in functions (@Count, @Sum, @Avg, @Min, @Max, @Round) on da
 @Floor(number: number | number[]) → number | number[] — Round down to nearest integer
 @Ceil(number: number | number[]) → number | number[] — Round up to nearest integer
 @Each(array: any[], varName: string, template: any) — Evaluate template for each element. varName is the loop variable — use it ONLY inside the template expression (inline). Do NOT create a separate statement for the template.
-@Percent(done: number, total: number) → number — done as a percentage of total, rounded
+@Percent(done: number, total: number) → number — done as a percentage of total, rounded to a whole number
+@Money(value: number, currency: string) → string — value formatted as money in the given ISO currency code, such as "GBP"
+@Ago(timestamp: any) → string — a timestamp (ISO 8601 text or epoch milliseconds) as relative time, such as "3 hours ago"
 
 Builtins compose — output of one is input to the next:
 `@Count(@Filter(data.rows, "field", "==", "val"))` for KPIs/chart values, `@Round(@Avg(data.rows.score), 1)`, `@Each(data.rows, "item", Comp(item.field))` for per-item rendering.
@@ -82,7 +102,7 @@ Available steps:
 - @OpenUrl(url: string) — Navigate to a URL
 - @Set(variable: $variable, value: any) — Set a $variable to a specific value
 - @Reset(variable: $variable) — Reset $variables to their declared defaults; pass several to reset each (e.g. @Reset($title, $priority) restores $title="" and $priority="medium")
-- @Ask(text: string, context?: any) — Send a message to the assistant as if the person typed it; context is hidden data
+- @Ask(text: string, context?: any) — Send a message to the assistant as if the person typed it; context is hidden data for it
 
 Example — simple nav:
 ```

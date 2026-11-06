@@ -1,8 +1,7 @@
 {
   "id": "https://iris.shreyaskamat.in/genui/library/v1",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "root": "Stack",
-  "x-iris-provisional": "A 12-component stand-in so the plugin can validate before the real library exists. Replaced by the Dart export (server/hermes-iris/catalog/v1.library.json) in plan task 3.1.",
   "schema": {
     "properties": {
       "Stack": {
@@ -17,8 +16,20 @@
       "Divider": {
         "$ref": "#/$defs/Divider"
       },
+      "Tabs": {
+        "$ref": "#/$defs/Tabs"
+      },
+      "Tab": {
+        "$ref": "#/$defs/Tab"
+      },
+      "Expander": {
+        "$ref": "#/$defs/Expander"
+      },
       "Text": {
         "$ref": "#/$defs/Text"
+      },
+      "Markdown": {
+        "$ref": "#/$defs/Markdown"
       },
       "KeyValue": {
         "$ref": "#/$defs/KeyValue"
@@ -32,11 +43,38 @@
       "StatusPill": {
         "$ref": "#/$defs/StatusPill"
       },
+      "Table": {
+        "$ref": "#/$defs/Table"
+      },
       "ListRow": {
         "$ref": "#/$defs/ListRow"
       },
+      "Timeline": {
+        "$ref": "#/$defs/Timeline"
+      },
+      "TimelineItem": {
+        "$ref": "#/$defs/TimelineItem"
+      },
+      "Checklist": {
+        "$ref": "#/$defs/Checklist"
+      },
+      "ChecklistItem": {
+        "$ref": "#/$defs/ChecklistItem"
+      },
       "Progress": {
         "$ref": "#/$defs/Progress"
+      },
+      "CodeBlock": {
+        "$ref": "#/$defs/CodeBlock"
+      },
+      "Diff": {
+        "$ref": "#/$defs/Diff"
+      },
+      "Image": {
+        "$ref": "#/$defs/Image"
+      },
+      "Link": {
+        "$ref": "#/$defs/Link"
       },
       "Button": {
         "$ref": "#/$defs/Button"
@@ -45,7 +83,7 @@
     "$defs": {
       "Stack": {
         "type": "object",
-        "description": "Lays out children in a column (default) or a row",
+        "description": "Lays out children in a column (default) or a row. Use it as the root of almost every display",
         "properties": {
           "children": {
             "type": "array",
@@ -75,7 +113,7 @@
       },
       "Card": {
         "type": "object",
-        "description": "A titled container with a border",
+        "description": "A bordered container with an optional title. One card per idea; do not nest cards",
         "properties": {
           "children": {
             "type": "array",
@@ -93,7 +131,7 @@
       },
       "Section": {
         "type": "object",
-        "description": "A heading followed by content",
+        "description": "A heading followed by content, for grouping without a border",
         "properties": {
           "title": {
             "type": "string"
@@ -112,12 +150,68 @@
       },
       "Divider": {
         "type": "object",
-        "description": "A thin line between groups",
+        "description": "A thin line between groups. Prefer Section to a bare divider",
         "properties": {}
+      },
+      "Tabs": {
+        "type": "object",
+        "description": "Switches between Tab children, one visible at a time. Keep to 2 to 5 tabs",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Tab"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "Tab": {
+        "type": "object",
+        "description": "One page of a Tabs; the label is the tab title and should be a word or two",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Component"
+            }
+          }
+        },
+        "required": [
+          "label",
+          "children"
+        ]
+      },
+      "Expander": {
+        "type": "object",
+        "description": "A title that opens to reveal children; use for detail most people will not need",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Component"
+            }
+          },
+          "open": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "title",
+          "children"
+        ]
       },
       "Text": {
         "type": "object",
-        "description": "A run of text",
+        "description": "A run of text; title is a heading, caption is small and muted, mono is for ids and paths",
         "properties": {
           "value": {
             "type": "string"
@@ -136,9 +230,21 @@
           "value"
         ]
       },
+      "Markdown": {
+        "type": "object",
+        "description": "Formatted text (bold, lists, links, code); use when the content is already Markdown",
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ]
+      },
       "KeyValue": {
         "type": "object",
-        "description": "A label with its value on one line",
+        "description": "A label with its value on one line, for facts such as \"Region: eu-west\"",
         "properties": {
           "key": {
             "type": "string"
@@ -154,7 +260,7 @@
       },
       "Stat": {
         "type": "object",
-        "description": "One big number with a label and an optional change",
+        "description": "One big number with a label and an optional change; keep value short, such as \"12\" or \"98%\"",
         "properties": {
           "label": {
             "type": "string"
@@ -181,7 +287,7 @@
       },
       "StatRow": {
         "type": "object",
-        "description": "A row of Stat components",
+        "description": "A row of 2 to 4 Stat components that share the width",
         "properties": {
           "stats": {
             "type": "array",
@@ -196,7 +302,7 @@
       },
       "StatusPill": {
         "type": "object",
-        "description": "A small coloured status label",
+        "description": "A small coloured status label; tone says how it feels, so pick it for meaning, not looks",
         "properties": {
           "label": {
             "type": "string"
@@ -215,9 +321,32 @@
           "label"
         ]
       },
+      "Table": {
+        "type": "object",
+        "description": "A grid of text. columns are the headings; each row has one cell per column. Up to about 6 columns",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {}
+            }
+          }
+        },
+        "required": [
+          "columns",
+          "rows"
+        ]
+      },
       "ListRow": {
         "type": "object",
-        "description": "A row with a title, an optional subtitle and trailing text",
+        "description": "A row with a title, an optional second line and trailing text, for lists of things",
         "properties": {
           "title": {
             "type": "string"
@@ -233,24 +362,157 @@
           "title"
         ]
       },
+      "Timeline": {
+        "type": "object",
+        "description": "Events in time order, oldest first, joined by a line",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TimelineItem"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "TimelineItem": {
+        "type": "object",
+        "description": "One event on a Timeline; time is shown as given, so write it the way a person would say it",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "Checklist": {
+        "type": "object",
+        "description": "A read-only list of items that are done or not yet done",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ChecklistItem"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "ChecklistItem": {
+        "type": "object",
+        "description": "One line of a Checklist; done defaults to false",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
       "Progress": {
         "type": "object",
-        "description": "A bar showing a value from 0 to 100",
+        "description": "A bar (or ring) showing a value from 0 to 100, not a fraction",
         "properties": {
           "value": {
             "type": "number"
           },
           "label": {
             "type": "string"
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "bar",
+              "ring"
+            ]
           }
         },
         "required": [
           "value"
         ]
       },
+      "CodeBlock": {
+        "type": "object",
+        "description": "Monospaced code with copy; language is a short name such as \"dart\" or \"bash\"",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "Diff": {
+        "type": "object",
+        "description": "Two versions of some text, with the changed lines marked. Use for edits, not for general comparison",
+        "properties": {
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "before",
+          "after"
+        ]
+      },
+      "Image": {
+        "type": "object",
+        "description": "A picture from an allowed image host. alt is required and should describe it for a screen reader",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "alt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "alt"
+        ]
+      },
+      "Link": {
+        "type": "object",
+        "description": "Text that opens a web address after the person confirms. Use for sources, not for actions",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ]
+      },
       "Button": {
         "type": "object",
-        "description": "A button; without an action it sends its label to the assistant",
+        "description": "A button. Without an action it sends its label to the assistant as the person's next message",
         "properties": {
           "label": {
             "type": "string"
@@ -285,7 +547,19 @@
             "$ref": "#/$defs/Divider"
           },
           {
+            "$ref": "#/$defs/Tabs"
+          },
+          {
+            "$ref": "#/$defs/Tab"
+          },
+          {
+            "$ref": "#/$defs/Expander"
+          },
+          {
             "$ref": "#/$defs/Text"
+          },
+          {
+            "$ref": "#/$defs/Markdown"
           },
           {
             "$ref": "#/$defs/KeyValue"
@@ -300,10 +574,37 @@
             "$ref": "#/$defs/StatusPill"
           },
           {
+            "$ref": "#/$defs/Table"
+          },
+          {
             "$ref": "#/$defs/ListRow"
           },
           {
+            "$ref": "#/$defs/Timeline"
+          },
+          {
+            "$ref": "#/$defs/TimelineItem"
+          },
+          {
+            "$ref": "#/$defs/Checklist"
+          },
+          {
+            "$ref": "#/$defs/ChecklistItem"
+          },
+          {
             "$ref": "#/$defs/Progress"
+          },
+          {
+            "$ref": "#/$defs/CodeBlock"
+          },
+          {
+            "$ref": "#/$defs/Diff"
+          },
+          {
+            "$ref": "#/$defs/Image"
+          },
+          {
+            "$ref": "#/$defs/Link"
           },
           {
             "$ref": "#/$defs/Button"
@@ -362,7 +663,7 @@
     },
     "functions": {
       "Percent": {
-        "description": "done as a percentage of total, rounded",
+        "description": "done as a percentage of total, rounded to a whole number",
         "params": {
           "type": "object",
           "properties": {
@@ -381,11 +682,47 @@
         "returns": {
           "type": "number"
         }
+      },
+      "Money": {
+        "description": "value formatted as money in the given ISO currency code, such as \"GBP\"",
+        "params": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value",
+            "currency"
+          ]
+        },
+        "returns": {
+          "type": "string"
+        }
+      },
+      "Ago": {
+        "description": "a timestamp (ISO 8601 text or epoch milliseconds) as relative time, such as \"3 hours ago\"",
+        "params": {
+          "type": "object",
+          "properties": {
+            "timestamp": {}
+          },
+          "required": [
+            "timestamp"
+          ]
+        },
+        "returns": {
+          "type": "string"
+        }
       }
     },
     "actions": {
       "Ask": {
-        "description": "Send a message to the assistant as if the person typed it; context is hidden data",
+        "description": "Send a message to the assistant as if the person typed it; context is hidden data for it",
         "params": {
           "type": "object",
           "properties": {
@@ -404,63 +741,165 @@
   "components": {
     "Stack": {
       "signature": "Stack(children: any[], direction?: \"column\" | \"row\", gap?: \"s\" | \"m\" | \"l\")",
-      "description": "Lays out children in a column (default) or a row"
+      "description": "Lays out children in a column (default) or a row. Use it as the root of almost every display"
     },
     "Card": {
       "signature": "Card(children: any[], title?: string)",
-      "description": "A titled container with a border"
+      "description": "A bordered container with an optional title. One card per idea; do not nest cards"
     },
     "Section": {
       "signature": "Section(title: string, children: any[])",
-      "description": "A heading followed by content"
+      "description": "A heading followed by content, for grouping without a border"
     },
     "Divider": {
       "signature": "Divider()",
-      "description": "A thin line between groups"
+      "description": "A thin line between groups. Prefer Section to a bare divider"
+    },
+    "Tabs": {
+      "signature": "Tabs(items: Tab[])",
+      "description": "Switches between Tab children, one visible at a time. Keep to 2 to 5 tabs"
+    },
+    "Tab": {
+      "signature": "Tab(label: string, children: any[])",
+      "description": "One page of a Tabs; the label is the tab title and should be a word or two"
+    },
+    "Expander": {
+      "signature": "Expander(title: string, children: any[], open?: boolean)",
+      "description": "A title that opens to reveal children; use for detail most people will not need"
     },
     "Text": {
       "signature": "Text(value: string, variant?: \"body\" | \"title\" | \"caption\" | \"mono\")",
-      "description": "A run of text"
+      "description": "A run of text; title is a heading, caption is small and muted, mono is for ids and paths"
+    },
+    "Markdown": {
+      "signature": "Markdown(value: string)",
+      "description": "Formatted text (bold, lists, links, code); use when the content is already Markdown"
     },
     "KeyValue": {
       "signature": "KeyValue(key: string, value: string)",
-      "description": "A label with its value on one line"
+      "description": "A label with its value on one line, for facts such as \"Region: eu-west\""
     },
     "Stat": {
       "signature": "Stat(label: string, value: string, delta?: string, trend?: \"up\" | \"down\" | \"flat\")",
-      "description": "One big number with a label and an optional change"
+      "description": "One big number with a label and an optional change; keep value short, such as \"12\" or \"98%\""
     },
     "StatRow": {
       "signature": "StatRow(stats: Stat[])",
-      "description": "A row of Stat components"
+      "description": "A row of 2 to 4 Stat components that share the width"
     },
     "StatusPill": {
       "signature": "StatusPill(label: string, tone?: \"neutral\" | \"good\" | \"warn\" | \"bad\")",
-      "description": "A small coloured status label"
+      "description": "A small coloured status label; tone says how it feels, so pick it for meaning, not looks"
+    },
+    "Table": {
+      "signature": "Table(columns: string[], rows: any[][])",
+      "description": "A grid of text. columns are the headings; each row has one cell per column. Up to about 6 columns"
     },
     "ListRow": {
       "signature": "ListRow(title: string, subtitle?: string, trailing?: string)",
-      "description": "A row with a title, an optional subtitle and trailing text"
+      "description": "A row with a title, an optional second line and trailing text, for lists of things"
+    },
+    "Timeline": {
+      "signature": "Timeline(items: TimelineItem[])",
+      "description": "Events in time order, oldest first, joined by a line"
+    },
+    "TimelineItem": {
+      "signature": "TimelineItem(title: string, time?: string, detail?: string)",
+      "description": "One event on a Timeline; time is shown as given, so write it the way a person would say it"
+    },
+    "Checklist": {
+      "signature": "Checklist(items: ChecklistItem[])",
+      "description": "A read-only list of items that are done or not yet done"
+    },
+    "ChecklistItem": {
+      "signature": "ChecklistItem(label: string, done?: boolean)",
+      "description": "One line of a Checklist; done defaults to false"
     },
     "Progress": {
-      "signature": "Progress(value: number, label?: string)",
-      "description": "A bar showing a value from 0 to 100"
+      "signature": "Progress(value: number, label?: string, style?: \"bar\" | \"ring\")",
+      "description": "A bar (or ring) showing a value from 0 to 100, not a fraction"
+    },
+    "CodeBlock": {
+      "signature": "CodeBlock(code: string, language?: string)",
+      "description": "Monospaced code with copy; language is a short name such as \"dart\" or \"bash\""
+    },
+    "Diff": {
+      "signature": "Diff(before: string, after: string)",
+      "description": "Two versions of some text, with the changed lines marked. Use for edits, not for general comparison"
+    },
+    "Image": {
+      "signature": "Image(url: string, alt: string)",
+      "description": "A picture from an allowed image host. alt is required and should describe it for a screen reader"
+    },
+    "Link": {
+      "signature": "Link(label: string, url: string)",
+      "description": "Text that opens a web address after the person confirms. Use for sources, not for actions"
     },
     "Button": {
       "signature": "Button(label: string, action?: ActionExpression, variant?: \"primary\" | \"secondary\")",
-      "description": "A button; without an action it sends its label to the assistant"
+      "description": "A button. Without an action it sends its label to the assistant as the person's next message"
     }
   },
   "functions": {
     "Percent": {
       "signature": "Percent(done: number, total: number) → number",
-      "description": "done as a percentage of total, rounded"
+      "description": "done as a percentage of total, rounded to a whole number"
+    },
+    "Money": {
+      "signature": "Money(value: number, currency: string) → string",
+      "description": "value formatted as money in the given ISO currency code, such as \"GBP\""
+    },
+    "Ago": {
+      "signature": "Ago(timestamp: any) → string",
+      "description": "a timestamp (ISO 8601 text or epoch milliseconds) as relative time, such as \"3 hours ago\""
     }
   },
   "actions": {
     "Ask": {
       "signature": "Ask(text: string, context?: any)",
-      "description": "Send a message to the assistant as if the person typed it; context is hidden data"
+      "description": "Send a message to the assistant as if the person typed it; context is hidden data for it"
     }
-  }
+  },
+  "componentGroups": [
+    {
+      "name": "Layout",
+      "components": [
+        "Stack",
+        "Card",
+        "Section",
+        "Divider",
+        "Tabs",
+        "Tab",
+        "Expander"
+      ]
+    },
+    {
+      "name": "Text and data",
+      "components": [
+        "Text",
+        "Markdown",
+        "KeyValue",
+        "Stat",
+        "StatRow",
+        "StatusPill",
+        "Table",
+        "ListRow",
+        "Timeline",
+        "TimelineItem",
+        "Checklist",
+        "ChecklistItem",
+        "Progress",
+        "CodeBlock",
+        "Diff",
+        "Image",
+        "Link"
+      ]
+    },
+    {
+      "name": "Actions",
+      "components": [
+        "Button"
+      ]
+    }
+  ]
 }

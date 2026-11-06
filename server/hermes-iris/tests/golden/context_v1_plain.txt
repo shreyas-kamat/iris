@@ -6,5 +6,5 @@ Rules:
 - code is OpenUI Lang: one statement per line, root first, positional arguments, e.g. root = Stack([a])  a = Text("Hi", "title"). Every statement must be reachable from root.
 - Prefer a template when one fits. Never put secrets or tokens in a display.
 - If iris_ui returns errors, fix them and send it again.
-Components: Stack(children, direction?, gap?), Card(children, title?), Section(title, children), Divider(), Text(value, variant?), KeyValue(key, value), Stat(label, value, delta?, trend?), StatRow(stats), StatusPill(label, tone?), ListRow(title, subtitle?, trailing?), Progress(value, label?), Button(label, action?, variant?)
+Components: Stack(children, direction?, gap?), Card(children, title?), Section(title, children), Divider(), Tabs(items), Tab(label, children), Expander(title, children, open?), Text(value, variant?), Markdown(value), KeyValue(key, value), Stat(label, value, delta?, trend?), StatRow(stats), StatusPill(label, tone?), Table(columns, rows), ListRow(title, subtitle?, trailing?), Timeline(items), TimelineItem(title, time?, detail?), Checklist(items), ChecklistItem(label, done?), Progress(value, label?, style?), CodeBlock(code, language?), Diff(before, after), Image(url, alt), Link(label, url), Button(label, action?, variant?)
 Full signatures and examples: skill_view('iris:iris-genui', 'references/library.md')

@@ -58,7 +58,7 @@ plugin.yaml  __init__.py  pyproject.toml
 dashboard/{manifest.json,plugin_api.py,dist/index.js}   routes under /api/plugins/iris/
 genui/    store (files), templates, surfaces (iris_ui), tool, guards, context, flags, skill, catalog, paths
 openui/   Python port of the OpenUI Lang lexer, parser, validator and prompt generator (validation only)
-catalog/  v1.library.json: the component library (provisional until the Dart export lands, plan 3.1)
+catalog/  v1.library.json: the component library, exported from `lib/features/genui/render/iris_library.dart` (refresh: `IRIS_WRITE_CATALOG=1 flutter test test/features/genui/iris_library_test.dart`)
 skills/iris-genui/   SKILL.md, references/library.md (generated), references/patterns.md (every program is tested)
 tools/    build_skill_refs.py: regenerates library.md (`--check` fails when it is stale)
 tests/

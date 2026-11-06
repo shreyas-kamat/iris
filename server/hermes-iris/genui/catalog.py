@@ -1,8 +1,8 @@
 """The component libraries the plugin knows (``catalog/*.library.json``).
 
-``v1.library.json`` is exported from Dart (the Iris catalog is defined once, in ``lib/features/genui/render/``; plan
-3.1) and checked in; Python builds the validator and the prompt from that file. Until 3.1 the file is a provisional
-12-component stand-in (``x-iris-provisional``).
+``v1.library.json`` is exported from Dart (the Iris catalog is defined once, in
+``lib/features/genui/render/iris_library.dart``) and checked in; Python builds the validator and the prompt from that
+file. Refresh it with ``IRIS_WRITE_CATALOG=1 flutter test test/features/genui/iris_library_test.dart``.
 """
 
 from __future__ import annotations
