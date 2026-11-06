@@ -36,6 +36,7 @@ def _core():
 
 
 core = _core()
+catalog = importlib.import_module(f"{_PACKAGE}.genui.catalog")
 router = APIRouter()
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
@@ -47,6 +48,6 @@ def capabilities(profile: str | None = None):
     return {
         "version": core.__version__,
         "openui": core.OPENUI_VERSION,
-        "library_ids": [],
+        "library_ids": catalog.library_ids(),
         "features": FEATURES,
     }

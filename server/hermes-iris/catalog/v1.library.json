@@ -1,0 +1,466 @@
+{
+  "id": "https://iris.shreyaskamat.in/genui/library/v1",
+  "version": "0.0.1",
+  "root": "Stack",
+  "x-iris-provisional": "A 12-component stand-in so the plugin can validate before the real library exists. Replaced by the Dart export (server/hermes-iris/catalog/v1.library.json) in plan task 3.1.",
+  "schema": {
+    "properties": {
+      "Stack": {
+        "$ref": "#/$defs/Stack"
+      },
+      "Card": {
+        "$ref": "#/$defs/Card"
+      },
+      "Section": {
+        "$ref": "#/$defs/Section"
+      },
+      "Divider": {
+        "$ref": "#/$defs/Divider"
+      },
+      "Text": {
+        "$ref": "#/$defs/Text"
+      },
+      "KeyValue": {
+        "$ref": "#/$defs/KeyValue"
+      },
+      "Stat": {
+        "$ref": "#/$defs/Stat"
+      },
+      "StatRow": {
+        "$ref": "#/$defs/StatRow"
+      },
+      "StatusPill": {
+        "$ref": "#/$defs/StatusPill"
+      },
+      "ListRow": {
+        "$ref": "#/$defs/ListRow"
+      },
+      "Progress": {
+        "$ref": "#/$defs/Progress"
+      },
+      "Button": {
+        "$ref": "#/$defs/Button"
+      }
+    },
+    "$defs": {
+      "Stack": {
+        "type": "object",
+        "description": "Lays out children in a column (default) or a row",
+        "properties": {
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Component"
+            }
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "column",
+              "row"
+            ]
+          },
+          "gap": {
+            "type": "string",
+            "enum": [
+              "s",
+              "m",
+              "l"
+            ]
+          }
+        },
+        "required": [
+          "children"
+        ]
+      },
+      "Card": {
+        "type": "object",
+        "description": "A titled container with a border",
+        "properties": {
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Component"
+            }
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "children"
+        ]
+      },
+      "Section": {
+        "type": "object",
+        "description": "A heading followed by content",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Component"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "children"
+        ]
+      },
+      "Divider": {
+        "type": "object",
+        "description": "A thin line between groups",
+        "properties": {}
+      },
+      "Text": {
+        "type": "object",
+        "description": "A run of text",
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "body",
+              "title",
+              "caption",
+              "mono"
+            ]
+          }
+        },
+        "required": [
+          "value"
+        ]
+      },
+      "KeyValue": {
+        "type": "object",
+        "description": "A label with its value on one line",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      },
+      "Stat": {
+        "type": "object",
+        "description": "One big number with a label and an optional change",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "delta": {
+            "type": "string"
+          },
+          "trend": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "flat"
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ]
+      },
+      "StatRow": {
+        "type": "object",
+        "description": "A row of Stat components",
+        "properties": {
+          "stats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Stat"
+            }
+          }
+        },
+        "required": [
+          "stats"
+        ]
+      },
+      "StatusPill": {
+        "type": "object",
+        "description": "A small coloured status label",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "good",
+              "warn",
+              "bad"
+            ]
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "ListRow": {
+        "type": "object",
+        "description": "A row with a title, an optional subtitle and trailing text",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "trailing": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "Progress": {
+        "type": "object",
+        "description": "A bar showing a value from 0 to 100",
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ]
+      },
+      "Button": {
+        "type": "object",
+        "description": "A button; without an action it sends its label to the assistant",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/$defs/ActionExpression"
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "secondary"
+            ]
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "Component": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Stack"
+          },
+          {
+            "$ref": "#/$defs/Card"
+          },
+          {
+            "$ref": "#/$defs/Section"
+          },
+          {
+            "$ref": "#/$defs/Divider"
+          },
+          {
+            "$ref": "#/$defs/Text"
+          },
+          {
+            "$ref": "#/$defs/KeyValue"
+          },
+          {
+            "$ref": "#/$defs/Stat"
+          },
+          {
+            "$ref": "#/$defs/StatRow"
+          },
+          {
+            "$ref": "#/$defs/StatusPill"
+          },
+          {
+            "$ref": "#/$defs/ListRow"
+          },
+          {
+            "$ref": "#/$defs/Progress"
+          },
+          {
+            "$ref": "#/$defs/Button"
+          }
+        ]
+      },
+      "ActionExpression": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "open_url"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "url"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "continue_conversation"
+              },
+              "context": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        ]
+      }
+    },
+    "functions": {
+      "Percent": {
+        "description": "done as a percentage of total, rounded",
+        "params": {
+          "type": "object",
+          "properties": {
+            "done": {
+              "type": "number"
+            },
+            "total": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "done",
+            "total"
+          ]
+        },
+        "returns": {
+          "type": "number"
+        }
+      }
+    },
+    "actions": {
+      "Ask": {
+        "description": "Send a message to the assistant as if the person typed it; context is hidden data",
+        "params": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "context": {}
+          },
+          "required": [
+            "text"
+          ]
+        }
+      }
+    }
+  },
+  "components": {
+    "Stack": {
+      "signature": "Stack(children: any[], direction?: \"column\" | \"row\", gap?: \"s\" | \"m\" | \"l\")",
+      "description": "Lays out children in a column (default) or a row"
+    },
+    "Card": {
+      "signature": "Card(children: any[], title?: string)",
+      "description": "A titled container with a border"
+    },
+    "Section": {
+      "signature": "Section(title: string, children: any[])",
+      "description": "A heading followed by content"
+    },
+    "Divider": {
+      "signature": "Divider()",
+      "description": "A thin line between groups"
+    },
+    "Text": {
+      "signature": "Text(value: string, variant?: \"body\" | \"title\" | \"caption\" | \"mono\")",
+      "description": "A run of text"
+    },
+    "KeyValue": {
+      "signature": "KeyValue(key: string, value: string)",
+      "description": "A label with its value on one line"
+    },
+    "Stat": {
+      "signature": "Stat(label: string, value: string, delta?: string, trend?: \"up\" | \"down\" | \"flat\")",
+      "description": "One big number with a label and an optional change"
+    },
+    "StatRow": {
+      "signature": "StatRow(stats: Stat[])",
+      "description": "A row of Stat components"
+    },
+    "StatusPill": {
+      "signature": "StatusPill(label: string, tone?: \"neutral\" | \"good\" | \"warn\" | \"bad\")",
+      "description": "A small coloured status label"
+    },
+    "ListRow": {
+      "signature": "ListRow(title: string, subtitle?: string, trailing?: string)",
+      "description": "A row with a title, an optional subtitle and trailing text"
+    },
+    "Progress": {
+      "signature": "Progress(value: number, label?: string)",
+      "description": "A bar showing a value from 0 to 100"
+    },
+    "Button": {
+      "signature": "Button(label: string, action?: ActionExpression, variant?: \"primary\" | \"secondary\")",
+      "description": "A button; without an action it sends its label to the assistant"
+    }
+  },
+  "functions": {
+    "Percent": {
+      "signature": "Percent(done: number, total: number) → number",
+      "description": "done as a percentage of total, rounded"
+    }
+  },
+  "actions": {
+    "Ask": {
+      "signature": "Ask(text: string, context?: any)",
+      "description": "Send a message to the assistant as if the person typed it; context is hidden data"
+    }
+  }
+}
