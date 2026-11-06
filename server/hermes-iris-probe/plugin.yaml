@@ -1,0 +1,7 @@
+name: iris-probe
+version: 0.0.1
+description: "Throwaway GenUI Phase 0 probe for Iris: a no-op tool, observing hooks and two dashboard routes. Delete after the probe."
+author: shreyas-kamat
+kind: backend
+provides_tools:
+  - iris_probe

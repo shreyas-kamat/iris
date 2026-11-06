@@ -1,0 +1,10 @@
+{
+  "name": "iris-probe",
+  "label": "Iris probe",
+  "description": "Throwaway GenUI Phase 0 probe routes.",
+  "icon": "Puzzle",
+  "version": "0.0.1",
+  "tab": { "path": "/iris-probe", "hidden": true },
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}
