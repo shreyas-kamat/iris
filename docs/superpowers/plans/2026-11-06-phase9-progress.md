@@ -8,7 +8,7 @@ newest last. Models are the minimum; a higher one is fine.
 | ID | Subphase / segment | Model | Status | Last commit |
 |---|---|---|---|---|
 | 9.1 | **GenUI** (`feat/genui`; plan `2026-10-31-genui.md`) | | | |
-| G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | see journal |
+| G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | `d535765` |
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | todo | |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | todo | |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | todo | |
