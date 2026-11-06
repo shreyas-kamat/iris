@@ -111,3 +111,8 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
   data dir); dashboard restarted; pong passes. Its name stays in `plugins.disabled` in the server config (harmless).
 - Gate still open: the GenUI plan's open questions 1, 2 and 6 need the user's answers before G2.
 - segment G1 complete
+
+### G1 gate — 2026-11-07 01:05
+- User answered the GenUI plan's open questions 1, 2 and 6 as proposed: plugin in this repo (`server/hermes-iris/`),
+  `openui_lang` in this repo, Python port of the parser (D10). Recorded in the plan. Gate closed; G2 can start.
+- Next: G2 (Sonnet), 1.1 skeleton + fixtures.
