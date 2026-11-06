@@ -77,7 +77,13 @@ const _valueEnds = {
   TokenKind.builtin,
 };
 
-List<Token> lex(String src) {
+/// Tokens plus whether the text ended inside a string.
+typedef LexResult = ({List<Token> tokens, bool unterminatedString});
+
+List<Token> lex(String src) => lexAll(src).tokens;
+
+LexResult lexAll(String src) {
+  var unterminated = false;
   final tokens = <Token>[];
   final n = src.length;
   var i = 0;
@@ -162,11 +168,13 @@ List<Token> lex(String src) {
       case 0x22:
         final start = i;
         final r = _doubleQuoted(src, i);
+        unterminated = !r.closed;
         i = r.end;
         add(TokenKind.string, start, r.value);
       case 0x27:
         final start = i;
         final r = _singleQuoted(src, i);
+        unterminated = !r.closed;
         i = r.end;
         add(TokenKind.string, start, r.value);
       case 0x24 || 0x40: // $name or @name
@@ -218,7 +226,7 @@ List<Token> lex(String src) {
     }
   }
   tokens.add(Token(TokenKind.eof, n, n));
-  return tokens;
+  return (tokens: tokens, unterminatedString: unterminated);
 }
 
 bool _afterValue(List<Token> tokens) => tokens.isNotEmpty && _valueEnds.contains(tokens.last.kind);
@@ -250,13 +258,13 @@ bool _afterValue(List<Token> tokens) => tokens.isNotEmpty && _valueEnds.contains
   return (end: i, value: dangling ? double.nan : double.parse(src.substring(from, i)));
 }
 
-({int end, String value}) _doubleQuoted(String src, int from) {
+({int end, String value, bool closed}) _doubleQuoted(String src, int from) {
   final n = src.length;
   final out = StringBuffer();
   var i = from + 1;
   while (i < n) {
     final c = src[i];
-    if (c == '"') return (end: i + 1, value: out.toString());
+    if (c == '"') return (end: i + 1, value: out.toString(), closed: true);
     if (c != r'\') {
       out.write(c);
       i++;
@@ -295,16 +303,16 @@ bool _afterValue(List<Token> tokens) => tokens.isNotEmpty && _valueEnds.contains
         out.write(e);
     }
   }
-  return (end: n, value: out.toString());
+  return (end: n, value: out.toString(), closed: false);
 }
 
-({int end, String value}) _singleQuoted(String src, int from) {
+({int end, String value, bool closed}) _singleQuoted(String src, int from) {
   final n = src.length;
   final out = StringBuffer();
   var i = from + 1;
   while (i < n) {
     final c = src[i];
-    if (c == "'") return (end: i + 1, value: out.toString());
+    if (c == "'") return (end: i + 1, value: out.toString(), closed: true);
     if (c == r'\') {
       i++;
       if (i < n) {
@@ -321,5 +329,5 @@ bool _afterValue(List<Token> tokens) => tokens.isNotEmpty && _valueEnds.contains
       i++;
     }
   }
-  return (end: n, value: out.toString());
+  return (end: n, value: out.toString(), closed: false);
 }
