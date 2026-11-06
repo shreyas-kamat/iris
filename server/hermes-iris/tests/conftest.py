@@ -22,6 +22,7 @@ def _install_fake_hermes_constants() -> None:
 
     mod.get_hermes_home = get_hermes_home  # type: ignore[attr-defined]
     mod.get_default_hermes_root = get_hermes_home  # type: ignore[attr-defined]
+    mod.profile_name_for_home = lambda path=None: None  # type: ignore[attr-defined]
     sys.modules["hermes_constants"] = mod
 
 
