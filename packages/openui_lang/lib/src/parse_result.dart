@@ -25,6 +25,9 @@ class ParseResult {
   final Program? program;
   final Map<String, Object?>? state;
 
+  /// Statements in the program after last-wins (language.md §2.4).
+  int get statementCount => program?.statements.length ?? 0;
+
   bool get hasFatalError => errors.any((e) => e.isFatal);
 
   /// The tree in the canonical form the conformance fixtures compare (fixtures/README.md).

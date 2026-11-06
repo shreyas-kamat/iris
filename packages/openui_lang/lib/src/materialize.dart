@@ -40,13 +40,16 @@ class Materialized {
   final Set<String> unresolved;
 }
 
-Materialized materialize(Program program, LibrarySpec library) => _Materializer(program, library).run();
+/// While [streaming], a missing entry is not an error and enum checks wait for the stream end (language.md §2.2, §8.2).
+Materialized materialize(Program program, LibrarySpec library, {bool streaming = false}) =>
+    _Materializer(program, library, streaming).run();
 
 class _Materializer {
-  _Materializer(this.program, this.lib);
+  _Materializer(this.program, this.lib, this.streaming);
 
   final Program program;
   final LibrarySpec lib;
+  final bool streaming;
   final errors = <OpenUiError>[];
   final unresolved = <String>{};
   final _stack = <String>[];
@@ -54,7 +57,7 @@ class _Materializer {
   Materialized run() {
     final entry = program.entry;
     if (entry == null) {
-      if (program.statements.isNotEmpty) errors.add(const OpenUiError(code: ErrorCode.noRoot, message: 'no root statement'));
+      if (program.statements.isNotEmpty && !streaming) errors.add(const OpenUiError(code: ErrorCode.noRoot, message: 'no root statement'));
       return Materialized(null, errors, unresolved);
     }
     _stack.add(entry);
@@ -65,13 +68,13 @@ class _Materializer {
       if (s.kind != StatementKind.value) _scan(s.expr);
     }
     if (v is Element || v is Deferred) {
-      if (program.entryIsFallback) {
+      if (program.entryIsFallback && !streaming) {
         errors.add(const OpenUiError(
             code: ErrorCode.noRoot, message: 'no root statement; rendering the first statement that calls the root component', warning: true));
       }
       return Materialized(v, errors, unresolved);
     }
-    errors.add(const OpenUiError(code: ErrorCode.noRoot, message: 'root does not give a component'));
+    if (!streaming) errors.add(const OpenUiError(code: ErrorCode.noRoot, message: 'root does not give a component'));
     return Materialized(null, errors, unresolved);
   }
 
@@ -259,7 +262,7 @@ class _Materializer {
     final any = s['anyOf'];
     if (any is List) return any.any((a) => a is Map && _accepts(a.cast<String, Object?>(), v));
     final en = s['enum'];
-    if (en is List && !en.contains(v)) return false;
+    if (en is List && !en.contains(v) && !streaming) return false;
     if (s.containsKey('const') && s['const'] != v) return false;
     switch (s['type']) {
       case 'string':

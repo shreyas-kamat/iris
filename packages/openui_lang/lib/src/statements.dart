@@ -38,8 +38,9 @@ StatementKind _classify(String name, Expr e) {
   return StatementKind.value;
 }
 
-/// Groups token indexes into statements. Returns the half-open token ranges.
-List<(int, int)> _ranges(List<Token> tokens) {
+/// Groups token indexes into statements. Returns the half-open token ranges; every range but the last ends at the
+/// newline token that ended it, the last at `eof`.
+List<(int, int)> statementRanges(List<Token> tokens) {
   final out = <(int, int)>[];
   var begin = 0;
   var depth = 0;
@@ -92,18 +93,23 @@ SplitResult splitStatements(String prepared) {
       default:
     }
   }
-  for (final (a, b) in _ranges(tokens)) {
-    final slice = tokens.sublist(a, b);
-    if (slice.where((t) => t.kind != TokenKind.newline).isEmpty) continue;
-    final parsed = ExprParser(slice).parseStatement();
-    if (parsed == null) continue;
-    statements.add(Statement(
-      parsed.name,
-      _classify(parsed.name, parsed.value),
-      parsed.value,
-      slice.first.start,
-      slice.last.end,
-    ));
+  for (final (a, b) in statementRanges(tokens)) {
+    final s = statementFromTokens(tokens.sublist(a, b));
+    if (s != null) statements.add(s);
   }
   return SplitResult(statements, incomplete: lexed.unterminatedString || depthAtEnd > 0);
+}
+
+/// Parses one statement's tokens, or null when they do not form `name = expression`. [offset] shifts the span.
+Statement? statementFromTokens(List<Token> slice, [int offset = 0]) {
+  if (slice.where((t) => t.kind != TokenKind.newline).isEmpty) return null;
+  final parsed = ExprParser(slice).parseStatement();
+  if (parsed == null) return null;
+  return Statement(
+    parsed.name,
+    _classify(parsed.name, parsed.value),
+    parsed.value,
+    slice.first.start + offset,
+    slice.last.end + offset,
+  );
 }
