@@ -1,0 +1,4 @@
+The files under test/fixtures/ are the OpenUI 1.0 conformance fixtures from
+https://github.com/thesysdev/openui, spec/fixtures/1.0/, at commit
+eea983e31730677f794f3873e4ee9efa03e065eb. They are MIT licensed, copyright (c) Thesys Inc.;
+the licence text is test/fixtures/LICENSE. Re-syncing them is a deliberate task.
