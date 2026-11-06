@@ -11,7 +11,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | `d535765` |
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | done | `c205f14` |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
-| G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | todo | |
+| G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | doing | |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | todo | |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
@@ -152,3 +152,14 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations / rulings: (1) The evaluator follows the reference `lang-core` runtime (read at `eea983e`) where the spec is silent: no schema re-check of evaluated component props; a null prop is left out; a runtime throw makes that prop null (spec 8.2) rather than the reference's raw-value fallback. (2) `@Each` substitutes the element into the template as a `ValueLit` (reference `substituteRef`), so actions capture their element; there is no scope map. (3) Value statements reached from computed expressions are materialized on demand; new structural errors found that way are added once (deduped against parse errors). (4) `localeCompare` is a root-collation stand-in for Latin text (punctuation < digits < letters; accent then case as tie-breaks, lower first), not full ICU. Cost if wrong: non-Latin `@Sort` order differs from browsers. (5) `url` rule requires a host, per the spec prose (the reference accepts `mailto:`). (6) `query-cycle` is reported at stream end, one error per cycle on its first query, component `Query`. (7) Caps: 64 nested references (then a `runtime-error` on the prop), 1000 elements per `@Each` (silent truncation).
 - Decisions for later tasks: public API is `parseProgram` / `StreamingParser` -> `ParseResult` (`tree`, `errors`, `state`, `unresolved`, `orphans`, `incomplete`, `statementCount`), then `Evaluator(result, library, store:, functions:, resolveData:)` -> `evaluateRoot()` = `(root: Element?, errors)`; `summarize()` gives the fixture shape. Actions are `ActionValue` of `SetStep`/`ResetStep`/`RunStep`/`ToAssistantStep`/`OpenUrlStep`/`CustomStep`; `evaluateStepValue(SetStep)` evaluates at click time. Bindings stay `Binding(name)`; widgets write `StateStore.set`. `resolveData` is the hook Phase 4's query manager fills. The Python port (G4) must match these rulings.
 - segment G3 complete. Next: G4 (Sonnet), 1.7 prompt generator.
+
+### G4 — doing — 2026-11-07
+- Running as Sonnet 5.5. Git matches the log (G3 `f040585`; HEAD `9a68b08`, clean apart from `store/screenshots/`).
+- Next: 1.7 prompt generator.
+
+### G4 — 1.7–1.8 — done — 2026-11-07 — Sonnet 5.5
+- Commits: 7198c8d prompt generator; 95626d5 package README and phase check
+- Verified: `dart test test/prompt_test.dart` -> 9 pass (byte-identical to OpenUI's TypeScript `generateSystemPrompt` for 7 library/option combinations: defaults, bindings, builtin functions alone, preamble+examples+rules, component groups, a minimal library with and without bindings); `dart analyze` in `packages/openui_lang` -> No issues found!; `dart test` -> 324 pass, 5 skipped (editing); conformance 54 passed / 5 skipped / 0 failed; `flutter test --exclude-tags live` -> 1400 pass, 4 skipped; no `dart:ui` or Flutter import in the package; README snippet compiled and ran. `flutter analyze` reports 3 infos in `lib/` I did not touch.
+- Deviations: (1) Goldens come from the TypeScript reference (`eea983e`, run from the scratchpad with telemetry off), not from Python as the spec's risk table says: the TS is the oracle and Python (2.5) must match these files. (2) `.gitattributes` marks `test/golden/**` as `-text` so `core.autocrlf` cannot change their bytes. (3) Dart reads signatures and descriptions from the library JSON's `components` / `functions` / `actions` / `componentGroups` (pre-built, as OpenUI's generator does), not from the JSON Schema.
+- Decisions for later tasks: `generateSystemPrompt(library, options: PromptOptions(bindings:, builtinFunctions:, preamble:, examples:, additionalRules:))`; `bindings` defaults to false, `builtinFunctions` to `bindings`. Goldens and their library files are in `packages/openui_lang/test/golden/prompt/` (`<library>.library.json` + `<case>.txt`); the Python prompt port (2.5) should read the same files. Iris writes its own preamble (pass `preamble`).
+- Next: 2.1 server skeleton (`server/hermes-iris/`).
