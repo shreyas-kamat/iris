@@ -3,6 +3,7 @@
 library;
 
 import 'errors.dart';
+import 'evaluator.dart';
 import 'lexer.dart';
 import 'library_spec.dart';
 import 'materialize.dart';
@@ -125,7 +126,20 @@ class StreamingParser {
           if (!streaming || !closing.closed || i < pending.length - 1 || !completedNames.contains(pending[i].name))
             pending[i],
       ];
-      return _result(statements, prepared, incomplete: closing.closed, streaming: streaming);
+      // A $name still being typed at the end of the stream is not declared from the pending statement.
+      String? partialName;
+      if (streaming && pending.isNotEmpty) {
+        final toks = lex(pendingText);
+        final last = toks.length > 1 ? toks[toks.length - 2] : null;
+        if (last != null && last.kind == TokenKind.stateName && last.end == pendingText.length) {
+          partialName = last.value! as String;
+        }
+      }
+      return _result(statements, prepared,
+          incomplete: closing.closed,
+          streaming: streaming,
+          partial: partialName != null && identical(statements.last, pending.last) ? statements.last : null,
+          partialName: partialName);
     } on Object catch (e) {
       return ParseResult(
         tree: null,
@@ -162,7 +176,7 @@ class StreamingParser {
   }
 
   ParseResult _result(List<Statement> statements, String prepared,
-      {required bool incomplete, required bool streaming}) {
+      {required bool incomplete, required bool streaming, Statement? partial, String? partialName}) {
     if (statements.isEmpty) {
       final errors = prepared.trim().isEmpty || streaming
           ? <OpenUiError>[]
@@ -174,13 +188,15 @@ class StreamingParser {
         orphans: const {},
         incomplete: incomplete,
         program: null,
+        state: const {},
       );
     }
     final program = Program.build(statements, library, incomplete: incomplete);
     final m = materialize(program, library, streaming: streaming);
     return ParseResult(
       tree: m.root,
-      errors: m.errors,
+      errors: [...m.errors, if (!streaming) ...queryCycles(program)],
+      state: declareState(program, library, partial: partial, partialName: partialName),
       unresolved: m.unresolved,
       orphans: program.orphans,
       incomplete: incomplete,

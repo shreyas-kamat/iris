@@ -44,6 +44,76 @@ class Materialized {
 Materialized materialize(Program program, LibrarySpec library, {bool streaming = false}) =>
     _Materializer(program, library, streaming).run();
 
+/// Materializes one expression of [program] written in statement [statementId], for the evaluator: a component call
+/// or a value statement reached from a computed expression. A dropped value is null.
+Materialized materializeExpression(Program program, LibrarySpec library, Expr e, String statementId,
+    {bool valuePos = true}) {
+  final m = _Materializer(program, library, false);
+  m._stack.add(statementId);
+  final v = m._clean(m._value(e, statementId, valuePos: valuePos));
+  return Materialized(v, m.errors, m.unresolved);
+}
+
+/// True when [v], a parsed or evaluated value, matches [schema] (enums are not checked while [streaming]).
+bool schemaAccepts(LibrarySpec library, Json schema, Object? v, {bool streaming = false}) =>
+    _SchemaCheck(library, streaming).accepts(schema, v);
+
+class _SchemaCheck {
+  _SchemaCheck(this.lib, this.streaming);
+  final LibrarySpec lib;
+  final bool streaming;
+
+  Json resolve(Json schema) {
+    var s = schema;
+    for (var guard = 0; guard < 8; guard++) {
+      final ref = s[r'$ref'];
+      if (ref is! String) return s;
+      final name = ref.split('/').last;
+      if (lib.components.containsKey(name) || lib.actions.containsKey(name) || _actionDefs.contains(name)) return s;
+      final def = lib.defs[name];
+      if (def is! Map) return s;
+      s = def.cast<String, Object?>();
+    }
+    return s;
+  }
+
+  bool accepts(Json raw, Object? v) {
+    if (v is Deferred || v is Binding) return true;
+    final s = resolve(raw);
+    final ref = s[r'$ref'];
+    if (ref is String) {
+      final name = ref.split('/').last;
+      if (lib.components.containsKey(name)) return v is Element;
+      return v is List || v is ActionValue; // an action
+    }
+    final any = s['anyOf'];
+    if (any is List) return any.any((a) => a is Map && accepts(a.cast<String, Object?>(), v));
+    final en = s['enum'];
+    if (en is List && !streaming && !en.any((x) => x == v)) return false;
+    if (s.containsKey('const') && s['const'] != v) return false;
+    switch (s['type']) {
+      case 'string':
+        return v is String;
+      case 'number':
+        return v is num;
+      case 'integer':
+        return v is num && v == v.truncateToDouble();
+      case 'boolean':
+        return v is bool;
+      case 'array':
+        if (v is! List) return false;
+        final items = s['items'];
+        return items is! Map || v.every((x) => x == null || accepts(items.cast<String, Object?>(), x));
+      case 'object':
+        return v is Map;
+      case 'null':
+        return v == null;
+      default:
+        return true;
+    }
+  }
+}
+
 class _Materializer {
   _Materializer(this.program, this.lib, this.streaming);
 
@@ -85,8 +155,47 @@ class _Materializer {
   }
 
   Deferred _defer(Expr e, String sid) {
+    _checkCalls(e, sid);
     _scan(e);
     return Deferred(e, sid);
+  }
+
+  /// Reports unknown functions and bad literal arguments of custom functions anywhere inside [e].
+  void _checkCalls(Expr e, String sid) {
+    void walk(Expr x) {
+      switch (x) {
+        case FnExpr(:final args):
+          _checkFn(x, sid);
+          args.forEach(walk);
+        case CallExpr(:final args):
+          args.forEach(walk);
+        case ArrayExpr(:final items):
+          items.forEach(walk);
+        case ObjectExpr(:final entries):
+          for (final (_, v) in entries) {
+            walk(v);
+          }
+        case MemberExpr(:final object):
+          walk(object);
+        case IndexExpr(:final object, :final index):
+          walk(object);
+          walk(index);
+        case UnaryExpr(:final operand):
+          walk(operand);
+        case BinaryExpr(:final left, :final right):
+          walk(left);
+          walk(right);
+        case TernaryExpr(:final cond, :final then, :final otherwise):
+          walk(cond);
+          walk(then);
+          walk(otherwise);
+        case AssignExpr(:final value):
+          walk(value);
+        case StrLit() || NumLit() || BoolLit() || NullLit() || RefExpr() || ValueLit():
+      }
+    }
+
+    walk(e);
   }
 
   Object? _clean(Object? v) => (v is _Drop || v is _Missing) ? null : v;
@@ -102,6 +211,8 @@ class _Materializer {
         return value;
       case NullLit():
         return null;
+      case ValueLit(:final value):
+        return value;
       case ArrayExpr(:final items):
         return [
           for (final i in items)
@@ -236,53 +347,11 @@ class _Materializer {
 
   // ---- schema checks ----
 
-  Json _resolve(Json schema) {
-    var s = schema;
-    for (var guard = 0; guard < 8; guard++) {
-      final ref = s[r'$ref'];
-      if (ref is! String) return s;
-      final name = ref.split('/').last;
-      if (lib.components.containsKey(name) || lib.actions.containsKey(name) || _actionDefs.contains(name)) return s;
-      final def = lib.defs[name];
-      if (def is! Map) return s;
-      s = def.cast<String, Object?>();
-    }
-    return s;
-  }
+  late final _check = _SchemaCheck(lib, streaming);
 
-  bool _accepts(Json raw, Object? v) {
-    if (v is Deferred || v is Binding) return true;
-    final s = _resolve(raw);
-    final ref = s[r'$ref'];
-    if (ref is String) {
-      final name = ref.split('/').last;
-      if (lib.components.containsKey(name)) return v is Element;
-      return v is List || v is Deferred; // an action
-    }
-    final any = s['anyOf'];
-    if (any is List) return any.any((a) => a is Map && _accepts(a.cast<String, Object?>(), v));
-    final en = s['enum'];
-    if (en is List && !en.contains(v) && !streaming) return false;
-    if (s.containsKey('const') && s['const'] != v) return false;
-    switch (s['type']) {
-      case 'string':
-        return v is String;
-      case 'number':
-        return v is double;
-      case 'integer':
-        return v is double && v == v.truncateToDouble();
-      case 'boolean':
-        return v is bool;
-      case 'array':
-        if (v is! List) return false;
-        final items = s['items'];
-        return items is! Map || v.every((x) => x == null || _accepts(items.cast<String, Object?>(), x));
-      case 'object':
-        return v is Map;
-      default:
-        return true;
-    }
-  }
+  Json _resolve(Json schema) => _check.resolve(schema);
+
+  bool _accepts(Json raw, Object? v) => _check.accepts(raw, v);
 
   /// Checks [v] against [schema]. Array items are checked one by one; bad items are removed and reported.
   Object? _coerce(Json schema, Object? v, String sid, ComponentSpec spec, String path) {
@@ -310,20 +379,30 @@ class _Materializer {
   // ---- functions ----
 
   Object? _fn(FnExpr e, String sid) {
-    if (builtinFunctions.contains(e.name) || builtinActions.contains(e.name) || lib.actions.containsKey(e.name)) {
-      return _defer(e, sid);
+    final invalid = _checkFn(e, sid);
+    for (final a in e.args) {
+      _checkCalls(a, sid);
     }
-    final fn = lib.functions[e.name];
+    _scan(e);
+    if (builtinFunctions.contains(e.name) || builtinActions.contains(e.name) || lib.actions.containsKey(e.name)) {
+      return Deferred(e, sid);
+    }
+    return invalid ? null : Deferred(e, sid);
+  }
+
+  /// Reports an unknown function, and bad literal arguments of a custom function or action (language.md §3.6, §6.3).
+  /// Returns true when the call cannot run: unknown, or a required argument is invalid.
+  bool _checkFn(FnExpr e, String sid) {
+    if (builtinFunctions.contains(e.name) || builtinActions.contains(e.name)) return false;
+    final fn = lib.functions[e.name] ?? lib.actions[e.name];
     if (fn == null) {
       errors.add(OpenUiError(
           code: ErrorCode.unknownFunction,
           statementId: sid,
           message: 'unknown function @${e.name}',
           hint: 'Available: ${[...builtinFunctions, ...lib.functions.keys].map((n) => '@$n').join(', ')}'));
-      _scan(e);
-      return null;
+      return true;
     }
-    // Literal arguments are checked when parsing (language.md §3.6).
     var args = e.args;
     var invalid = false;
     OpenUiError fe(String code, String? path, String m) => OpenUiError(
@@ -358,8 +437,7 @@ class _Materializer {
         if (p.required) invalid = true;
       }
     }
-    _scan(e);
-    return invalid ? null : Deferred(e, sid);
+    return invalid;
   }
 }
 

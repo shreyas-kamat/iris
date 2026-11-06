@@ -128,12 +128,21 @@ class AssignExpr extends Expr {
   String toString() => '(= $target $value)';
 }
 
-/// ECMAScript Number::toString for the values the language produces.
+/// A value put into the tree by the evaluator, such as an `@Each` element substituted for its loop variable. The
+/// parser never produces one.
+class ValueLit extends Expr {
+  const ValueLit(this.value);
+  final Object? value;
+  @override
+  String toString() => '<$value>';
+}
+
+/// ECMAScript Number::toString. Dart prints the same shortest round-trip digits; only the `.0` of integers and the
+/// sign of zero differ.
 String formatNumber(double v) {
   if (v.isNaN) return 'NaN';
   if (v.isInfinite) return v < 0 ? '-Infinity' : 'Infinity';
-  if (v == v.truncateToDouble() && v.abs() < 1e21) {
-    return v == 0 ? '0' : v.toInt().toString();
-  }
-  return v.toString();
+  if (v == 0) return '0';
+  final s = v.toString();
+  return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
 }

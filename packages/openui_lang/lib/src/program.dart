@@ -114,7 +114,7 @@ Set<String> referencedNames(Expr e, [Set<String> shadow = const {}]) {
         walk(otherwise, sh);
       case AssignExpr(:final value):
         walk(value, sh);
-      case StrLit() || NumLit() || BoolLit() || NullLit():
+      case StrLit() || NumLit() || BoolLit() || NullLit() || ValueLit():
     }
   }
 
