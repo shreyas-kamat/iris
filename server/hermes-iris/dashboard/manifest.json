@@ -1,0 +1,10 @@
+{
+  "name": "iris",
+  "label": "Iris",
+  "description": "Routes for the Iris app: capabilities, generated surfaces, profile and templates.",
+  "icon": "Puzzle",
+  "version": "0.1.0",
+  "tab": { "path": "/iris", "hidden": true },
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}

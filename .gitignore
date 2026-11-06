@@ -62,3 +62,9 @@ GoogleService-Info.plist
 
 # Golden test failure output (diffs, master and test images). Local only.
 test/**/failures/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
