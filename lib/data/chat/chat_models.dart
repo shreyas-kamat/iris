@@ -7,6 +7,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../genui/genui_models.dart';
+
 /// One row of the conversation list.
 @immutable
 final class ConversationSummary {
@@ -155,6 +157,35 @@ final class ToolCall extends TranscriptItem {
     output: output ?? this.output,
     status: status ?? this.status,
   );
+}
+
+/// A native display the agent made with the `iris_ui` tool. Drawn from the program in [ref] when the call carried it
+/// whole, otherwise from the stored surface, fetched by id.
+final class UiSurfaceItem extends TranscriptItem {
+  const UiSurfaceItem({required String id, required this.ref}) : super(id);
+
+  final UiSurfaceRef ref;
+
+  /// Later mentions of the same display replace earlier ones: one display, one place, the newest.
+  static List<TranscriptItem> add(
+    List<TranscriptItem> items,
+    UiSurfaceItem item,
+  ) => [
+    for (final other in items)
+      if (!(other is UiSurfaceItem &&
+          other.ref.surfaceId == item.ref.surfaceId))
+        other,
+    item,
+  ];
+
+  /// [items] without the display named [surfaceId].
+  static List<TranscriptItem> remove(
+    List<TranscriptItem> items,
+    String surfaceId,
+  ) => [
+    for (final other in items)
+      if (!(other is UiSurfaceItem && other.ref.surfaceId == surfaceId)) other,
+  ];
 }
 
 /// A line that is not a turn: an error, a stop.

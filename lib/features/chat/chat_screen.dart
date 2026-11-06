@@ -25,6 +25,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../genui/surface_block.dart';
 import '../voice/mic_permission_sheet.dart';
 import '../voice/voice_call.dart';
 import '../voice/voice_call_screen.dart';
@@ -147,6 +148,18 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   MediaImageLoader? get _loadMediaImage => widget.backend is MediaImageBackend
       ? (widget.backend as MediaImageBackend).loadMediaImage
+      : null;
+
+  /// Fetches a generated display's stored program, for the conversation that is open. Null when the backend cannot.
+  SurfaceLoader? get _loadSurface => widget.backend is SurfaceBackend
+      ? (surfaceId) async {
+          final stored = _chat.conversationId;
+          if (stored == null) return null;
+          return (await (widget.backend as SurfaceBackend).surface(
+            stored,
+            surfaceId,
+          )).valueOrNull;
+        }
       : null;
 
   late final ChatController _chat = ChatController(
@@ -932,6 +945,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     TranscriptEntry(
                       item,
                       loadMediaImage: _loadMediaImage,
+                      loadSurface: _loadSurface,
                       live: live,
                       onRetry: _chat.isLive && !state.running
                           ? () => unawaited(_chat.retry())

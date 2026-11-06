@@ -15,6 +15,8 @@ import 'dart:typed_data';
 import '../../core/failure.dart';
 import '../../core/json.dart';
 import '../../core/result.dart';
+import '../genui/genui_api.dart';
+import '../genui/genui_models.dart';
 import '../rpc/dashboard_session.dart';
 import '../rpc/rpc_frame.dart';
 import 'attachment.dart';
@@ -242,7 +244,17 @@ abstract interface class MediaImageBackend {
   Future<Uint8List?> loadMediaImage(String path);
 }
 
-final class DashboardChat implements ChatBackend, MediaImageBackend {
+/// Optional capability: the displays the hermes-iris plugin stored for a conversation.
+// A capability is named by its interface, as MediaImageBackend is.
+// ignore: one_member_abstracts
+abstract interface class SurfaceBackend {
+  /// The display [surfaceId] of the stored conversation [storedSessionId], with its program. The plugin addresses
+  /// conversations by their stored id, never the live one.
+  Future<Result<UiSurface>> surface(String storedSessionId, String surfaceId);
+}
+
+final class DashboardChat
+    implements ChatBackend, MediaImageBackend, SurfaceBackend {
   DashboardChat(this._session, {this.profile = 'default'})
     : _live = _session.state.phase == LinkPhase.live,
       _everLive = _session.state.phase == LinkPhase.live {
@@ -299,6 +311,13 @@ final class DashboardChat implements ChatBackend, MediaImageBackend {
       return null;
     }
   }
+
+  @override
+  Future<Result<UiSurface>> surface(String storedSessionId, String surfaceId) =>
+      DashboardGenUiApi(
+        _session.connection.client,
+        profile: profile,
+      ).surface(storedSessionId, surfaceId);
 
   final _events = StreamController<ChatEvent>.broadcast();
   late final StreamSubscription<RpcEvent> _eventSubscription;

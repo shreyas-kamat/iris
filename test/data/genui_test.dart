@@ -357,52 +357,46 @@ void main() {
       );
     });
 
-    test(
-      'reads a stored history row the way the transcript parser keeps it',
-      () {
-        final transcript = HistoryParser.transcript(
-          Json.of({
-            'messages': [
-              {
-                'id': 'a1',
-                'role': 'assistant',
-                'content': 'Here you go.',
-                'tool_calls': [
-                  {
-                    'id': 'call_9',
-                    'type': 'function',
-                    'function': {
-                      'name': 'iris_ui',
-                      'arguments': jsonEncode(args),
-                    },
+    test('reads a stored history row the way the transcript parser keeps it', () {
+      final transcript = HistoryParser.transcript(
+        Json.of({
+          'messages': [
+            {
+              'id': 'a1',
+              'role': 'assistant',
+              'content': 'Here you go.',
+              'tool_calls': [
+                {
+                  'id': 'call_9',
+                  'type': 'function',
+                  'function': {
+                    'name': 'iris_ui',
+                    'arguments': jsonEncode(args),
                   },
-                ],
-              },
-              {
-                'id': 't1',
-                'role': 'tool',
-                'tool_call_id': 'call_9',
-                'tool_name': 'iris_ui',
-                'content': jsonEncode({
-                  'ok': true,
-                  'surface_id': 'status',
-                  'rev': 1,
-                }),
-              },
-            ],
-          }),
-        );
-        final call = transcript.whereType<ToolCall>().single;
-        final ref = GenUiParser.surfaceRef(
-          name: call.name,
-          input: call.arguments,
-          output: call.output,
-        )!;
-        expect(ref.surfaceId, 'status');
-        expect(ref.accepted, isTrue);
-        expect(ref.rev, 1);
-      },
-    );
+                },
+              ],
+            },
+            {
+              'id': 't1',
+              'role': 'tool',
+              'tool_call_id': 'call_9',
+              'tool_name': 'iris_ui',
+              'content': jsonEncode({
+                'ok': true,
+                'surface_id': 'status',
+                'rev': 1,
+              }),
+            },
+          ],
+        }),
+      );
+      // The transcript parser turns the call into a display, with the answer folded in.
+      expect(transcript.whereType<ToolCall>(), isEmpty);
+      final ref = transcript.whereType<UiSurfaceItem>().single.ref;
+      expect(ref.surfaceId, 'status');
+      expect(ref.accepted, isTrue);
+      expect(ref.rev, 1);
+    });
   });
 
   group('IrisActionEnvelope', () {

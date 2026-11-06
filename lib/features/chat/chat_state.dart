@@ -4,6 +4,8 @@
 /// edge case is a plain unit test rather than a widget test.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import '../../core/failure.dart';
@@ -11,6 +13,7 @@ import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/chat/connection_models.dart';
+import '../../data/genui/genui_parser.dart';
 
 enum ChatPhase {
   /// Reading the stored transcript.
@@ -186,15 +189,7 @@ final class ChatState {
       turn: _waitingOr(TurnPhase.idle),
     ),
     ToolStarted(:final toolId, :final name, :final input) => copyWith(
-      items: _pickedUp([
-        ..._settled(items),
-        ToolCall(
-          id: toolId ?? 'tool-${items.length}',
-          name: name,
-          arguments: input,
-          status: ToolStatus.running,
-        ),
-      ]),
+      items: _toolStarted(items, toolId, name, input),
       turn: TurnPhase.working,
     ),
     final ToolCompleted done => copyWith(
@@ -698,10 +693,82 @@ final class ChatState {
     return false;
   }
 
+  static List<TranscriptItem> _toolStarted(
+    List<TranscriptItem> items,
+    String? toolId,
+    String name,
+    String? input,
+  ) {
+    final id = toolId ?? 'tool-${items.length}';
+    // A generated display is drawn natively, not as a tool card. A later mention of the same display replaces the
+    // earlier one, and a delete removes it.
+    final ref = GenUiParser.surfaceRef(name: name, input: input);
+    if (ref != null) {
+      final settled = _settled(items);
+      return ref.deleted
+          ? UiSurfaceItem.remove(settled, ref.surfaceId)
+          : UiSurfaceItem.add(settled, UiSurfaceItem(id: id, ref: ref));
+    }
+    return _pickedUp([
+      ..._settled(items),
+      ToolCall(
+        id: id,
+        name: name,
+        arguments: input,
+        status: ToolStatus.running,
+      ),
+    ]);
+  }
+
+  /// A finished `iris_ui` call: the plugin's answer is advice, the display stays unless it said no. When it did, the
+  /// display is swapped for a failed tool card so the failure is visible and nothing half-formed is drawn.
+  static List<TranscriptItem>? _surfaceDone(
+    List<TranscriptItem> items,
+    ToolCompleted done,
+  ) {
+    if (!GenUiParser.mayBeSurface(done.name)) return null;
+    final toolId = done.toolId;
+    final at = toolId == null
+        ? -1
+        : items.indexWhere(
+            (item) => item is UiSurfaceItem && item.id == toolId,
+          );
+    if (at < 0) {
+      // The display was removed or replaced by a later call; its answer needs no card of its own. A failure still
+      // gets one.
+      final answered = GenUiParser.surfaceRef(
+        name: GenUiParser.toolName,
+        input: '{"surface_id":"-"}',
+        output: done.output,
+      );
+      return answered?.accepted == true && !done.failed ? items : null;
+    }
+    final item = items[at] as UiSurfaceItem;
+    final answered = GenUiParser.surfaceRef(
+      name: GenUiParser.toolName,
+      input: jsonEncode({'surface_id': item.ref.surfaceId}),
+      output: done.output,
+    );
+    final accepted = done.failed ? false : answered?.accepted;
+    final next = accepted == false
+        ? ToolCall(
+            id: item.id,
+            name: GenUiParser.toolName,
+            output: done.output,
+            status: ToolStatus.failed,
+          )
+        : UiSurfaceItem(
+            id: item.id,
+            ref: item.ref.copyWith(accepted: accepted, rev: answered?.rev),
+          );
+    return [...items.sublist(0, at), next, ...items.sublist(at + 1)];
+  }
+
   static List<TranscriptItem> _toolDone(
     List<TranscriptItem> items,
     ToolCompleted done,
   ) {
+    if (_surfaceDone(items, done) case final updated?) return updated;
     final status = done.failed ? ToolStatus.failed : ToolStatus.done;
     final toolId = done.toolId;
     var at = toolId == null

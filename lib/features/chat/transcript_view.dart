@@ -22,6 +22,7 @@ import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
 import '../../design/tokens/typography.dart';
+import '../genui/surface_block.dart';
 import 'attachment_chip.dart';
 import 'links.dart';
 
@@ -41,6 +42,7 @@ class TranscriptEntry extends StatelessWidget {
     this.onHold,
     this.collapsing = false,
     this.loadMediaImage,
+    this.loadSurface,
     super.key,
   });
 
@@ -67,6 +69,9 @@ class TranscriptEntry extends StatelessWidget {
   final bool collapsing;
   final MediaImageLoader? loadMediaImage;
 
+  /// Fetches a generated display's stored program by id; without it only displays that carry theirs are drawn.
+  final SurfaceLoader? loadSurface;
+
   @override
   Widget build(BuildContext context) {
     final entry = _entry();
@@ -89,6 +94,10 @@ class TranscriptEntry extends StatelessWidget {
       loadMediaImage: loadMediaImage,
     ),
     final ToolCall call => ToolCard(call),
+    final UiSurfaceItem surface => SurfaceBlock(
+      surface,
+      loadSurface: loadSurface,
+    ),
     final Notice notice when notice.retryable && onRetry != null => _FailedCard(
       notice,
       onRetry: onRetry!,
