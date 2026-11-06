@@ -70,7 +70,7 @@ tests/
 |---|---|
 | `GET capabilities` -> `{version, openui, library_ids, features}` | `dashboard/plugin_api.py` |
 | `POST/GET/DELETE sessions/{id}/genui` flags a *stored* session id for generated UI | `genui/store.py`, `genui/flags.py` |
-| Tool `iris_ui(surface_id, code | template+data, fallback, placement, delete)` | `genui/tool.py`, `genui/surfaces.py` |
+| Tool `iris_ui(surface_id, code or template+data, fallback, placement, delete)` | `genui/tool.py`, `genui/surfaces.py` |
 | `pre_tool_call` keeps `iris_*` to flagged sessions, 4 surfaces a turn; `transform_tool_result` trims receipts | `genui/guards.py` |
 | `pre_llm_call` adds <= 2,500 characters of rules, a component digest and the approved templates | `genui/context.py` |
 | `GET surfaces/{session}[/{surface}]` | `dashboard/plugin_api.py` |
