@@ -55,9 +55,29 @@ dashboard routes can run in different processes, so they share state only throug
 
 ```
 plugin.yaml  __init__.py  pyproject.toml
-dashboard/{manifest.json,plugin_api.py,dist/index.js}
+dashboard/{manifest.json,plugin_api.py,dist/index.js}   routes under /api/plugins/iris/
+genui/    store (files), templates, surfaces (iris_ui), tool, guards, context, flags, skill, catalog, paths
+openui/   Python port of the OpenUI Lang lexer, parser, validator and prompt generator (validation only)
+catalog/  v1.library.json: the component library (provisional until the Dart export lands, plan 3.1)
+skills/iris-genui/   SKILL.md, references/library.md (generated), references/patterns.md (every program is tested)
+tools/    build_skill_refs.py: regenerates library.md (`--check` fails when it is stale)
 tests/
 ```
 
-More lands as the plan's Phase 2 proceeds: `genui/` (store, templates, context), `openui/` (the Python port),
-`catalog/` (the component library exported from Dart), `skills/iris-genui/`.
+## What it does
+
+| Piece | Where |
+|---|---|
+| `GET capabilities` -> `{version, openui, library_ids, features}` | `dashboard/plugin_api.py` |
+| `POST/GET/DELETE sessions/{id}/genui` flags a *stored* session id for generated UI | `genui/store.py`, `genui/flags.py` |
+| Tool `iris_ui(surface_id, code | template+data, fallback, placement, delete)` | `genui/tool.py`, `genui/surfaces.py` |
+| `pre_tool_call` keeps `iris_*` to flagged sessions, 4 surfaces a turn; `transform_tool_result` trims receipts | `genui/guards.py` |
+| `pre_llm_call` adds <= 2,500 characters of rules, a component digest and the approved templates | `genui/context.py` |
+| `GET surfaces/{session}[/{surface}]` | `dashboard/plugin_api.py` |
+
+Files live in `<default Hermes root>/iris/<profile>/`: `profile.json`, `templates/`, `surfaces/<session>/`, `flags.json`,
+`usage.jsonl`. Every route takes `?profile=`. Nothing logs a program, its data or a fallback.
+
+Two suites cross-check the Python against the Dart package (`dart` must be on PATH for the second):
+`tests/test_openui_conformance.py` runs the vendored OpenUI fixtures, and `tests/test_crosscheck_dart.py` compares every
+prefix of every fixture program.
