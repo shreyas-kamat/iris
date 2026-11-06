@@ -125,6 +125,7 @@ void main() {
       addTearDown(sub.cancel);
 
       final rows = <Map<String, Object?>>[];
+      var revTotal = 0;
       for (var i = 0; i < _prompts.length; i++) {
         final from = events.length;
         done = Completer<void>();
@@ -161,6 +162,20 @@ void main() {
           } on Object {
             errorLines.add('unparsed result');
           }
+        }
+        // tool.complete does not carry the tool result on this server, so the
+        // truth is the stored revisions: each accepted call adds one.
+        if (completes.isNotEmpty && ok == 0) {
+          stdout.writeln(
+            '    complete payload keys: ${completes.first.keys.toList()}',
+          );
+          final listedNow = await api.get('$_base/surfaces/$stored');
+          final total = [
+            for (final s in listedNow.valueOrNull?['surfaces'].list ?? const <Json>[])
+              s['rev'].intOrNull ?? 0,
+          ].fold<int>(0, (a, b) => a + b);
+          ok = (total - revTotal).clamp(0, completes.length);
+          revTotal = total;
         }
         final text = turn
             .where((e) => e.type == 'message.complete')

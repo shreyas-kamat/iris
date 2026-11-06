@@ -11,7 +11,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | `d535765` |
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | done | `c205f14` |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
-| G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | doing | |
+| G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `PENDING` |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | todo | |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
@@ -184,3 +184,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - **Blocked:** the 10-prompt measurement did not run. Every chat turn failed in seconds with the same 402-character error text, and the dashboard journal shows the model provider answering `HTTP 404 ... Function '<id>' Not found for account` on each turn. That is the server's model/provider configuration (not the plugin; no iris error appears), so the first-try validity and retry counts are not measured, and the open assumptions are still unchecked: that tool handlers get the stored `session_id`, and that `skill_view('iris:iris-genui', 'references/library.md')` resolves.
 - Needs the user: fix or re-point the model/provider on the Hermes server, then rerun `flutter test --tags live --run-skipped test/live/genui_plugin_live_test.dart --plain-name "ten prompts"` (about 30 minutes). The plugin stays installed and enabled on the server.
 - Next: 2.12 rerun, then write `segment G4 complete` (next: G5, Sonnet, plan 3.1).
+
+### G4 — 2.12 — done — 2026-11-07 — Sonnet 5.5
+- Commits: this log and the live test fix (`test(genui): count accepted iris_ui calls from stored revisions`).
+- Verified: `flutter test --tags live --run-skipped test/live/genui_plugin_live_test.dart --plain-name "ten prompts"` against the user's server (model provider fixed by the user) -> passed. 9 of 10 turns made a display; **first-try valid 8 of 9; 1 retry** (prompt 5, after a `skill_view` call); prompt 8 gave a text-only reply. All surfaces stored under the stored session id, so tool handlers do get the stored `session_id`. The throwaway session was deleted.
+- Deviations: `tool.complete` payloads (`tool_id, name, args, duration_s, result`) did not yield a parseable `ok` from `result` on the first run (all 10 counted failed, wrongly), so the test now counts accepted calls from the growth in stored revisions. Prompt 5's failure text is not captured. `skill_view('iris:iris-genui', ...)` was called in prompt 5; whether it resolved is inferred from the retry succeeding, not read directly.
+- Decisions for later tasks: surfaces are the source of truth for success; `tool.complete.result` is not reliable for the client.
+- segment G4 complete. Next: G5 (Sonnet), Phase 3, task 3.1.
