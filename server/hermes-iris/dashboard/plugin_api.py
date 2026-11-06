@@ -51,7 +51,7 @@ def _profile_store(profile: str | None):
 
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities", "session-flag"]
+FEATURES: list[str] = ["capabilities", "session-flag", "surfaces"]
 
 
 @router.get("/capabilities")
@@ -94,3 +94,35 @@ def get_session_flag(session_id: str, profile: str | None = None):
 @router.delete("/sessions/{session_id}/genui")
 def unflag_session(session_id: str, profile: str | None = None):
     return _session_flag(session_id, profile, "clear")
+
+
+# ---- surfaces: what the agent showed, for the app to render ---------------------------------------------------------
+
+
+@router.get("/surfaces/{session_id}")
+def list_surfaces(session_id: str, profile: str | None = None):
+    """A summary of every surface in a session (no programs; fetch one for its code)."""
+    p = _profile_store(profile)
+    try:
+        ids = p.list_surfaces(session_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"session: {e}") from None
+    out = []
+    for surface_id in ids:
+        s = p.get_surface(session_id, surface_id)
+        if s is None:
+            continue
+        out.append({k: s.get(k) for k in ("surface_id", "rev", "placement", "template", "updated")})
+    return {"ok": True, "session": session_id, "surfaces": out}
+
+
+@router.get("/surfaces/{session_id}/{surface_id}")
+def get_surface(session_id: str, surface_id: str, profile: str | None = None):
+    p = _profile_store(profile)
+    try:
+        s = p.get_surface(session_id, surface_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+    if s is None:
+        raise HTTPException(status_code=404, detail="no such surface")
+    return {"ok": True, "surface": s}
