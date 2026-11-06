@@ -10,7 +10,7 @@ newest last. Models are the minimum; a higher one is fine.
 | 9.1 | **GenUI** (`feat/genui`; plan `2026-10-31-genui.md`) | | | |
 | G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | `d535765` |
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | done | `c205f14` |
-| G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | todo | |
+| G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | doing | |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | todo | |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | todo | |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
@@ -139,3 +139,9 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) positional->named mapping and validation live in `materialize.dart` (1.4), not the parser (1.3). (2) Values needing evaluation stay `Deferred` in the tree; `ParseResult.summary({evaluate})` takes the evaluator hook that 1.6 supplies. (3) `query-cycle` is not implemented yet: it needs query/mutation result reads, so it goes with 1.6. (4) Lexer skips comments itself; `prepareSource` only does fences and `]]>openui:` marker lines. (5) A reference to an unresolved name in a required prop drops the component silently (no `missing-required`), per section 2.3's stream-end rule; revisit if a 1.5 fixture says otherwise.
 - Decisions for later tasks: `ParseResult.tree` holds `Element`/`Binding`/`Deferred`; the streaming parser (1.5) should reuse `splitStatements`, `Program.build` and `materialize` and only add prefix caching and implicit closing. `Program.build` takes statements in source order and does last-wins itself. Number props are `double`; `summarizeValue` prints integer-valued doubles as ints.
 - segment G2 complete. Next: G3 (Opus), 1.5 streaming parser.
+
+### G3 — 1.5 — done — 2026-11-07 — Opus 5.5
+- Commits: edfbde6 streaming parser with prefix cache, implicit closing and batch equivalence
+- Verified: `dart analyze` -> No issues found!; `dart test` -> 232 pass, 5 skipped, 30 red (all conformance; was 32: streaming/005 and 006 now pass, 001 and 003 need the evaluator); `test/streaming_test.dart` all green, including every fixture program streamed a character at a time and split in two at every boundary.
+- Deviations / rulings: (1) `parseProgram` is now `StreamingParser(lib).end(text)`: the spec defines a batch parse as an ended one-chunk stream (rule 7), and only that way does implicit closing (streaming/006's `\`) apply to batch too. Cost if wrong: the property test compares incremental feeding with one-shot, not with an independent batch path. (2) `ParseResult` keeps flat fields (`errors`, `unresolved`, `incomplete`, new getter `statementCount`) instead of a nested `meta`. (3) A line completes only when the next line's first token has arrived and ends before the end of the text (a lone `/` may still become `//`). (4) While streaming: no `no-root`, no `parse-failed`, enum values accepted; all apply at `end()`.
+- Next: 1.6 evaluator + store.
