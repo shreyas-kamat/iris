@@ -18,4 +18,7 @@ _log = logging.getLogger("hermes_iris")
 
 def register(ctx) -> None:
     """Called by Hermes when the plugin is enabled. Tools, hooks and the skill are registered here as they land."""
+    from .genui import tool
+
+    ctx.register_tool(name="iris_ui", toolset="iris", schema=tool.SCHEMA, handler=tool.handle_iris_ui)
     _log.info("hermes-iris %s loaded", __version__)
