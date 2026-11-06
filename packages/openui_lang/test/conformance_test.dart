@@ -51,12 +51,21 @@ void main() {
 }
 
 void _expectMatches(ParseResult actual, Map<String, Object?> expected) {
-  expect(actual.root, equals(expected['root']), reason: 'root');
-  expect(_multiset(actual.errors.map(_codeAndId)), equals(_multiset(_expectedErrors(expected))), reason: 'errors');
-  expect(actual.unresolved.toSet(), equals(((expected['unresolved'] as List?) ?? const []).cast<String>().toSet()));
-  expect(actual.orphans.toSet(), equals(((expected['orphans'] as List?) ?? const []).cast<String>().toSet()));
+  expect(actual.summary(), equals(expected['root']), reason: 'root');
+  expect(_multiset(actual.errors.map((e) => _codeAndId(e.toJson()))), equals(_multiset(_expectedErrors(expected))),
+      reason: 'errors');
+  expect(actual.unresolved, equals(((expected['unresolved'] as List?) ?? const []).cast<String>().toSet()));
+  expect(actual.orphans, equals(((expected['orphans'] as List?) ?? const []).cast<String>().toSet()));
   expect(actual.incomplete, equals(expected['incomplete'] ?? false), reason: 'incomplete');
   if (expected.containsKey('state')) expect(actual.state, equals(expected['state']), reason: 'state');
+  for (final want in ((expected['errorObjects'] as List?) ?? const []).cast<Map<Object?, Object?>>()) {
+    final w = want.cast<String, Object?>();
+    expect(
+      actual.errors.map((e) => e.toJson()).any((got) => w.entries.every((kv) => got[kv.key] == kv.value)),
+      isTrue,
+      reason: 'error object $w in ${actual.errors}',
+    );
+  }
 }
 
 Iterable<String> _expectedErrors(Map<String, Object?> expected) =>
