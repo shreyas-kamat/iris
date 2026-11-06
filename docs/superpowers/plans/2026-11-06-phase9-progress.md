@@ -12,7 +12,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | done | `c205f14` |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
-| G5 | Phase 3: rendering surfaces in Iris | Sonnet | todo | |
+| G5 | Phase 3: rendering surfaces in Iris | Sonnet | doing | |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
@@ -191,3 +191,15 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: `tool.complete` payloads (`tool_id, name, args, duration_s, result`) did not yield a parseable `ok` from `result` on the first run (all 10 counted failed, wrongly), so the test now counts accepted calls from the growth in stored revisions. Prompt 5's failure text is not captured. `skill_view('iris:iris-genui', ...)` was called in prompt 5; whether it resolved is inferred from the retry succeeding, not read directly.
 - Decisions for later tasks: surfaces are the source of truth for success; `tool.complete.result` is not reliable for the client.
 - segment G4 complete. Next: G5 (Sonnet), Phase 3, task 3.1.
+
+### G5 — doing — 2026-11-07
+- Running as Sonnet 5.5. Git matches the log (G4 `39cff19`; HEAD `e67f919`, clean apart from `store/screenshots/`).
+- Next: 3.1 Iris library, part 1.
+
+### G5 — 3.1 — done — 2026-11-07 — Sonnet 5.5
+- Commits: 2f6c78b Iris component library in Dart, exported to the plugin catalog
+- Verified: `flutter test test/features/genui/iris_library_test.dart` -> 7 pass (drift test failed first against the provisional catalog, then passed after `IRIS_WRITE_CATALOG=1`); `flutter analyze lib/features/genui test/features/genui` -> No issues found!; `server/hermes-iris/.venv/Scripts/python -m pytest` -> 265 pass, 1 skipped; `tools/build_skill_refs.py --check` clean.
+- Packages: `openui_lang` added to `pubspec.yaml` as a path dependency (`packages/openui_lang`); no pub.dev package added.
+- Deviations: (1) Part 1 holds 27 components: layout (Stack, Card, Section, Divider, Tabs, Tab, Expander), text and data (Text, Markdown, KeyValue, Stat, StatRow, StatusPill, Table, ListRow, Timeline, TimelineItem, Checklist, ChecklistItem, Progress, CodeBlock, Diff, Image, Link) and `Button`, kept from the provisional catalog so existing patterns validate; its builder and the inputs, charts and `ApproveReject`/`Submit` are Phase 4. Tab, TimelineItem and ChecklistItem are small sub-components. (2) Functions `Percent`, `Money`, `Ago`; action `Ask`. (3) Added `componentGroups` (Layout, Text and data, Actions) so the prompt is grouped. (4) The two context snapshot goldens in `server/hermes-iris/tests/golden/` were regenerated on purpose: the digest lists every component (1,509 and 1,618 characters, cap 2,500). (5) The drift test refreshes the catalog when `IRIS_WRITE_CATALOG=1`.
+- Decisions for later tasks: `IrisLibrary.components/functions/actions/groups`, `toJson()`, `toLibrarySpec()` in `lib/features/genui/render/iris_library.dart`; builders are not on the definitions, 3.2 keys them by component name. `Evaluator` returns `Element` with `type` and `props`. The evaluator has no `@Money`/`@Ago` implementation yet: 3.2 or 3.3 must register them as `OpenUiFunction`s.
+- Next: 3.2 node builder.
