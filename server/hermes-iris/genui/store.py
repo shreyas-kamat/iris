@@ -13,14 +13,19 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 #: Rotate ``usage.jsonl`` once it reaches this size; one rotated file (``usage.jsonl.1``) is kept.
 USAGE_MAX_BYTES = 1024 * 1024
 
+#: How many flagged sessions a profile remembers; the oldest are forgotten first.
+FLAG_LIMIT = 500
+
 _NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _USAGE_LOCK = threading.Lock()
+_FLAGS_LOCK = threading.Lock()
 
 
 class StoreError(Exception):
@@ -184,6 +189,36 @@ class ProfileStore:
                 if isinstance(row, dict):
                     rows.append(row)
         return rows
+
+    # -- flags.json: sessions Iris has switched generated UI on for ---------------------------------------------
+
+    def flagged_sessions(self) -> dict[str, float]:
+        """Flagged stored session ids with the time each was flagged."""
+        data = _load(self._file("flags.json")) or {}
+        return {k: float(v) for k, v in data.items() if isinstance(k, str) and isinstance(v, (int, float))}
+
+    def is_flagged(self, session_id: object) -> bool:
+        return safe_component(session_id) in self.flagged_sessions()
+
+    def flag_session(self, session_id: object) -> None:
+        sid = safe_component(session_id)
+        with _FLAGS_LOCK:
+            flagged = self.flagged_sessions()
+            flagged[sid] = time.time()
+            if len(flagged) > FLAG_LIMIT:
+                newest = sorted(flagged.items(), key=lambda kv: kv[1], reverse=True)[:FLAG_LIMIT]
+                flagged = dict(newest)
+            _atomic_write(self._file("flags.json"), _dump(flagged))
+
+    def unflag_session(self, session_id: object) -> bool:
+        sid = safe_component(session_id)
+        with _FLAGS_LOCK:
+            flagged = self.flagged_sessions()
+            if sid not in flagged:
+                return False
+            del flagged[sid]
+            _atomic_write(self._file("flags.json"), _dump(flagged))
+            return True
 
     # -- reset -------------------------------------------------------------------------------------------------
 

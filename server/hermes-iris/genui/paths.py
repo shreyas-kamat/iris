@@ -24,3 +24,14 @@ def hermes_root() -> Path:
 
 def iris_root() -> Path:
     return hermes_root() / "iris"
+
+
+def current_profile() -> str:
+    """The Hermes profile this process serves, as the store names it ("default" when it is not a named profile)."""
+    try:
+        from hermes_constants import get_hermes_home, profile_name_for_home
+
+        name = profile_name_for_home(get_hermes_home())
+        return name or "default"
+    except Exception:  # noqa: BLE001 - an older Hermes, or no home: the default profile
+        return "default"

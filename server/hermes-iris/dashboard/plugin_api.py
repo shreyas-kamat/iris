@@ -11,7 +11,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 _PACKAGE = "hermes_iris"
 _ROOT = Path(__file__).resolve().parent.parent
@@ -37,10 +37,21 @@ def _core():
 
 core = _core()
 catalog = importlib.import_module(f"{_PACKAGE}.genui.catalog")
+store_mod = importlib.import_module(f"{_PACKAGE}.genui.store")
+paths = importlib.import_module(f"{_PACKAGE}.genui.paths")
 router = APIRouter()
 
+
+def _profile_store(profile: str | None):
+    """The caller's profile store. A missing ``?profile=`` is the default profile; an unsafe one is a 400."""
+    try:
+        return store_mod.Store(paths.iris_root()).profile("default" if profile is None else profile)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"profile: {e}") from None
+
+
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities"]
+FEATURES: list[str] = ["capabilities", "session-flag"]
 
 
 @router.get("/capabilities")
@@ -51,3 +62,35 @@ def capabilities(profile: str | None = None):
         "library_ids": catalog.library_ids(),
         "features": FEATURES,
     }
+
+
+# ---- sessions: switching generated UI on (D3) -----------------------------------------------------------------------
+
+
+def _session_flag(session_id: str, profile: str | None, action: str):
+    p = _profile_store(profile)
+    try:
+        if action == "set":
+            p.flag_session(session_id)
+        elif action == "clear":
+            p.unflag_session(session_id)
+        flagged = p.is_flagged(session_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"session: {e}") from None
+    return {"ok": True, "session": session_id, "flagged": flagged}
+
+
+@router.post("/sessions/{session_id}/genui")
+def flag_session(session_id: str, profile: str | None = None):
+    """Flags a session by its *stored* id (the only id hooks see; Phase 0.5). Iris re-sends it after every reconnect."""
+    return _session_flag(session_id, profile, "set")
+
+
+@router.get("/sessions/{session_id}/genui")
+def get_session_flag(session_id: str, profile: str | None = None):
+    return _session_flag(session_id, profile, "get")
+
+
+@router.delete("/sessions/{session_id}/genui")
+def unflag_session(session_id: str, profile: str | None = None):
+    return _session_flag(session_id, profile, "clear")
