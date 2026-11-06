@@ -1,0 +1,23 @@
+{
+  "id": "mini",
+  "version": "1.0.0",
+  "root": "Stack",
+  "schema": {
+    "properties": {},
+    "$defs": {}
+  },
+  "components": {
+    "Stack": {
+      "signature": "Stack(children: any[], direction?: \"row\" | \"column\")",
+      "description": "Lays out children in a column or a row"
+    },
+    "Text": {
+      "signature": "Text(text: string, variant?: \"body\" | \"heading\")",
+      "description": "A run of text"
+    },
+    "Tag": {
+      "signature": "Tag(text: string, color?: \"gray\" | \"green\" | \"red\")",
+      "description": "A small colored label"
+    }
+  }
+}

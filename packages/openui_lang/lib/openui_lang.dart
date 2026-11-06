@@ -9,5 +9,6 @@ export 'src/values.dart' show jsString, localeCompare, looseEquals, toNumber, tr
 export 'src/library_spec.dart';
 export 'src/parse_result.dart';
 export 'src/parser.dart';
+export 'src/prompt.dart';
 export 'src/streaming.dart';
 export 'src/tree.dart';

@@ -1,0 +1,2 @@
+# Golden prompts are compared byte for byte; keep their line endings as written.
+packages/openui_lang/test/golden/** -text
