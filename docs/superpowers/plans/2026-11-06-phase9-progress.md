@@ -9,7 +9,7 @@ newest last. Models are the minimum; a higher one is fine.
 |---|---|---|---|---|
 | 9.1 | **GenUI** (`feat/genui`; plan `2026-10-31-genui.md`) | | | |
 | G1 | Phase 0: live probe and OpenUI groundwork (gate) | Opus | done | `d535765` |
-| G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | todo | |
+| G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | doing | |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | todo | |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | todo | |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | todo | |
@@ -116,3 +116,12 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - User answered the GenUI plan's open questions 1, 2 and 6 as proposed: plugin in this repo (`server/hermes-iris/`),
   `openui_lang` in this repo, Python port of the parser (D10). Recorded in the plan. Gate closed; G2 can start.
 - Next: G2 (Sonnet), 1.1 skeleton + fixtures.
+
+### G2 — doing — 2026-11-07
+- Running as Sonnet 5.5. Git matches the log (G1 `d535765`; HEAD `05728bd`). OpenUI clone still at `eea983e` in an earlier scratchpad (`91330a6be4617d07/20c4ae4a-…/scratchpad/openui`).
+- Next: 1.1 package skeleton, vendored fixtures, runner.
+
+### G2 — doing — 2026-11-07
+- 1.1 done (`b6b9ae7`): package, 145 vendored fixture files + `NOTICE`, runner; `dart test` 53 red, 6 skipped (editing, validation-only), `dart analyze` clean.
+- 1.2 done: `lib/src/lexer.dart` + 22 tests green, analyze clean. Comments are skipped in the lexer; fence extraction and the `]]>openui:` marker are for 1.3.
+- Next: 1.3 parser (source prep, statements, expressions, `LibrarySpec` models).
