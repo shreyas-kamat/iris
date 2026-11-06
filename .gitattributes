@@ -2,3 +2,4 @@
 packages/openui_lang/test/golden/** -text
 # Context snapshots are compared byte for byte.
 server/hermes-iris/tests/golden/** -text
+server/hermes-iris/skills/**/*.md -text

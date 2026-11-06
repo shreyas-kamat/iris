@@ -4,7 +4,7 @@ user's row, and so needs no stripping in the app).
 It must stay small (``MAX_CHARS``): it is sent on every turn. It carries the rules, the one tool and its argument shape
 (Hermes defers plugin tools, and naming it lets the model skip the ~13 s discovery), a one-line-per-component digest,
 and an index of the person's approved templates. The full signatures and worked examples live in the skill
-(``skill_view('iris-genui', 'references/library.md')``) and are pulled only when composing something new.
+(``skill_view('iris:iris-genui', 'references/library.md')``) and are pulled only when composing something new.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ Rules:
 - Prefer a template when one fits. Never put secrets or tokens in a display.
 - If iris_ui returns errors, fix them and send it again."""
 
-_FOOTER = "Full signatures and examples: skill_view('iris-genui', 'references/library.md')"
+_FOOTER = "Full signatures and examples: skill_view('iris:iris-genui', 'references/library.md')"
 
 
 def _signature(spec: Any) -> str:

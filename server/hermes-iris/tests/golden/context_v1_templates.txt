@@ -10,4 +10,4 @@ Components: Stack(children, direction?, gap?), Card(children, title?), Section(t
 Templates:
 - jobs: Job list (data: title, rows)
 - deploy-status: Deploy status (data: service, state, since)
-Full signatures and examples: skill_view('iris-genui', 'references/library.md')
+Full signatures and examples: skill_view('iris:iris-genui', 'references/library.md')

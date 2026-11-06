@@ -18,10 +18,14 @@ _log = logging.getLogger("hermes_iris")
 
 def register(ctx) -> None:
     """Called by Hermes when the plugin is enabled. Tools, hooks and the skill are registered here as they land."""
-    from .genui import context, guards, tool
+    from .genui import context, guards, skill, tool
 
     ctx.register_tool(name="iris_ui", toolset="iris", schema=tool.SCHEMA, handler=tool.handle_iris_ui)
     ctx.register_hook("pre_llm_call", context.on_pre_llm_call)
     ctx.register_hook("pre_tool_call", guards.on_pre_tool_call)
     ctx.register_hook("transform_tool_result", guards.on_transform_tool_result)
+    try:
+        ctx.register_skill(skill.SKILL_NAME, skill.SKILL_DIR / "SKILL.md", description=skill.SKILL_DESCRIPTION)
+    except Exception:  # noqa: BLE001 - an older Hermes without plugin skills still gets the tool and the hooks
+        _log.warning("hermes-iris: could not register the iris-genui skill", exc_info=True)
     _log.info("hermes-iris %s loaded", __version__)

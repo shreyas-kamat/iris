@@ -47,7 +47,7 @@ def test_snapshot_with_templates(ctx_mod, v1):
 
 def test_names_the_tool_and_the_rules(ctx_mod, v1):
     text = ctx_mod.build(v1, [])
-    for needle in ("iris_ui", "tool_call", "surface_id", "fallback", "root", "OpenUI", "skill_view('iris-genui'"):
+    for needle in ("iris_ui", "tool_call", "surface_id", "fallback", "root", "OpenUI", "skill_view('iris:iris-genui'"):
         assert needle in text, needle
     assert "secret" in text.lower()
 
