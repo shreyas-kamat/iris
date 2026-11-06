@@ -41,7 +41,10 @@ enum ServerCapability {
   kanban('/api/plugins/kanban', 'Kanban'),
 
   /// Hermes Conduit's notifier plugin: push, live voice tokens, calls.
-  conduitPlugin('/api/plugins/conduit_push/capabilities', 'Notifier plugin');
+  conduitPlugin('/api/plugins/conduit_push/capabilities', 'Notifier plugin'),
+
+  /// The hermes-iris plugin: generated displays, templates and the study.
+  irisGenui('/api/plugins/iris/capabilities', 'Generative UI');
 
   const ServerCapability(this.probePath, this.label);
 
