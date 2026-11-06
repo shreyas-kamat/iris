@@ -301,6 +301,7 @@ class NodeBuilder {
         };
         return Align(
           alignment: Alignment.centerLeft,
+          widthFactor: 1,
           child: state == null
               ? IrisChip(label)
               : IrisChip.state(label, state, palette),
@@ -392,6 +393,7 @@ class NodeBuilder {
               IrisRing(
                 value: fraction,
                 size: 28,
+                color: palette.accent,
                 semanticLabel:
                     '${label ?? 'Progress'}: ${(fraction * 100).round()} percent',
               ),
@@ -406,7 +408,13 @@ class NodeBuilder {
             ],
           );
         }
-        return IrisGauge(value: fraction, label: label, width: null);
+        // The gauge shades toward the failure hue as it fills, which suits a context window and not a task's progress.
+        return IrisGauge(
+          value: fraction,
+          label: label,
+          width: null,
+          tint: palette.accent,
+        );
 
       case 'CodeBlock':
         final code = _s(e, 'code');
@@ -447,6 +455,7 @@ class NodeBuilder {
         }
         return Align(
           alignment: Alignment.centerLeft,
+          widthFactor: 1,
           child: Semantics(
             link: true,
             child: IrisPressable(
@@ -470,6 +479,7 @@ class NodeBuilder {
               ]);
         return Align(
           alignment: Alignment.centerLeft,
+          widthFactor: 1,
           child: IrisButton(
             label: label,
             tone: _s(e, 'variant') == 'primary'

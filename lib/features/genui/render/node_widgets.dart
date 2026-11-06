@@ -212,49 +212,59 @@ class IrisDiffView extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: const BorderRadius.all(IrisRadius.sm),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final line in lines)
-                  Semantics(
-                    label: switch (line.kind) {
-                      DiffKind.same => line.text,
-                      DiffKind.removed => 'Removed: ${line.text}',
-                      DiffKind.added => 'Added: ${line.text}',
-                    },
-                    excludeSemantics: true,
-                    child: ColoredBox(
-                      color: switch (line.kind) {
-                        DiffKind.same => const Color(0x00000000),
-                        DiffKind.removed => removed.withValues(alpha: 0.14),
-                        DiffKind.added => added.withValues(alpha: 0.14),
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: IrisSpace.md,
-                          vertical: 1,
-                        ),
-                        child: Text(
-                          '${switch (line.kind) {
-                            DiffKind.same => '  ',
-                            DiffKind.removed => '- ',
-                            DiffKind.added => '+ ',
-                          }}${line.text}',
-                          style: style.copyWith(
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              // Every line takes the width of the longest, and at least the card's, so the tints form a block.
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: box.maxWidth),
+                child: IntrinsicWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final line in lines)
+                        Semantics(
+                          label: switch (line.kind) {
+                            DiffKind.same => line.text,
+                            DiffKind.removed => 'Removed: ${line.text}',
+                            DiffKind.added => 'Added: ${line.text}',
+                          },
+                          excludeSemantics: true,
+                          child: ColoredBox(
                             color: switch (line.kind) {
-                              DiffKind.same => palette.inkMuted,
-                              DiffKind.removed => removed,
-                              DiffKind.added => added,
+                              DiffKind.same => const Color(0x00000000),
+                              DiffKind.removed => removed.withValues(
+                                alpha: 0.14,
+                              ),
+                              DiffKind.added => added.withValues(alpha: 0.14),
                             },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: IrisSpace.md,
+                                vertical: 1,
+                              ),
+                              child: Text(
+                                '${switch (line.kind) {
+                                  DiffKind.same => '  ',
+                                  DiffKind.removed => '- ',
+                                  DiffKind.added => '+ ',
+                                }}${line.text}',
+                                style: style.copyWith(
+                                  color: switch (line.kind) {
+                                    DiffKind.same => palette.inkMuted,
+                                    DiffKind.removed => removed,
+                                    DiffKind.added => added,
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                    ],
                   ),
-              ],
+                ),
+              ),
             ),
           ),
         ),
