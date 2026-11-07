@@ -16,6 +16,7 @@ import '../../../design/components/primitives.dart';
 import '../../../design/theme/iris_theme.dart';
 import '../../../design/tokens/metrics.dart';
 import '../../../design/tokens/palette.dart';
+import 'chart_widgets.dart';
 import 'node_widgets.dart';
 
 /// The OpenUI tree's element, named apart from Flutter's.
@@ -466,6 +467,32 @@ class NodeBuilder {
           ),
         );
 
+      case 'Sparkline':
+        final values = cleanValues(_list(e, 'values'));
+        return values.isEmpty ? null : IrisSparkline(values: values);
+
+      case 'Series': // outside a chart: nothing to say it belongs to
+        return null;
+
+      case 'LineChart':
+      case 'BarChart':
+        final series = _series(e);
+        if (series.isEmpty) return null;
+        final labels = [for (final l in _list(e, 'labels')) jsString(l)];
+        if (e.type == 'BarChart') {
+          return IrisBarChart(series: series, labels: labels);
+        }
+        // A line needs two points to be a line; one point alone is not a chart.
+        if (series.every((s) => s.values.length < 2)) return null;
+        return IrisLineChart(series: series, labels: labels);
+
+      case 'Donut':
+        final slices = _slices(e);
+        return slices.isEmpty ? null : IrisDonut(slices: slices);
+
+      case 'Slice':
+        return null;
+
       case 'Button':
         final label = _s(e, 'label');
         if (label == null) return null;
@@ -493,6 +520,18 @@ class NodeBuilder {
     }
     return null; // a component this app does not know yet
   }
+
+  List<ChartSeries> _series(UiElement e) => [
+    for (final s in _elements(e, 'series', 'Series'))
+      if (cleanValues(_list(s, 'values')) case final v when v.isNotEmpty)
+        ChartSeries(_s(s, 'name') ?? '', v),
+  ].take(kMaxSeries).toList();
+
+  List<ChartSlice> _slices(UiElement e) => [
+    for (final s in _elements(e, 'slices', 'Slice'))
+      if (_n(s, 'value') case final v? when v > 0 && v.isFinite)
+        ChartSlice(_s(s, 'label') ?? '', v),
+  ].take(kMaxSlices).toList();
 
   Widget _stat(BuildContext context, UiElement e) {
     final palette = context.palette;

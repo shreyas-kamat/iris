@@ -76,6 +76,24 @@
       "Link": {
         "$ref": "#/$defs/Link"
       },
+      "Sparkline": {
+        "$ref": "#/$defs/Sparkline"
+      },
+      "Series": {
+        "$ref": "#/$defs/Series"
+      },
+      "LineChart": {
+        "$ref": "#/$defs/LineChart"
+      },
+      "BarChart": {
+        "$ref": "#/$defs/BarChart"
+      },
+      "Donut": {
+        "$ref": "#/$defs/Donut"
+      },
+      "Slice": {
+        "$ref": "#/$defs/Slice"
+      },
       "Button": {
         "$ref": "#/$defs/Button"
       }
@@ -510,6 +528,113 @@
           "url"
         ]
       },
+      "Sparkline": {
+        "type": "object",
+        "description": "A small trend line with no axes, for a quick sense of direction. Use LineChart when the person needs to read values",
+        "properties": {
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "values"
+        ]
+      },
+      "Series": {
+        "type": "object",
+        "description": "One named run of numbers in a LineChart or BarChart; keep the name short, it labels the legend",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ]
+      },
+      "LineChart": {
+        "type": "object",
+        "description": "One to four Series as lines over shared labels, such as days. Every Series needs the same number of values as labels",
+        "properties": {
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Series"
+            }
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "series"
+        ]
+      },
+      "BarChart": {
+        "type": "object",
+        "description": "One to four Series as grouped bars over shared labels. The baseline is zero, so use it to compare amounts, not to show a trend",
+        "properties": {
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Series"
+            }
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "series"
+        ]
+      },
+      "Donut": {
+        "type": "object",
+        "description": "Shares of a whole, up to 12 Slice values, shown as a ring with a legend. Use for parts of a total, not for trends",
+        "properties": {
+          "slices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Slice"
+            }
+          }
+        },
+        "required": [
+          "slices"
+        ]
+      },
+      "Slice": {
+        "type": "object",
+        "description": "One share of a Donut; value is any positive amount and the percentage is worked out for you",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ]
+      },
       "Button": {
         "type": "object",
         "description": "A button. Without an action it sends its label to the assistant as the person's next message",
@@ -605,6 +730,24 @@
           },
           {
             "$ref": "#/$defs/Link"
+          },
+          {
+            "$ref": "#/$defs/Sparkline"
+          },
+          {
+            "$ref": "#/$defs/Series"
+          },
+          {
+            "$ref": "#/$defs/LineChart"
+          },
+          {
+            "$ref": "#/$defs/BarChart"
+          },
+          {
+            "$ref": "#/$defs/Donut"
+          },
+          {
+            "$ref": "#/$defs/Slice"
           },
           {
             "$ref": "#/$defs/Button"
@@ -835,6 +978,30 @@
       "signature": "Link(label: string, url: string)",
       "description": "Text that opens a web address after the person confirms. Use for sources, not for actions"
     },
+    "Sparkline": {
+      "signature": "Sparkline(values: number[])",
+      "description": "A small trend line with no axes, for a quick sense of direction. Use LineChart when the person needs to read values"
+    },
+    "Series": {
+      "signature": "Series(name: string, values: number[])",
+      "description": "One named run of numbers in a LineChart or BarChart; keep the name short, it labels the legend"
+    },
+    "LineChart": {
+      "signature": "LineChart(series: Series[], labels?: string[])",
+      "description": "One to four Series as lines over shared labels, such as days. Every Series needs the same number of values as labels"
+    },
+    "BarChart": {
+      "signature": "BarChart(series: Series[], labels?: string[])",
+      "description": "One to four Series as grouped bars over shared labels. The baseline is zero, so use it to compare amounts, not to show a trend"
+    },
+    "Donut": {
+      "signature": "Donut(slices: Slice[])",
+      "description": "Shares of a whole, up to 12 Slice values, shown as a ring with a legend. Use for parts of a total, not for trends"
+    },
+    "Slice": {
+      "signature": "Slice(label: string, value: number)",
+      "description": "One share of a Donut; value is any positive amount and the percentage is worked out for you"
+    },
     "Button": {
       "signature": "Button(label: string, action?: ActionExpression, variant?: \"primary\" | \"secondary\")",
       "description": "A button. Without an action it sends its label to the assistant as the person's next message"
@@ -893,6 +1060,17 @@
         "Diff",
         "Image",
         "Link"
+      ]
+    },
+    {
+      "name": "Charts",
+      "components": [
+        "Sparkline",
+        "Series",
+        "LineChart",
+        "BarChart",
+        "Donut",
+        "Slice"
       ]
     },
     {

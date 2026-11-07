@@ -394,6 +394,50 @@ abstract final class IrisLibrary {
       ],
     ),
 
+    // Charts
+    IrisComponent(
+      'Sparkline',
+      'A small trend line with no axes, for a quick sense of direction. Use LineChart when the person needs to read values',
+      [IrisProp('values', IrisType.listOf(IrisType.number))],
+    ),
+    IrisComponent(
+      'Series',
+      'One named run of numbers in a LineChart or BarChart; keep the name short, it labels the legend',
+      [
+        const IrisProp('name', IrisType.string),
+        IrisProp('values', IrisType.listOf(IrisType.number)),
+      ],
+    ),
+    IrisComponent(
+      'LineChart',
+      'One to four Series as lines over shared labels, such as days. Every Series needs the same number of values as labels',
+      [
+        IrisProp('series', IrisType.components('Series')),
+        IrisProp.optional('labels', IrisType.listOf(IrisType.string)),
+      ],
+    ),
+    IrisComponent(
+      'BarChart',
+      'One to four Series as grouped bars over shared labels. The baseline is zero, so use it to compare amounts, not to show a trend',
+      [
+        IrisProp('series', IrisType.components('Series')),
+        IrisProp.optional('labels', IrisType.listOf(IrisType.string)),
+      ],
+    ),
+    IrisComponent(
+      'Donut',
+      'Shares of a whole, up to 12 Slice values, shown as a ring with a legend. Use for parts of a total, not for trends',
+      [IrisProp('slices', IrisType.components('Slice'))],
+    ),
+    IrisComponent(
+      'Slice',
+      'One share of a Donut; value is any positive amount and the percentage is worked out for you',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp('value', IrisType.number),
+      ],
+    ),
+
     // Actions (the inputs and reply kits arrive in Phase 4)
     IrisComponent(
       'Button',
@@ -475,6 +519,14 @@ abstract final class IrisLibrary {
       'Diff',
       'Image',
       'Link',
+    ]),
+    IrisComponentGroup('Charts', const [
+      'Sparkline',
+      'Series',
+      'LineChart',
+      'BarChart',
+      'Donut',
+      'Slice',
     ]),
     IrisComponentGroup('Actions', const ['Button']),
   ];

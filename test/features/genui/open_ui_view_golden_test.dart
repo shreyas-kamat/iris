@@ -46,6 +46,15 @@ link = Link("Read the docs", "https://example.com/docs")
 btn = Button("Try again", null, "primary")
 ''';
 
+const _charts = '''
+root = Stack([head, spark, line, bar, donut])
+head = Text("Charts", "title")
+spark = Card([Text("Requests this week", "caption"), Sparkline([12, 15, 11, 18, 22, 19, 27])], "Sparkline")
+line = Card([LineChart([Series("Requests", [10, 14, 9, 20, 18, 26, 24]), Series("Errors", [1, 0, 2, 1, 4, 2, 1])], ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])], "Line chart")
+bar = Card([BarChart([Series("Revenue", [120, 90, 150, -20]), Series("Costs", [80, 85, 90, 60])], ["Q1", "Q2", "Q3", "Q4"])], "Bar chart")
+donut = Card([Donut([Slice("Docs", 40), Slice("Code", 35), Slice("Chat", 20), Slice("Other", 0.5)])], "Donut")
+''';
+
 Widget _host(String code, {required bool dark}) {
   final theme = IrisThemeData(skin: IrisSkin.aperture, isDark: dark);
   return MediaQuery(
@@ -88,6 +97,7 @@ void main() {
     'layout': _layout,
     'data': _data,
     'more': _more,
+    'charts': _charts,
   }.entries) {
     for (final dark in [true, false]) {
       testWidgets('${entry.key}, ${dark ? 'dark' : 'light'}', (tester) async {

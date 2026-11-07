@@ -58,6 +58,14 @@ Diff(before: string, after: string) — Two versions of some text, with the chan
 Image(url: string, alt: string) — A picture from an allowed image host. alt is required and should describe it for a screen reader
 Link(label: string, url: string) — Text that opens a web address after the person confirms. Use for sources, not for actions
 
+### Charts
+Sparkline(values: number[]) — A small trend line with no axes, for a quick sense of direction. Use LineChart when the person needs to read values
+Series(name: string, values: number[]) — One named run of numbers in a LineChart or BarChart; keep the name short, it labels the legend
+LineChart(series: Series[], labels?: string[]) — One to four Series as lines over shared labels, such as days. Every Series needs the same number of values as labels
+BarChart(series: Series[], labels?: string[]) — One to four Series as grouped bars over shared labels. The baseline is zero, so use it to compare amounts, not to show a trend
+Donut(slices: Slice[]) — Shares of a whole, up to 12 Slice values, shown as a ring with a legend. Use for parts of a total, not for trends
+Slice(label: string, value: number) — One share of a Donut; value is any positive amount and the percentage is worked out for you
+
 ### Actions
 Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary") — A button. Without an action it sends its label to the assistant as the person's next message
 
