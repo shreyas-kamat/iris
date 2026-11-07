@@ -41,6 +41,7 @@ catalog = importlib.import_module(f"{_PACKAGE}.genui.catalog")
 store_mod = importlib.import_module(f"{_PACKAGE}.genui.store")
 paths = importlib.import_module(f"{_PACKAGE}.genui.paths")
 personal = importlib.import_module(f"{_PACKAGE}.genui.personal")
+feedback = importlib.import_module(f"{_PACKAGE}.genui.feedback")
 router = APIRouter()
 
 
@@ -53,7 +54,7 @@ def _profile_store(profile: str | None):
 
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates"]
+FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback"]
 
 
 @router.get("/capabilities")
@@ -191,3 +192,9 @@ async def put_template(template_id: str, request: Request, profile: str | None =
 def delete_template(template_id: str, profile: str | None = None):
     tid = _template_id(template_id)
     return {"ok": True, "id": tid, "deleted": _profile_store(profile).delete_template(tid)}
+
+
+@router.post("/feedback")
+async def post_feedback(request: Request, profile: str | None = None):
+    """Signals about displays the app drew (used, expanded, dismissed, not useful). Best effort on the app's side."""
+    return _answer(feedback.record(_profile_store(profile), await _json_body(request)))
