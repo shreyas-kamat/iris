@@ -183,6 +183,7 @@ class _OpenUiViewState extends State<OpenUiView> {
         return false;
       },
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Stack(

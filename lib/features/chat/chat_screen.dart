@@ -25,6 +25,7 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../genui/reply_kit.dart';
 import '../genui/surface_block.dart';
 import '../voice/mic_permission_sheet.dart';
 import '../voice/voice_call.dart';
@@ -182,6 +183,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _chat.onBranchRequested = () => unawaited(_branch());
     _chat.onPromptReturned = _prefill;
     _text.addListener(_watchForSlash);
+    _text.addListener(_clearKitOnTyping);
     unawaited(_chat.open());
   }
 
@@ -197,6 +199,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _text.removeListener(_watchForSlash);
+    _text.removeListener(_clearKitOnTyping);
     _clock?.cancel();
     _missedTimer?.cancel();
     unawaited(_recorder.cancel());
@@ -420,6 +423,51 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// The command catalogue is read the first time the person types a slash.
+  /// Reply kits the person has dismissed, tapped or typed past. A kit the assistant updates has a new key and returns.
+  final _dismissedKits = <String>{};
+
+  /// The kit to show: the newest one, while nothing is running and the person has not put it away.
+  UiSurfaceItem? _replyKitFor(ChatState state) {
+    if (state.running) return null;
+    final kit = currentReplyKit(state.items);
+    return kit == null || _dismissedKits.contains(replyKitKey(kit))
+        ? null
+        : kit;
+  }
+
+  /// The reply kit docked above the composer, if there is one to show.
+  Widget _kitDock(BuildContext context, ChatState state) {
+    final kit = _replyKitFor(state);
+    return IrisAnimatedSize(
+      alignment: Alignment.bottomCenter,
+      child: kit == null
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.window.gutter,
+                IrisSpace.sm,
+                context.window.gutter,
+                0,
+              ),
+              child: ReplyKitDock(
+                key: ValueKey(replyKitKey(kit)),
+                item: kit,
+                loadSurface: _loadSurface,
+                onUiAction: (text, action) =>
+                    unawaited(_chat.sendUiAction(text, action)),
+                onDismiss: () =>
+                    setState(() => _dismissedKits.add(replyKitKey(kit))),
+              ),
+            ),
+    );
+  }
+
+  void _clearKitOnTyping() {
+    if (_text.text.isEmpty || !mounted) return;
+    final kit = _replyKitFor(_chat.value);
+    if (kit != null) setState(() => _dismissedKits.add(replyKitKey(kit)));
+  }
+
   void _watchForSlash() {
     if (_text.text.startsWith('/')) unawaited(_chat.loadCommands());
   }
@@ -743,6 +791,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
           ),
+          _kitDock(context, state),
           Composer(
             controller: _text,
             running: state.running,

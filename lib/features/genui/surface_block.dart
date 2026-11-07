@@ -25,6 +25,8 @@ class SurfaceBlock extends StatefulWidget {
     this.loadSurface,
     this.env = const NodeEnv(),
     this.onUiAction,
+    this.docked = false,
+    this.maxHeight = 480,
     super.key,
   });
 
@@ -35,6 +37,12 @@ class SurfaceBlock extends StatefulWidget {
   /// The person asked the assistant something from this display: the sentence to send as their message and the
   /// hidden block that says where it came from. The host sends it as a chat message.
   final void Function(String text, IrisActionEnvelope action)? onUiAction;
+
+  /// Drawn by the reply-kit dock rather than in the transcript: a reply kit is then shown, not skipped.
+  final bool docked;
+
+  /// Taller displays are cut here with a "Show all" button.
+  final double maxHeight;
 
   @override
   State<SurfaceBlock> createState() => _SurfaceBlockState();
@@ -94,11 +102,16 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
   @override
   Widget build(BuildContext context) {
     // Reply kits sit above the composer, not in the transcript.
-    if (_ref.placement == SurfacePlacement.replyKit) {
+    if (_ref.placement == SurfacePlacement.replyKit && !widget.docked) {
       return const SizedBox.shrink();
     }
     if (_hasCode) {
-      return OpenUiView(code: _ref.code!, fallback: _ref.fallback, env: _env);
+      return OpenUiView(
+        code: _ref.code!,
+        fallback: _ref.fallback,
+        env: _env,
+        maxHeight: widget.maxHeight,
+      );
     }
     final fetch = _fetch;
     if (fetch == null) return _fallback(context);
@@ -117,6 +130,7 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
           code: code,
           fallback: surface.fallback ?? _ref.fallback,
           env: _env,
+          maxHeight: widget.maxHeight,
         );
       },
     );
