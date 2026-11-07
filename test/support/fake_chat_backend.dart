@@ -22,6 +22,15 @@ final class FakeChatBackend implements ChatBackend, SurfaceBackend {
   /// The generated displays the plugin has stored, by id.
   final surfaces = <String, UiSurface>{};
 
+  /// What the plugin reports; not found when it is not installed.
+  Result<GenUiCapabilities> genUiCapabilitiesResult = const Err(
+    IrisFailure(FailureKind.notFound),
+  );
+
+  @override
+  Future<Result<GenUiCapabilities>> genUiCapabilities() async =>
+      genUiCapabilitiesResult;
+
   /// Every display asked for, as `<stored id>/<surface id>`.
   final surfacesFetched = <String>[];
 

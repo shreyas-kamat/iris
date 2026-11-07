@@ -17,6 +17,8 @@ import '../core/result.dart';
 import '../data/chat/chat_backend.dart';
 import '../data/chat/chat_models.dart';
 import '../data/db/database.dart';
+import '../data/genui/genui_api.dart';
+import '../data/genui/genui_controller.dart';
 import '../data/net/capabilities.dart';
 import '../data/net/credentials.dart';
 import '../data/net/server_config.dart';
@@ -26,6 +28,7 @@ import '../data/rpc/dashboard_session.dart';
 import '../data/rpc/rpc_frame.dart';
 import '../demo/demo_chat_backend.dart';
 import '../demo/demo_mode.dart';
+import 'genui_providers.dart';
 import 'preferences.dart';
 
 /// The on-disk database.
@@ -206,7 +209,16 @@ final activeChatProvider = FutureProvider<ChatBackend?>((ref) async {
   if (world != null) return DemoChatBackend(world, profile: profile);
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
-  final chat = DashboardChat(session, profile: profile);
+  final connection = session.connection;
+  final chat = DashboardChat(
+    session,
+    profile: profile,
+    // Read at each attach, so the switch in Settings applies to the next conversation opened.
+    genUi: GenUiController(
+      DashboardGenUiApi(connection.client, profile: profile),
+      enabled: () => ref.read(genUiActiveProvider),
+    ),
+  );
   ref.onDispose(() => unawaited(chat.dispose()));
   return chat;
 });

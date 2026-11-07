@@ -57,6 +57,10 @@ abstract final class PreferenceKeys {
   /// system prompt asked for, so a later refusal opens Settings instead.
   static const voiceMicAsked = 'voice.micAsked';
 
+  /// Per `<server>/<profile>`: `true` when the person turned generated
+  /// displays on. Absent means off.
+  static const genui = 'genui.enabled';
+
   /// Per `<server>/<profile>`: `voiceCalls.<id>` → a JSON list of the voice
   /// calls made in one conversation, oldest first.
   static String voiceCalls(String id) => 'voiceCalls.$id';
@@ -85,9 +89,9 @@ final class DriftPreferencesStore implements PreferencesStore {
   Future<void> write(String scope, String key, String? value) async {
     try {
       if (value == null) {
-        await (_db.delete(_db.preferences)
-              ..where((row) => row.scope.equals(scope) & row.key.equals(key)))
-            .go();
+        await (_db.delete(
+          _db.preferences,
+        )..where((row) => row.scope.equals(scope) & row.key.equals(key))).go();
       } else {
         await _db
             .into(_db.preferences)
