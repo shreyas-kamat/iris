@@ -13,7 +13,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
-| G6 | Phase 4: actions, inputs, reply kits | Sonnet | doing | |
+| G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
@@ -287,9 +287,16 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Next: 4.5 surface updates.
 
 ### G6 — 4.5 — done — 2026-11-07 — Sonnet 5.5
-- Commits: the `feat(genui): a display updates in place, is tagged Updated, and a refused update keeps the last good version` commit (sha in the next entry)
+- Commits: the `feat(genui): a display updates in place, is tagged Updated, and a refused update keeps the last good version` commit (`95c9350`)
 - Verified: `flutter test test/features/genui/surface_update_test.dart` red first (no `updated`/`isUpdated`), then 17 pass with the older `genui_transcript_test.dart`: 50 pass together; `flutter test --exclude-tags live` -> 1,652 pass, 4 skipped; `flutter analyze lib test` -> the 3 pre-existing infos only; `server/hermes-iris/.venv/Scripts/python -m pytest` -> 267 pass, 1 skipped.
 - What it does: `UiSurfaceItem` now has `callId` (the latest call that wrote it), `updated`, `previous` and `isUpdated` (`updated` or `rev > 1`). `UiSurfaceItem.add` replaces an existing display **where it stands**, keeping the first call's `id` as its stable key, so its widget, and what the person typed into it, survive the update (a test types into an `Input`, swaps in a revised program and checks the text and the dependent expression). Answers are matched by `callId`, so the first call's late answer cannot touch the update. A refused update puts the last good version back and adds the failed card after it (`refused()`); a refused first display is still just the failed card. `SurfaceBlock` shows a quiet "Updated" tag (not on the docked kit) in a slot that is always in the tree, so tagging never rebuilds the display.
 - Deviations: (1) 3.5's rule was "the newest mention wins and moves to the end"; 4.5 says "updates in place", so it now stays where it first appeared (and a display seen only at revision 2 or later is tagged too). Cost if wrong: an update far above the bottom of a long chat can be missed; the tag and the assistant's text mention it. (2) A delete followed by a new call with the same id is a new display, not an update.
 - Decisions for later tasks: `UiSurfaceItem.id` is the stable key, `callId` the live match; any new code matching a tool answer to a display must use `callId`.
 - Next: 4.6 live check of an approve/hold reply kit. Needs the user: the debug APK must be installed on the emulator (it was full before: `INSUFFICIENT_STORAGE`), signed in, Generated displays on, and a real turn of 240 s or more on their server.
+
+### G6 — 4.6 — done — 2026-11-07 — Sonnet 5.5
+- Commits: none (live check). The debug APK (x64 only) was installed over the old one with `adb install -r`, so the app's data and sign-in were kept; no wipe was needed this time.
+- Verified live on `emulator-5554` against the user's server (they said yes in this chat): new chat, "ask me if I want you to deploy... Approve and Hold in a reply kit display". Turn 1: the model drew an inline card (it chose `inline`), so the dock was not exercised. Turn 2, naming `placement reply_kit`: the display docked above the composer with a dismiss button and the question in the text; tapping Hold sent "Hold off on deploying the API to production" as the person's message (no `<iris-action>` text visible), the dock went away, and the assistant answered "Understood, sir. Deployment is on hold". Each turn took under 4 minutes.
+- Notes: the model needs the placement spelled out; left alone it may choose inline. The skill already says to use `placement: "reply_kit"` for decisions, so a later prompt tweak (7.x or the study phase) could stress it. The sentence sent is the one the model wrote in `@Ask`, not the button label. The side toolbar in the screenshots is the emulator's keyboard overlay, not the app. Not checked live: queue mode, dismiss, typing clearing the kit (all covered by screen tests).
+- Defects found: none new.
+- segment G6 complete. Next: G7 (Sonnet), Phases 5-6, task 5.1.
