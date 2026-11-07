@@ -118,7 +118,11 @@ abstract final class HistoryParser {
           final callId = firstText(row, const ['tool_call_id', 'call_id']);
           final at = callId == null
               ? -1
-              : items.indexWhere((item) => item.id == callId);
+              : items.indexWhere(
+                  (item) => item is UiSurfaceItem
+                      ? item.callId == callId
+                      : item.id == callId,
+                );
           final matched = at < 0 ? null : items[at];
           if (matched is ToolCall) {
             items[at] = matched.copyWith(output: content);
@@ -129,20 +133,15 @@ abstract final class HistoryParser {
               output: content,
             );
             if (answered?.accepted == false) {
-              // The plugin refused it, so there is nothing to draw: show the failed call.
-              items[at] = ToolCall(
-                id: matched.id,
-                name: GenUiParser.toolName,
-                output: content,
-                status: ToolStatus.failed,
-              );
+              // The plugin refused it: the version it replaced comes back, if there was one, and the failed call
+              // is shown either way.
+              items
+                ..removeAt(at)
+                ..insertAll(at, matched.refused(content));
             } else if (answered != null) {
-              items[at] = UiSurfaceItem(
-                id: matched.id,
-                ref: matched.ref.copyWith(
-                  accepted: answered.accepted,
-                  rev: answered.rev,
-                ),
+              items[at] = matched.answered(
+                accepted: answered.accepted,
+                rev: answered.rev,
               );
             }
           } else if (callId != null && surfaceCalls.contains(callId)) {

@@ -734,7 +734,7 @@ final class ChatState {
     final at = toolId == null
         ? -1
         : items.indexWhere(
-            (item) => item is UiSurfaceItem && item.id == toolId,
+            (item) => item is UiSurfaceItem && item.callId == toolId,
           );
     if (at < 0) {
       // The display was removed or replaced by a later call; its answer needs no card of its own. A failure still
@@ -754,17 +754,9 @@ final class ChatState {
     );
     final accepted = done.failed ? false : answered?.accepted;
     final next = accepted == false
-        ? ToolCall(
-            id: item.id,
-            name: GenUiParser.toolName,
-            output: done.output,
-            status: ToolStatus.failed,
-          )
-        : UiSurfaceItem(
-            id: item.id,
-            ref: item.ref.copyWith(accepted: accepted, rev: answered?.rev),
-          );
-    return [...items.sublist(0, at), next, ...items.sublist(at + 1)];
+        ? item.refused(done.output)
+        : [item.answered(accepted: accepted, rev: answered?.rev)];
+    return [...items.sublist(0, at), ...next, ...items.sublist(at + 1)];
   }
 
   static List<TranscriptItem> _toolDone(

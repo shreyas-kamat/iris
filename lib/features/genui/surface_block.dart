@@ -11,6 +11,7 @@ import '../../data/genui/genui_models.dart';
 import '../../data/genui/genui_parser.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/markdown.dart';
+import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import 'render/node_builder.dart';
 import 'render/node_widgets.dart';
@@ -105,6 +106,19 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
     if (_ref.placement == SurfacePlacement.replyKit && !widget.docked) {
       return const SizedBox.shrink();
     }
+    // The tag slot is always there, so a display that becomes "updated" keeps its widget, and what was typed in it.
+    final tagged = widget.item.isUpdated && !widget.docked;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tagged ? const _UpdatedTag() : const SizedBox.shrink(),
+        _display(context),
+      ],
+    );
+  }
+
+  Widget _display(BuildContext context) {
     if (_hasCode) {
       return OpenUiView(
         code: _ref.code!,
@@ -155,6 +169,38 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// "Updated": the assistant has changed this display since it first showed it.
+class _UpdatedTag extends StatelessWidget {
+  const _UpdatedTag();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: IrisSpace.xs),
+      child: Semantics(
+        label: 'Updated display',
+        excludeSemantics: true,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.update,
+              size: IrisSize.iconSmall,
+              color: palette.inkMuted,
+            ),
+            const SizedBox(width: IrisSpace.xs),
+            Text(
+              'Updated',
+              style: context.type.caption.copyWith(color: palette.inkMuted),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
