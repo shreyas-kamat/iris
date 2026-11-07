@@ -2,6 +2,8 @@
 /// them in a study; nothing is used until the person approves it in Iris.
 library;
 
+import 'dart:convert';
+
 import '../../core/json.dart';
 
 /// Where a proposal stands.
@@ -129,6 +131,10 @@ final class UiTemplate {
   final Map<String, Object?> dataSchema;
   final Map<String, Object?> sampleData;
   final DateTime? updated;
+
+  /// The program with [data] (the sample by default) bound as `data = {...}`, as the plugin expands it for a reply.
+  String expanded([Map<String, Object?>? data]) =>
+      'data = ${jsonEncode(data ?? sampleData)}\n$program';
 
   /// The names of the data the template takes, from its schema.
   List<String> get dataKeys {

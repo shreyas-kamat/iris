@@ -13,6 +13,7 @@ import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/settings_list.dart';
 import '../../design/platform/platform_feel.dart';
+import '../genui/study_review_screen.dart';
 import '../genui/study_screen.dart';
 
 class GenUiSettingsSection extends ConsumerWidget {
@@ -76,9 +77,19 @@ class GenUiSettingsSection extends ConsumerWidget {
       label: 'Study my work',
       sub: 'Let Hermes learn what you do and propose displays for it',
       onTap: () => unawaited(
-        Navigator.of(
-          context,
-        ).push(IrisPageRoute<void>(builder: (_) => const StudyScreen())),
+        Navigator.of(context).push(
+          IrisPageRoute<void>(
+            builder: (studyContext) => StudyScreen(
+              onReview: () => unawaited(
+                Navigator.of(studyContext).push(
+                  IrisPageRoute<void>(
+                    builder: (_) => const StudyReviewScreen(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
