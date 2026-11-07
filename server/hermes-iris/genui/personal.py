@@ -21,6 +21,7 @@ from . import templates
 from .store import InvalidName, ProfileStore, StoreError, safe_component
 
 STATUSES = ("proposed", "approved", "retired")
+KINDS = ("display", "reply_kit")
 MAX_TEMPLATES = 50
 SUMMARY_MAX = 600
 CHIPS_MAX = 12
@@ -30,7 +31,7 @@ WHEN_MAX = 200
 SCHEMA_MAX_BYTES = 4096
 SAMPLE_MAX_BYTES = 4096
 
-_TEMPLATE_FIELDS = ("name", "when", "data_schema", "program", "sample_data")
+_TEMPLATE_FIELDS = ("name", "when", "data_schema", "program", "sample_data", "kind")
 _LOCK = threading.Lock()
 
 
@@ -151,6 +152,8 @@ def _template_problems(library: Library, fields: dict[str, Any]) -> list[str]:
         problems.append("when is required: one line saying when to use this template")
     elif len(when) > WHEN_MAX:
         problems.append(f"when is longer than {WHEN_MAX} characters")
+    if fields.get("kind", "display") not in KINDS:
+        problems.append(f"kind must be one of {', '.join(KINDS)}")
     schema, sample, program = fields.get("data_schema"), fields.get("sample_data"), fields.get("program")
     schema_ok = isinstance(schema, dict) and schema.get("type") == "object"
     if not schema_ok:
@@ -194,6 +197,7 @@ def propose_template(profile: ProfileStore, library: Library, args: Any) -> dict
     if not isinstance(args, dict):
         return _fail("the arguments must be an object")
     template_id, problems = _template_id(args.get("id"))
+    args = {**args, "kind": args.get("kind") or "display"}
     problems += _template_problems(library, args)
     if problems:
         return _fail(*problems)
@@ -235,6 +239,8 @@ def put_template(profile: ProfileStore, library: Library, template_id: Any, body
             merged.update({k: body[k] for k in (*_TEMPLATE_FIELDS, "status") if k in body})
             if merged.get("status") is None:
                 merged["status"] = "proposed"
+            if merged.get("kind") is None:
+                merged["kind"] = "display"
             problems = [] if merged["status"] in STATUSES else [f"status must be one of {', '.join(STATUSES)}"]
             problems += _template_problems(library, merged)
             if old is None and not problems and _count(profile) >= MAX_TEMPLATES:
@@ -277,6 +283,7 @@ def list_template_summaries(profile: ProfileStore, status: str | None = None) ->
                 "id": t.get("id"),
                 "name": t.get("name"),
                 "when": t.get("when"),
+                "kind": t.get("kind") or "display",
                 "status": t.get("status"),
                 "rev": t.get("rev"),
                 "keys": list(props) if isinstance(props, dict) else [],

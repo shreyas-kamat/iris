@@ -108,8 +108,8 @@ def test_register_adds_the_skill(plugin):
             skills.append((name, path, description))
 
     plugin.register(Ctx())
-    ((name, path, description),) = skills
-    assert name == "iris-genui" and path.name == "SKILL.md" and path.exists() and description
+    (name, path, description) = next(x for x in skills if x[0] == "iris-genui")
+    assert path.name == "SKILL.md" and path.exists() and description
 
 
 def test_an_older_hermes_without_register_skill_still_loads(plugin):

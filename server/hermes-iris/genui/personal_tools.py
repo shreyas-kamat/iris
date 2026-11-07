@@ -63,6 +63,11 @@ TEMPLATE_PROPOSE: dict[str, Any] = {
             "name": {"type": "string", "description": "What the person will see, at most 60 characters."},
             "when": {"type": "string", "description": "One line: when to use it, at most 200 characters."},
             "data_schema": {"type": "object", "description": 'JSON Schema of `data`; "type": "object".'},
+            "kind": {
+                "type": "string",
+                "enum": list(personal.KINDS),
+                "description": "display (default) for a card in the reply; reply_kit for buttons or choices that dock above the composer.",
+            },
             "program": {"type": "string", "description": "OpenUI Lang, root first, reading `data`."},
             "sample_data": {"type": "object", "description": "Made-up data that fits data_schema."},
         },

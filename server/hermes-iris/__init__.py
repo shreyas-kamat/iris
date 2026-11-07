@@ -26,8 +26,12 @@ def register(ctx) -> None:
     ctx.register_hook("pre_llm_call", context.on_pre_llm_call)
     ctx.register_hook("pre_tool_call", guards.on_pre_tool_call)
     ctx.register_hook("transform_tool_result", guards.on_transform_tool_result)
-    try:
-        ctx.register_skill(skill.SKILL_NAME, skill.SKILL_DIR / "SKILL.md", description=skill.SKILL_DESCRIPTION)
-    except Exception:  # noqa: BLE001 - an older Hermes without plugin skills still gets the tool and the hooks
-        _log.warning("hermes-iris: could not register the iris-genui skill", exc_info=True)
+    for name, directory, description in (
+        (skill.SKILL_NAME, skill.SKILL_DIR, skill.SKILL_DESCRIPTION),
+        (skill.STUDY_SKILL_NAME, skill.STUDY_SKILL_DIR, skill.STUDY_SKILL_DESCRIPTION),
+    ):
+        try:
+            ctx.register_skill(name, directory / "SKILL.md", description=description)
+        except Exception:  # noqa: BLE001 - an older Hermes without plugin skills still gets the tools and the hooks
+            _log.warning("hermes-iris: could not register the %s skill", name, exc_info=True)
     _log.info("hermes-iris %s loaded", __version__)

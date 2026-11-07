@@ -256,6 +256,7 @@ def test_list_templates_gives_summaries_with_the_data_keys(env):
         "id": "jobs",
         "name": "Job list",
         "when": "Whenever cron jobs are listed",
+        "kind": "display",
         "status": "proposed",
         "rev": 1,
         "keys": ["title", "rows"],
@@ -317,3 +318,50 @@ def test_tool_errors_do_not_raise(plugin, hermes_home):
 
     assert run(pt.handle_template_propose, "nope")["ok"] is False
     assert run(pt.handle_profile_propose, None)["ok"] is False
+
+
+# ---- kind: a template is a display or a reply kit --------------------------------------------------------------------
+
+
+def test_kind_defaults_to_display_and_is_kept(env):
+    env.m.propose_template(env.p, env.lib, proposal())
+    assert env.p.get_template("jobs")["kind"] == "display"
+    env.m.propose_template(env.p, env.lib, proposal(id="kit", kind="reply_kit"))
+    assert env.p.get_template("kit")["kind"] == "reply_kit"
+    assert {t["id"]: t["kind"] for t in env.m.list_template_summaries(env.p)} == {"jobs": "display", "kit": "reply_kit"}
+
+
+def test_kind_must_be_known(env):
+    r = env.m.propose_template(env.p, env.lib, proposal(kind="banner"))
+    assert r["ok"] is False and any("kind" in e for e in r["errors"])
+
+
+def test_the_person_can_not_leave_kind_unknown_on_put(env):
+    env.m.propose_template(env.p, env.lib, proposal())
+    assert env.m.put_template(env.p, env.lib, "jobs", {"kind": "reply_kit"})["template"]["kind"] == "reply_kit"
+    assert env.m.put_template(env.p, env.lib, "jobs", {"kind": "x"})["ok"] is False
+
+
+def test_an_older_record_without_kind_reads_as_a_display(env):
+    env.p.put_template("old", {"id": "old", "name": "Old", "when": "w", "status": "approved", "data_schema": SCHEMA})
+    assert env.m.list_template_summaries(env.p)[0]["kind"] == "display"
+
+
+def test_a_reply_kit_template_docks_by_default(env):
+    from hermes_iris.genui import surfaces
+
+    kit = (
+        'root = Stack([q, go])\nq = Text(data.question)\n'
+        'go = ApproveReject("Go ahead", "Hold", "Ask me")\n'
+    )
+    schema = {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}
+    r = env.m.propose_template(
+        env.p, env.lib, proposal(id="decide", kind="reply_kit", data_schema=schema, program=kit, sample_data={"question": "Deploy?"})
+    )
+    assert r["ok"], r
+    env.m.put_template(env.p, env.lib, "decide", {"status": "approved"})
+    args = {"surface_id": "k", "template": "decide", "data": {"question": "Ship it?"}, "fallback": "Ship it?"}
+    assert surfaces.submit(env.p, env.lib, SID, args)["ok"]
+    assert env.p.get_surface(SID, "k")["placement"] == "reply_kit"
+    assert surfaces.submit(env.p, env.lib, SID, {**args, "surface_id": "k2", "placement": "inline"})["ok"]
+    assert env.p.get_surface(SID, "k2")["placement"] == "inline", "an explicit placement wins"

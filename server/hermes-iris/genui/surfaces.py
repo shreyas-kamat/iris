@@ -46,8 +46,8 @@ def submit(profile: ProfileStore, library: Library, session_id: Any, args: Any) 
             return {"ok": True, "surface_id": surface_id, "deleted": profile.delete_surface(session, surface_id)}
 
     problems: list[str] = []
-    placement = args.get("placement", "inline")
-    if placement not in PLACEMENTS:
+    placement = args.get("placement")
+    if placement is not None and placement not in PLACEMENTS:
         problems.append(f"placement must be one of {', '.join(PLACEMENTS)}")
     for key, kind, word in (("code", str, "text"), ("template", str, "a template id"), ("data", dict, "an object"), ("fallback", str, "text")):
         if args.get(key) is not None and not isinstance(args[key], kind):
@@ -81,8 +81,11 @@ def submit(profile: ProfileStore, library: Library, session_id: Any, args: Any) 
             code = templates.expand(template, args["data"])
         except templates.TemplateError as e:
             return _fail(*e.errors)
+        if placement is None and template.get("kind") == "reply_kit":
+            placement = "reply_kit"
     else:
         code = args["code"]
+    placement = placement or "inline"
 
     verdict = validate_program(library, code)
     if not verdict.ok:

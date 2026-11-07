@@ -15,6 +15,10 @@ SKILL_NAME = "iris-genui"
 SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / SKILL_NAME
 SKILL_DESCRIPTION = "Show native displays in the Iris app with the iris_ui tool, written in OpenUI Lang."
 
+STUDY_SKILL_NAME = "iris-study"
+STUDY_SKILL_DIR = SKILL_DIR.parent / STUDY_SKILL_NAME
+STUDY_SKILL_DESCRIPTION = "Study the person's work and propose a profile, templates and reply kits for them to review in Iris."
+
 PREAMBLE = (
     "This is the component library for the iris_ui tool. Pass the program as the `code` argument; your reply itself "
     "stays ordinary text, and `fallback` carries the same content as Markdown. The rules below describe the language "
