@@ -8,6 +8,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../genui/genui_models.dart';
+import '../genui/genui_parser.dart';
 
 /// One row of the conversation list.
 @immutable
@@ -90,7 +91,12 @@ final class QueuedMessage {
   const QueuedMessage({required this.id, required this.text});
 
   final String id;
+
+  /// What is sent: a message from a display carries its hidden `<iris-action>` block here.
   final String text;
+
+  /// What the person reads: [text] without that block.
+  String get shown => IrisActionEnvelope.strip(text);
 }
 
 /// Something the agent said, possibly still arriving.

@@ -190,7 +190,7 @@ void main() {
       _host(
         OpenUiView(
           code: 'root = Button("More")',
-          env: NodeEnv(onAction: (a, c) => from = c),
+          env: NodeEnv(onAsk: (t, x, c) => from = c),
         ),
       ),
     );

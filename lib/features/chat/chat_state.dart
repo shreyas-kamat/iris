@@ -319,7 +319,7 @@ final class ChatState {
       ..._settled(items),
       UserTurn(
         id: 'local-${items.length}',
-        text: text,
+        text: IrisActionEnvelope.strip(text),
         attachments: attachments,
         fromQueue: fromQueue,
       ),
@@ -335,7 +335,7 @@ final class ChatState {
       ..._settled(items),
       UserTurn(
         id: 'local-${items.length}',
-        text: text,
+        text: IrisActionEnvelope.strip(text),
         steered: true,
         steerPending: true,
       ),
@@ -356,7 +356,10 @@ final class ChatState {
     return copyWith(
       items: [
         ...marked,
-        UserTurn(id: 'local-${items.length}', text: text),
+        UserTurn(
+          id: 'local-${items.length}',
+          text: IrisActionEnvelope.strip(text),
+        ),
       ],
       turn: TurnPhase.thinking,
     );

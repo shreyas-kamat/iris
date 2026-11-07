@@ -91,7 +91,7 @@ Widget _host(String code, {required bool dark}) {
                     code: code,
                     maxHeight: 4000,
                     now: () => DateTime.utc(2026, 11, 7, 12),
-                    env: NodeEnv(onAction: (a, c) {}, onOpenUrl: (u) {}),
+                    env: NodeEnv(onAsk: (t, x, c) {}, onOpenUrl: (u) {}),
                   ),
                 ),
               ),

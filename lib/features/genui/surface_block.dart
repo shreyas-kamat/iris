@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_models.dart';
 import '../../data/genui/genui_models.dart';
+import '../../data/genui/genui_parser.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/markdown.dart';
 import '../../design/tokens/metrics.dart';
@@ -23,12 +24,17 @@ class SurfaceBlock extends StatefulWidget {
     this.item, {
     this.loadSurface,
     this.env = const NodeEnv(),
+    this.onUiAction,
     super.key,
   });
 
   final UiSurfaceItem item;
   final SurfaceLoader? loadSurface;
   final NodeEnv env;
+
+  /// The person asked the assistant something from this display: the sentence to send as their message and the
+  /// hidden block that says where it came from. The host sends it as a chat message.
+  final void Function(String text, IrisActionEnvelope action)? onUiAction;
 
   @override
   State<SurfaceBlock> createState() => _SurfaceBlockState();
@@ -67,6 +73,24 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
         : loader(_ref.surfaceId).catchError((Object _) => null);
   }
 
+  /// The host's env with the ask wired to this display: it adds which display and component it came from.
+  NodeEnv get _env {
+    final send = widget.onUiAction;
+    if (send == null) return widget.env;
+    return NodeEnv(
+      onAsk: (text, context, component) => send(
+        text,
+        IrisActionEnvelope(
+          surface: _ref.surfaceId,
+          component: component,
+          context: context,
+        ),
+      ),
+      onOpenUrl: widget.env.onOpenUrl,
+      maxDepth: widget.env.maxDepth,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Reply kits sit above the composer, not in the transcript.
@@ -74,11 +98,7 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
       return const SizedBox.shrink();
     }
     if (_hasCode) {
-      return OpenUiView(
-        code: _ref.code!,
-        fallback: _ref.fallback,
-        env: widget.env,
-      );
+      return OpenUiView(code: _ref.code!, fallback: _ref.fallback, env: _env);
     }
     final fetch = _fetch;
     if (fetch == null) return _fallback(context);
@@ -96,7 +116,7 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
         return OpenUiView(
           code: code,
           fallback: surface.fallback ?? _ref.fallback,
-          env: widget.env,
+          env: _env,
         );
       },
     );

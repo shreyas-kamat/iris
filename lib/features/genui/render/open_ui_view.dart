@@ -126,9 +126,39 @@ class _OpenUiViewState extends State<OpenUiView> {
       ...evaluated.errors,
     }.where((e) => !e.isFatal).length;
     final content = NodeBuilder(
-      env: widget.env.withStore(_store),
+      env: widget.env.copyWith(onAction: _run, store: _store),
     ).surface(context, root, pending: pending, errorCount: dropped);
     return _clamped(context, content);
+  }
+
+  /// Runs the steps of an action in order. `@Set` and `@Reset` change this display's own variables; a question for the
+  /// assistant and a link go to the host, which owns the chat and the confirmation. A step the host does not handle
+  /// (no [NodeEnv.onAsk]) is dropped, never thrown.
+  void _run(ActionValue action, String component) {
+    final evaluator = _evaluator;
+    if (evaluator == null) return;
+    final env = widget.env;
+    for (final step in action.steps) {
+      switch (step) {
+        case SetStep():
+          _store.set(step.target, evaluator.evaluateStepValue(step));
+        case ResetStep():
+          _store.reset(step.targets);
+        case OpenUrlStep():
+          env.onOpenUrl?.call(step.url);
+        case ToAssistantStep():
+          if (step.message.trim().isNotEmpty) {
+            env.onAsk?.call(step.message, step.context, component);
+          }
+        case CustomStep(name: 'Ask'):
+          final text = step.params['text'];
+          if (text is String && text.trim().isNotEmpty) {
+            env.onAsk?.call(text, step.params['context'], component);
+          }
+        case RunStep() || CustomStep():
+          break; // no queries or mutations in v1, and no other library actions yet
+      }
+    }
   }
 
   Widget _fallback(BuildContext context) {

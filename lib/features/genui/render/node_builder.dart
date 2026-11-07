@@ -23,13 +23,27 @@ import 'node_widgets.dart';
 /// The OpenUI tree's element, named apart from Flutter's.
 typedef UiElement = oul.Element;
 
-/// What a component may ask of the surface it sits in. Phase 4 supplies the real ones; without them buttons are
-/// disabled and links are plain text.
+/// What a component may ask of the surface it sits in.
+///
+/// Two layers use this. The builder itself only knows [onAction] (run this action) and [store]; `OpenUiView` fills
+/// those in, running `@Set` and `@Reset` against its own variables and passing what is left to the host's [onAsk] and
+/// [onOpenUrl]. A host that draws a display therefore supplies [onAsk] and [onOpenUrl]; only tests of the builder on its
+/// own supply [onAction]. Without a runner buttons are disabled; without [onOpenUrl] links are plain text.
 class NodeEnv {
-  const NodeEnv({this.onAction, this.onOpenUrl, this.store, this.maxDepth = 8});
+  const NodeEnv({
+    this.onAction,
+    this.onAsk,
+    this.onOpenUrl,
+    this.store,
+    this.maxDepth = 8,
+  });
 
   /// Runs an action. `component` is the component type that raised it, for the `<iris-action>` envelope.
   final void Function(ActionValue action, String component)? onAction;
+
+  /// The person asked the assistant something from the display: the sentence to send as their message, the hidden
+  /// context to send with it (what a form holds, which decision), and the component type that raised it.
+  final void Function(String text, Object? context, String component)? onAsk;
 
   /// Opens a web address after the host has asked the person to confirm it.
   final ValueChanged<String>? onOpenUrl;
@@ -38,10 +52,14 @@ class NodeEnv {
   /// locally. `OpenUiView` supplies its own.
   final StateStore? store;
 
-  NodeEnv withStore(StateStore store) => NodeEnv(
-    onAction: onAction,
+  NodeEnv copyWith({
+    void Function(ActionValue action, String component)? onAction,
+    StateStore? store,
+  }) => NodeEnv(
+    onAction: onAction ?? this.onAction,
+    onAsk: onAsk,
     onOpenUrl: onOpenUrl,
-    store: store,
+    store: store ?? this.store,
     maxDepth: maxDepth,
   );
 

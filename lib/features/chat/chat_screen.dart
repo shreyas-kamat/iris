@@ -946,6 +946,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       item,
                       loadMediaImage: _loadMediaImage,
                       loadSurface: _loadSurface,
+                      onUiAction: (text, action) =>
+                          unawaited(_chat.sendUiAction(text, action)),
                       live: live,
                       onRetry: _chat.isLive && !state.running
                           ? () => unawaited(_chat.retry())

@@ -325,30 +325,27 @@ root = DatePicker("Due", $d)
     testWidgets('each button sends its own label with the decision', (
       tester,
     ) async {
-      final sent = <(ActionValue, String)>[];
+      final sent = <(String, Object?, String)>[];
       await _show(
         tester,
         'root = ApproveReject("Approve", "Hold", "Ask me first")',
-        env: NodeEnv(onAction: (a, c) => sent.add((a, c))),
+        env: NodeEnv(onAsk: (t, c, k) => sent.add((t, c, k))),
       );
       for (final label in ['Approve', 'Hold', 'Ask me first']) {
         await tester.tap(find.text(label));
       }
-      expect(sent.length, 3);
-      CustomStep step(int i) => sent[i].$1.steps.single as CustomStep;
-      expect(step(0).name, 'Ask');
-      expect(step(0).params['text'], 'Approve');
-      expect(step(0).params['context'], {'decision': 'approve'});
-      expect(step(1).params['context'], {'decision': 'reject'});
-      expect(step(2).params['context'], {'decision': 'ask'});
-      expect(sent.every((e) => e.$2 == 'ApproveReject'), isTrue);
+      expect([for (final e in sent) e.$1], ['Approve', 'Hold', 'Ask me first']);
+      expect(sent[0].$2, equals({'decision': 'approve'}));
+      expect(sent[1].$2, equals({'decision': 'reject'}));
+      expect(sent[2].$2, equals({'decision': 'ask'}));
+      expect(sent.every((e) => e.$3 == 'ApproveReject'), isTrue);
     });
 
     testWidgets('without an ask label there are two buttons', (tester) async {
       await _show(
         tester,
         'root = ApproveReject("Yes", "No")',
-        env: NodeEnv(onAction: (a, c) {}),
+        env: NodeEnv(onAsk: (t, c, k) {}),
       );
       expect(find.text('Yes'), findsOneWidget);
       expect(find.text('No'), findsOneWidget);
@@ -357,18 +354,18 @@ root = DatePicker("Due", $d)
     testWidgets('Submit runs its action and sees the typed value', (
       tester,
     ) async {
-      final sent = <ActionValue>[];
+      final sent = <(String, Object?, String)>[];
       await _show(tester, r'''
 $note = ""
 root = Stack([Input("Note", $note), Submit("Send", @Ask("Here is my note", {note: $note}))])
-''', env: NodeEnv(onAction: (a, c) => sent.add(a)));
+''', env: NodeEnv(onAsk: (t, c, k) => sent.add((t, c, k))));
       await tester.enterText(find.byType(EditableText), 'ship it');
       await tester.pump();
       await tester.tap(find.text('Send'));
       expect(sent, hasLength(1));
-      final step = sent.single.steps.single as CustomStep;
-      expect(step.params['text'], 'Here is my note');
-      expect(step.params['context'], {'note': 'ship it'});
+      expect(sent.single.$1, 'Here is my note');
+      expect(sent.single.$2, equals({'note': 'ship it'}));
+      expect(sent.single.$3, 'Submit');
     });
 
     testWidgets('buttons are disabled without a host', (tester) async {
@@ -393,7 +390,7 @@ $q = "hello"
 root = Stack([Input("A fairly long label for a field", $q, "placeholder text"), ChoiceChips(["Daily", "Weekly", "Monthly", "Quarterly"], $f), Toggle("Tell me when this is finished", $on), Slider("Volume", 0, 100, $v), Stepper("Guests", $n, 1, 9), DatePicker("Due on", $d), ApproveReject("Approve", "Hold", "Ask me first"), Submit("Send it", @Ask("x"))])
 ''',
           scale: scale,
-          env: NodeEnv(onAction: (a, c) {}),
+          env: NodeEnv(onAsk: (t, c, k) {}),
         );
         expect(tester.takeException(), isNull);
       });

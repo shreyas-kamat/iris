@@ -121,3 +121,9 @@ def test_an_older_hermes_without_register_skill_still_loads(plugin):
             pass
 
     plugin.register(Ctx())  # must not raise
+
+
+def test_skill_explains_the_hidden_action_block():
+    text = (SKILL / "SKILL.md").read_bytes().decode("utf-8")
+    for needle in ("<iris-action>", "surface", "component", "context", "data the person entered"):
+        assert needle in text, needle

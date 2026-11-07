@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_models.dart';
+import '../../data/genui/genui_parser.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
 import '../../design/components/dashed_border.dart';
@@ -43,6 +44,7 @@ class TranscriptEntry extends StatelessWidget {
     this.collapsing = false,
     this.loadMediaImage,
     this.loadSurface,
+    this.onUiAction,
     super.key,
   });
 
@@ -72,6 +74,9 @@ class TranscriptEntry extends StatelessWidget {
   /// Fetches a generated display's stored program by id; without it only displays that carry theirs are drawn.
   final SurfaceLoader? loadSurface;
 
+  /// A tap in a generated display that asks the assistant something; the host sends it as a message.
+  final void Function(String text, IrisActionEnvelope action)? onUiAction;
+
   @override
   Widget build(BuildContext context) {
     final entry = _entry();
@@ -97,6 +102,7 @@ class TranscriptEntry extends StatelessWidget {
     final UiSurfaceItem surface => SurfaceBlock(
       surface,
       loadSurface: loadSurface,
+      onUiAction: onUiAction,
     ),
     final Notice notice when notice.retryable && onRetry != null => _FailedCard(
       notice,
