@@ -135,9 +135,9 @@ def test_hook_does_nothing_for_other_sessions(ctx_mod, store):
 def test_hook_lists_only_approved_templates(ctx_mod, store):
     store.flag_session(SID)
     schema = {"type": "object", "properties": {"title": {"type": "string"}, "rows": {"type": "array"}}}
-    store.put_template("jobs", {"title": "Job list", "schema": schema, "program": 'root = Text("x")', "approved": True})
-    store.put_template("draft", {"title": "Not yet", "schema": schema, "program": 'root = Text("x")', "approved": False})
-    store.put_template("unmarked", {"title": "No flag", "schema": schema, "program": 'root = Text("x")'})
+    store.put_template("jobs", {"name": "Job list", "data_schema": schema, "program": 'root = Text("x")', "status": "approved"})
+    store.put_template("draft", {"name": "Not yet", "data_schema": schema, "program": 'root = Text("x")', "status": "proposed"})
+    store.put_template("unmarked", {"name": "No flag", "data_schema": schema, "program": 'root = Text("x")'})
     text = ctx_mod.on_pre_llm_call(session_id=SID)["context"]
     assert "jobs" in text and "Job list" in text and "title, rows" in text
     assert "draft" not in text and "unmarked" not in text

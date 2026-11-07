@@ -8,8 +8,9 @@ SID = "20261106_193512_ab12cd"
 GOOD = 'root = Stack([a])\na = Text("Hello", "title")\n'
 
 TEMPLATE = {
-    "title": "Job list",
-    "schema": {
+    "name": "Job list",
+    "status": "approved",
+    "data_schema": {
         "type": "object",
         "properties": {"title": {"type": "string"}, "rows": {"type": "array", "items": {"type": "object"}}},
         "required": ["title", "rows"],

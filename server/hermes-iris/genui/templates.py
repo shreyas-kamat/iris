@@ -107,7 +107,7 @@ def expand(template: dict[str, Any], data: Any) -> str:
         raise TemplateError(["the template has no program"])
     if _DATA_STATEMENT.search(program):
         raise TemplateError(["a template may not define data itself; it reads the data it is given"])
-    errors = check_data(template.get("schema") or {}, data)
+    errors = check_data(template.get("data_schema") or {}, data)
     if errors:
         raise TemplateError(errors)
     try:

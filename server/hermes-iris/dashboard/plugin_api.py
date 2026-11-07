@@ -11,7 +11,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 _PACKAGE = "hermes_iris"
 _ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +40,7 @@ core = _core()
 catalog = importlib.import_module(f"{_PACKAGE}.genui.catalog")
 store_mod = importlib.import_module(f"{_PACKAGE}.genui.store")
 paths = importlib.import_module(f"{_PACKAGE}.genui.paths")
+personal = importlib.import_module(f"{_PACKAGE}.genui.personal")
 router = APIRouter()
 
 
@@ -51,7 +53,7 @@ def _profile_store(profile: str | None):
 
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities", "session-flag", "surfaces"]
+FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates"]
 
 
 @router.get("/capabilities")
@@ -126,3 +128,66 @@ def get_surface(session_id: str, surface_id: str, profile: str | None = None):
     if s is None:
         raise HTTPException(status_code=404, detail="no such surface")
     return {"ok": True, "surface": s}
+
+
+# ---- the person's profile and templates (Phase 5): the agent proposes, the person decides here ------------------------
+
+
+async def _json_body(request: Request):
+    try:
+        return await request.json()
+    except ValueError:
+        return None
+
+
+def _answer(result: dict):
+    """A service result as a response: 422 with ``{ok: false, errors}`` when it was refused, otherwise the result."""
+    if result.get("ok") is False:
+        return JSONResponse(result, status_code=422)
+    return result
+
+
+@router.get("/profile")
+def get_profile(profile: str | None = None):
+    return personal.get_profile(_profile_store(profile))
+
+
+@router.put("/profile")
+async def put_profile(request: Request, profile: str | None = None):
+    return _answer(personal.put_profile(_profile_store(profile), await _json_body(request)))
+
+
+@router.get("/templates")
+def list_templates(profile: str | None = None, status: str | None = None):
+    """Every template with its program and sample, for the review and Displays screens."""
+    if status is not None and status not in personal.STATUSES:
+        raise HTTPException(status_code=400, detail=f"status must be one of {', '.join(personal.STATUSES)}")
+    return {"ok": True, "templates": personal.list_templates(_profile_store(profile), status)}
+
+
+def _template_id(template_id: str) -> str:
+    try:
+        return store_mod.safe_component(template_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"template: {e}") from None
+
+
+@router.get("/templates/{template_id}")
+def get_template(template_id: str, profile: str | None = None):
+    t = _profile_store(profile).get_template(_template_id(template_id))
+    if t is None:
+        raise HTTPException(status_code=404, detail="no such template")
+    return {"ok": True, "template": t}
+
+
+@router.put("/templates/{template_id}")
+async def put_template(template_id: str, request: Request, profile: str | None = None):
+    """The person's edit or approval. Sent fields are merged onto the stored template and the result is validated."""
+    p = _profile_store(profile)
+    return _answer(personal.put_template(p, catalog.v1(), _template_id(template_id), await _json_body(request)))
+
+
+@router.delete("/templates/{template_id}")
+def delete_template(template_id: str, profile: str | None = None):
+    tid = _template_id(template_id)
+    return {"ok": True, "id": tid, "deleted": _profile_store(profile).delete_template(tid)}

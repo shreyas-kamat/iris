@@ -93,11 +93,11 @@ def _approved_templates(store_profile: Any) -> list[dict[str, Any]]:
     out = []
     for template_id in store_profile.list_templates():
         t = store_profile.get_template(template_id)
-        if not t or t.get("approved") is not True:
+        if not t or t.get("status") != "approved":
             continue
-        props = (t.get("schema") or {}).get("properties")
+        props = (t.get("data_schema") or {}).get("properties")
         keys = list(props)[:6] if isinstance(props, dict) else []
-        out.append({"id": template_id, "title": t.get("title") or "", "keys": keys})
+        out.append({"id": template_id, "title": t.get("name") or "", "keys": keys})
     return out
 
 

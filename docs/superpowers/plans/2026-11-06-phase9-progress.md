@@ -14,7 +14,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
-| G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
+| G7 | Phases 5–6: study, Displays, learning loop | Sonnet | doing | |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
 | G10 | 7.6 final review, release, PR | Opus | todo | |
@@ -300,3 +300,15 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Notes: the model needs the placement spelled out; left alone it may choose inline. The skill already says to use `placement: "reply_kit"` for decisions, so a later prompt tweak (7.x or the study phase) could stress it. The sentence sent is the one the model wrote in `@Ask`, not the button label. The side toolbar in the screenshots is the emulator's keyboard overlay, not the app. Not checked live: queue mode, dismiss, typing clearing the kit (all covered by screen tests).
 - Defects found: none new.
 - segment G6 complete. Next: G7 (Sonnet), Phases 5-6, task 5.1.
+
+### G7 — doing — 2026-11-07
+- Running as Sonnet 5.5. Git matches the log (G6 `95c9350`; HEAD `6b285ee`, clean apart from `store/screenshots/`).
+- Next: 5.1 server profile + templates.
+
+### G7 — 5.1 — done — 2026-11-07 — Sonnet 5.5
+- Commits: see the `feat(genui): profile and template proposals ...` commit
+- Verified: `server/hermes-iris/.venv/Scripts/python -m pytest` -> 326 pass, 1 skipped (was 267); new tests `test_personal.py` and `test_personal_routes.py` were written first and the suite was red on the renamed fields before the code.
+- What it does: `genui/personal.py` holds the profile (`{summary, chips, status, rev, created, updated, previous?}`) and templates (`{id, name, when, data_schema, program, sample_data, status, rev, created, updated}`; status `proposed|approved|retired`). `genui/personal_tools.py` registers `iris_profile_get/propose` and `iris_template_list/propose` (toolset `iris`, so the flagged-session guard covers them). Routes: `GET/PUT profile`, `GET templates[?status=]`, `GET/PUT/DELETE templates/{id}`; a refused write is `422 {ok:false, errors}`. `capabilities.features` now includes `profile` and `templates`. A template proposal is validated by expanding its `sample_data` and running the program validator; limits: 50 templates, name 60, when 200, schema and sample 4 KB each, profile summary 600, 12 chips of 40.
+- Deviations: (1) The template fields moved from the 2.x names (`title`, `schema`, `approved: bool`) to the plan's (`name`, `data_schema`, `status`); `templates.expand`, `context.py`, `surfaces.py` and their tests were updated. (2) `iris_ui` now refuses a template that is not `approved` (D8), and its "available templates" list shows only approved ones. (3) A proposal never replaces an approved template (it is in use); the refusal says to propose a new id. Refinement of an approved one is 6.3. (4) The app's `PUT` merges the fields it sends onto the stored record (so `{"status": "approved"}` approves) and creates only from a full set. (5) A new profile proposal keeps the approved text as `previous` for a before/after view.
+- Decisions for later tasks: the context digest still lists approved templates as `id: name (data: keys)`; `when` is not in it (budget). The Dart side reads `GET templates` (full records) for the review and Displays screens; `GET profile` returns `{ok, profile: null | {...}}`.
+- Next: 5.2 skill `/iris-study`.

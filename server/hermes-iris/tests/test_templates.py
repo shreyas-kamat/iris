@@ -66,20 +66,20 @@ def test_booleans_are_not_numbers(t):
 
 
 def test_expand_prepends_data(t):
-    code = t.expand({"schema": SCHEMA, "program": PROGRAM}, {"title": "Jobs", "rows": [{"name": "a", "state": "ok"}]})
+    code = t.expand({"data_schema": SCHEMA, "program": PROGRAM}, {"title": "Jobs", "rows": [{"name": "a", "state": "ok"}]})
     assert code.startswith('data = {"title": "Jobs", "rows": [{"name": "a", "state": "ok"}]}\n')
     assert code.endswith(PROGRAM)
 
 
 def test_expand_checks_the_data(t):
     with pytest.raises(t.TemplateError) as e:
-        t.expand({"schema": SCHEMA, "program": PROGRAM}, {"rows": []})
+        t.expand({"data_schema": SCHEMA, "program": PROGRAM}, {"rows": []})
     assert "title is required" in str(e.value)
 
 
 def test_a_template_may_not_define_data(t):
     with pytest.raises(t.TemplateError):
-        t.expand({"schema": {}, "program": 'data = {}\nroot = Text("x")\n'}, {})
+        t.expand({"data_schema": {}, "program": 'data = {}\nroot = Text("x")\n'}, {})
 
 
 def test_awkward_strings_survive_the_round_trip(plugin, t):
@@ -88,7 +88,7 @@ def test_awkward_strings_survive_the_round_trip(plugin, t):
     from hermes_iris.openui.nodes import Deferred
 
     nasty = 'He said "hi"\nline2 // not a comment # nor this \\ back   é 😀 {[(]) $x @y'
-    code = t.expand({"schema": {}, "program": 'root = Text("x")\n'}, {"v": nasty})
+    code = t.expand({"data_schema": {}, "program": 'root = Text("x")\n'}, {"v": nasty})
     result = parse_program(catalog.v1(), code)
     assert result.errors == []
     stmt = result.program.statements["data"]
@@ -100,4 +100,4 @@ def test_awkward_strings_survive_the_round_trip(plugin, t):
 
 def test_non_finite_numbers_are_refused(t):
     with pytest.raises(t.TemplateError):
-        t.expand({"schema": {}, "program": "root = Text(\"x\")\n"}, {"v": float("nan")})
+        t.expand({"data_schema": {}, "program": "root = Text(\"x\")\n"}, {"v": float("nan")})

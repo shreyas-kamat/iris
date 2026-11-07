@@ -70,9 +70,11 @@ def submit(profile: ProfileStore, library: Library, session_id: Any, args: Any) 
         except InvalidName:
             template = None
         if template is None:
-            known = profile.list_templates()
+            known = [i for i in profile.list_templates() if (profile.get_template(i) or {}).get("status") == "approved"]
             listing = ", ".join(known[:20]) if known else "none yet"
             return _fail(f'unknown template "{template_id}". Available templates: {listing}')
+        if template.get("status") != "approved":
+            return _fail(f'template "{template_id}" is not approved yet; use code instead')
         if args.get("data") is None:
             return _fail("a template needs data")
         try:
