@@ -12,6 +12,7 @@ import '../../core/result.dart';
 import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/genui/signals.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/media_image.dart';
@@ -102,6 +103,7 @@ class ChatScreen extends StatefulWidget {
     this.onBranched,
     this.menu,
     this.shareMarkdown,
+    this.signals,
     super.key,
   });
 
@@ -130,6 +132,9 @@ class ChatScreen extends StatefulWidget {
   /// Shares the exported transcript. Tests pass a fake; null opens the system
   /// share sheet.
   final ShareMarkdown? shareMarkdown;
+
+  /// Where signals about generated displays go; null where nothing learns from them.
+  final SignalReporter? signals;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -162,6 +167,16 @@ class _ChatScreenState extends State<ChatScreen> {
           )).valueOrNull;
         }
       : null;
+
+  /// Passes a display's signal on with the stored conversation it happened in. Null when nothing listens.
+  SignalSink? get _signal => widget.signals == null
+      ? null
+      : (signal, {surface, template}) => widget.signals?.record(
+          signal,
+          surface: surface,
+          template: template,
+          session: _chat.conversationId,
+        );
 
   late final ChatController _chat = ChatController(
     widget.backend,
@@ -276,6 +291,7 @@ class _ChatScreenState extends State<ChatScreen> {
             pickFiles: widget.pickFiles,
             recorder: widget.recorder,
             shareMarkdown: widget.shareMarkdown,
+            signals: widget.signals,
           ),
         ),
       ),
@@ -318,6 +334,7 @@ class _ChatScreenState extends State<ChatScreen> {
               pickFiles: widget.pickFiles,
               recorder: widget.recorder,
               shareMarkdown: widget.shareMarkdown,
+              signals: widget.signals,
             ),
           ),
         );
@@ -455,6 +472,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 loadSurface: _loadSurface,
                 onUiAction: (text, action) =>
                     unawaited(_chat.sendUiAction(text, action)),
+                onSignal: _signal,
                 onDismiss: () =>
                     setState(() => _dismissedKits.add(replyKitKey(kit))),
               ),
@@ -997,6 +1015,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       loadSurface: _loadSurface,
                       onUiAction: (text, action) =>
                           unawaited(_chat.sendUiAction(text, action)),
+                      onSignal: _signal,
                       live: live,
                       onRetry: _chat.isLive && !state.running
                           ? () => unawaited(_chat.retry())

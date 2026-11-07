@@ -7,6 +7,7 @@ import '../../core/result.dart';
 import '../net/api_client.dart';
 import 'genui_models.dart';
 import 'personal_models.dart';
+import 'signals.dart';
 
 abstract interface class GenUiApi {
   Future<Result<GenUiCapabilities>> capabilities();
@@ -45,6 +46,9 @@ abstract interface class GenUiApi {
   });
 
   Future<Result<void>> deleteTemplate(String id);
+
+  /// Reports what the person did with displays. Ids and signal names only; best effort.
+  Future<Result<void>> sendSignals(List<SignalEvent> signals);
 }
 
 final class DashboardGenUiApi implements GenUiApi {
@@ -181,4 +185,14 @@ final class DashboardGenUiApi implements GenUiApi {
     '$_base/templates/${_part(id)}',
     query: _query,
   )).map((_) {});
+
+  @override
+  Future<Result<void>> sendSignals(List<SignalEvent> signals) async =>
+      (await _client.post(
+        '$_base/feedback',
+        query: _query,
+        body: {
+          'signals': [for (final signal in signals) signal.toJson()],
+        },
+      )).map((_) {});
 }

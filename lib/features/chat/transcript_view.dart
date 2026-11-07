@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/chat/chat_models.dart';
 import '../../data/genui/genui_parser.dart';
+import '../../data/genui/signals.dart';
 import '../../demo/demo_content.dart';
 import '../../demo/demo_mode.dart';
 import '../../design/components/dashed_border.dart';
@@ -45,6 +46,7 @@ class TranscriptEntry extends StatelessWidget {
     this.loadMediaImage,
     this.loadSurface,
     this.onUiAction,
+    this.onSignal,
     super.key,
   });
 
@@ -77,6 +79,9 @@ class TranscriptEntry extends StatelessWidget {
   /// A tap in a generated display that asks the assistant something; the host sends it as a message.
   final void Function(String text, IrisActionEnvelope action)? onUiAction;
 
+  /// What the person did with a generated display, for the plugin's learning loop.
+  final SignalSink? onSignal;
+
   @override
   Widget build(BuildContext context) {
     final entry = _entry();
@@ -103,6 +108,7 @@ class TranscriptEntry extends StatelessWidget {
       surface,
       loadSurface: loadSurface,
       onUiAction: onUiAction,
+      onSignal: onSignal,
     ),
     final Notice notice when notice.retryable && onRetry != null => _FailedCard(
       notice,

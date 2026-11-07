@@ -9,13 +9,16 @@ import 'package:flutter/material.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/genui/genui_models.dart';
 import '../../data/genui/genui_parser.dart';
+import '../../data/genui/signals.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/markdown.dart';
+import '../../design/components/sheet.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import 'render/node_builder.dart';
 import 'render/node_widgets.dart';
 import 'render/open_ui_view.dart';
+import 'viewport_dwell.dart';
 
 /// Fetches the stored display [surfaceId] of the open conversation, or null when it cannot be had.
 typedef SurfaceLoader = Future<UiSurface?> Function(String surfaceId);
@@ -26,6 +29,7 @@ class SurfaceBlock extends StatefulWidget {
     this.loadSurface,
     this.env = const NodeEnv(),
     this.onUiAction,
+    this.onSignal,
     this.docked = false,
     this.maxHeight = 480,
     super.key,
@@ -38,6 +42,10 @@ class SurfaceBlock extends StatefulWidget {
   /// The person asked the assistant something from this display: the sentence to send as their message and the
   /// hidden block that says where it came from. The host sends it as a chat message.
   final void Function(String text, IrisActionEnvelope action)? onUiAction;
+
+  /// What the person did with this display: seen for two seconds, opened in full, or marked not useful (long press).
+  /// Null where nothing listens, and then there is no long-press menu either.
+  final SignalSink? onSignal;
 
   /// Drawn by the reply-kit dock rather than in the transcript: a reply kit is then shown, not skipped.
   final bool docked;
@@ -108,7 +116,7 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
     }
     // The tag slot is always there, so a display that becomes "updated" keeps its widget, and what was typed in it.
     final tagged = widget.item.isUpdated && !widget.docked;
-    return Column(
+    final block = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -116,6 +124,32 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
         _display(context),
       ],
     );
+    final signal = widget.onSignal;
+    if (signal == null) return block;
+    return ViewportDwell(
+      onDwell: () => _signal(DisplaySignal.used),
+      child: widget.docked
+          ? block
+          : GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onLongPress: () => unawaited(_askNotUseful(context)),
+              child: block,
+            ),
+    );
+  }
+
+  void _signal(DisplaySignal signal) => widget.onSignal?.call(
+    signal,
+    surface: _ref.surfaceId,
+    template: _ref.template,
+  );
+
+  Future<void> _askNotUseful(BuildContext context) async {
+    final yes = await showIrisSheet<bool>(
+      context: context,
+      builder: (_) => const _NotUsefulSheet(),
+    );
+    if (yes ?? false) _signal(DisplaySignal.notUseful);
   }
 
   Widget _display(BuildContext context) {
@@ -125,6 +159,7 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
         fallback: _ref.fallback,
         env: _env,
         maxHeight: widget.maxHeight,
+        onExpanded: () => _signal(DisplaySignal.expanded),
       );
     }
     final fetch = _fetch;
@@ -145,6 +180,7 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
           fallback: surface.fallback ?? _ref.fallback,
           env: _env,
           maxHeight: widget.maxHeight,
+          onExpanded: () => _signal(DisplaySignal.expanded),
         );
       },
     );
@@ -171,6 +207,24 @@ class _SurfaceBlockState extends State<SurfaceBlock> {
       ],
     );
   }
+}
+
+/// The long-press menu of a display: one way to say it was not worth showing.
+class _NotUsefulSheet extends StatelessWidget {
+  const _NotUsefulSheet();
+
+  @override
+  Widget build(BuildContext context) => IrisSheet(
+    title: 'This display',
+    subtitle: 'Tell Iris when one is not worth showing, so it shows fewer.',
+    child: Padding(
+      padding: const EdgeInsets.only(bottom: IrisSpace.lg),
+      child: IrisButton(
+        label: 'Not useful',
+        onPressed: () => Navigator.of(context).pop(true),
+      ),
+    ),
+  );
 }
 
 /// "Updated": the assistant has changed this display since it first showed it.

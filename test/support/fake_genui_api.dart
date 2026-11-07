@@ -7,6 +7,7 @@ import 'package:iris/core/result.dart';
 import 'package:iris/data/genui/genui_api.dart';
 import 'package:iris/data/genui/genui_models.dart';
 import 'package:iris/data/genui/personal_models.dart';
+import 'package:iris/data/genui/signals.dart';
 
 class FakeGenUiApi implements GenUiApi {
   WorkProfile? profile;
@@ -91,6 +92,16 @@ class FakeGenUiApi implements GenUiApi {
     calls.add('deleteTemplate:$id');
     stored.removeWhere((t) => t.id == id);
     return const Ok(null);
+  }
+
+  /// Every batch of signals sent, in order, and what the next send answers.
+  final signalBatches = <List<SignalEvent>>[];
+  Result<void> signalResult = const Ok(null);
+
+  @override
+  Future<Result<void>> sendSignals(List<SignalEvent> signals) async {
+    signalBatches.add(List.of(signals));
+    return signalResult;
   }
 
   // The rest of the plugin's routes are not part of the study.

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/genui/genui_models.dart';
 import '../../data/genui/genui_parser.dart';
+import '../../data/genui/signals.dart';
 import '../../design/components/primitives.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
@@ -42,6 +43,7 @@ class ReplyKitDock extends StatelessWidget {
     required this.onDismiss,
     this.loadSurface,
     this.onUiAction,
+    this.onSignal,
     this.onOpenUrl,
     super.key,
   });
@@ -53,6 +55,9 @@ class ReplyKitDock extends StatelessWidget {
   /// A tap that asks the assistant something. The kit goes once it has been sent.
   final void Function(String text, IrisActionEnvelope action)? onUiAction;
   final ValueChanged<String>? onOpenUrl;
+
+  /// Reports that the kit was seen or closed without being used.
+  final SignalSink? onSignal;
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +88,7 @@ class ReplyKitDock extends StatelessWidget {
                 maxHeight: kReplyKitMaxHeight,
                 loadSurface: loadSurface,
                 env: NodeEnv(onOpenUrl: onOpenUrl),
+                onSignal: onSignal,
                 onUiAction: (text, action) {
                   onUiAction?.call(text, action);
                   onDismiss();
@@ -93,7 +99,14 @@ class ReplyKitDock extends StatelessWidget {
               top: 0,
               right: 0,
               child: IrisPressable(
-                onTap: onDismiss,
+                onTap: () {
+                  onSignal?.call(
+                    DisplaySignal.dismissed,
+                    surface: item.ref.surfaceId,
+                    template: item.ref.template,
+                  );
+                  onDismiss();
+                },
                 semanticLabel: 'Dismiss suggested replies',
                 child: Padding(
                   padding: const EdgeInsets.all(IrisSpace.sm),

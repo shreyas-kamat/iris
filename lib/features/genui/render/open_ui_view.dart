@@ -25,6 +25,7 @@ class OpenUiView extends StatefulWidget {
     this.env = const NodeEnv(),
     this.maxHeight = 480,
     this.now,
+    this.onExpanded,
     super.key,
   });
 
@@ -44,6 +45,9 @@ class OpenUiView extends StatefulWidget {
 
   /// The clock `@Ago` measures from; tests pass a fixed one.
   final DateTime Function()? now;
+
+  /// The person opened a clamped display in full ("Show all"). Closing it again is not reported.
+  final VoidCallback? onExpanded;
 
   /// The v1 library, built once.
   static final LibrarySpec library = IrisLibrary.toLibrarySpec();
@@ -224,7 +228,10 @@ class _OpenUiViewState extends State<OpenUiView> {
             Align(
               alignment: Alignment.centerLeft,
               child: IrisPressable(
-                onTap: () => setState(() => _expanded = !_expanded),
+                onTap: () {
+                  setState(() => _expanded = !_expanded);
+                  if (_expanded) widget.onExpanded?.call();
+                },
                 semanticLabel: _expanded
                     ? 'Show less of this display'
                     : 'Show all of this display',

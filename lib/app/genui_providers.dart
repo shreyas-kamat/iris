@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/chat/chat_backend.dart';
 import '../data/genui/genui_api.dart';
 import '../data/genui/genui_models.dart';
+import '../data/genui/signals.dart';
 import '../data/net/capabilities.dart';
 import '../data/prefs/preferences_store.dart';
 import 'preferences.dart';
@@ -74,4 +75,13 @@ final genUiApiProvider = FutureProvider<GenUiApi?>((ref) async {
   final session = await ref.watch(activeSessionProvider.future);
   if (session == null) return null;
   return DashboardGenUiApi(session.connection.client, profile: profile);
+});
+
+/// Collects what the person does with displays and sends it to the plugin in small batches. Null while displays are
+/// off, so nothing is recorded or sent unless the person turned them on.
+final signalReporterProvider = Provider<SignalReporter?>((ref) {
+  if (!ref.watch(genUiActiveProvider)) return null;
+  final reporter = SignalReporter(api: () => ref.read(genUiApiProvider.future));
+  ref.onDispose(reporter.dispose);
+  return reporter;
 });
