@@ -12,7 +12,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G2 | 1.1–1.4: package, fixtures, lexer, parser, errors | Sonnet | done | `c205f14` |
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
-| G5 | Phase 3: rendering surfaces in Iris | Sonnet | doing | |
+| G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
@@ -243,3 +243,11 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Done: full `flutter test --exclude-tags live` (1,541 pass, 4 skipped), `dart test` in `packages/openui_lang` (324 pass), `flutter analyze lib test` (3 pre-existing infos), `flutter build apk --debug` -> built `build/app/outputs/flutter-apk/app-debug.apk`.
 - Blocked: the live emulator check. `adb install -r` on `emulator-5554` fails with `INSUFFICIENT_STORAGE` (the known full `/data`); the fix is to uninstall `com.iflotech.iris`, which wipes the app's saved sign-in, then sign in to the user's server again, turn on Generated displays, ask for a status card and wait at least 240 s. That needs the user's yes (data wipe, a sign-in, a real turn on their server).
 - Next: after the user says yes, uninstall, install, sign in, run the check; then write `segment G5 complete` (next: G6, Sonnet, plan 4.1).
+
+### G5 — 3.7 — done — 2026-11-07 — Sonnet 5.5
+- Commits: 44259c1 fix(genui): read the bridge's calls list and prefer tool.start args over the context preview
+- Verified: live on `emulator-5554` against the user's server (Cloudflare Access + login). Generated displays switch on, plugin 0.1.0 shown. Turn 1 ("deploy status card") first call refused by the plugin (`tone` must be good/warn/bad), model fixed it and the second call was accepted; turn 2 and a fresh chat after the fix both drew the native card live, and reopening the stored chat drew it from history with the refused call as a failed card. `flutter test --exclude-tags live` -> 1,546 pass, 4 skipped; `flutter analyze lib test` -> the 3 pre-existing infos only.
+- Defects the live check found, both fixed with tests first: (1) Hermes stores an `iris_ui` call as `tool_call` with `{"calls":[{"name":"iris_ui","arguments":{...}}]}` (arguments an object; key order varies); the 3.4 parser only read a top-level `{name, arguments}`, so no stored display drew. It now reads the calls list (last `iris_ui` entry wins) and still reads the older shapes. (2) Live `tool.start` carries a short `context` preview next to the full `args`; the event parser took the preview first. For `iris_ui` and bridge names it now prefers `args`; other tools are unchanged.
+- Deviations: (1) `INSUFFICIENT_STORAGE`: the emulator's `/data` was too small even for a 159 MB x86_64-only debug APK, so with the user's yes I uninstalled the other user app on it (`com.asturii.asturii_mobile`; its data is gone) and installed; the app's own data was wiped by the first uninstall too, as agreed. The APK was built with `--target-platform android-x64` for the emulator. (2) Signed in by typing the live-test config values over adb input; nothing from the config is in the log or repo.
+- Decisions for later tasks: the bridge shape and the preview-vs-args rule above are now confirmed against a real server, so the Phase 0 "assumption" notes are closed. `tool.complete.result` is still not relied on; the stored `iris_ui` tool row (`ok`, `rev`) is what marks a refusal in history. The model's first call often misses a prop value (tone, gap); it recovers after `skill_view`, which costs a few seconds per display.
+- segment G5 complete. Next: G6 (Sonnet), Phase 4, task 4.1.
