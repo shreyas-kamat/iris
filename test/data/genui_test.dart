@@ -228,6 +228,52 @@ void main() {
       expect(ref.deleted, isFalse);
     });
 
+    test(
+      'an iris_ui tool.start with a context preview still yields its args',
+      () {
+        // The live check (3.7): Hermes sends a short `context` preview (the
+        // code) next to the full `args`; the preview must not hide the args.
+        for (final name in ['iris_ui', 'mcp__tool_call']) {
+          final started =
+              ChatEvent.fromEvent(
+                    _event('tool.start', {
+                      'tool_id': 'call_1',
+                      'name': name,
+                      'context': 'root = Stack([card])',
+                      'args': name == 'iris_ui'
+                          ? args
+                          : {
+                              'calls': [
+                                {'name': 'iris_ui', 'arguments': args},
+                              ],
+                            },
+                    }),
+                  )!
+                  as ToolStarted;
+          final ref = GenUiParser.surfaceRef(
+            name: started.name,
+            input: started.input,
+          )!;
+          expect(ref.surfaceId, 'status', reason: name);
+          expect(ref.code, _program, reason: name);
+        }
+      },
+    );
+
+    test('other tools keep the context preview as their input', () {
+      final started =
+          ChatEvent.fromEvent(
+                _event('tool.start', {
+                  'tool_id': 'call_2',
+                  'name': 'terminal',
+                  'context': 'ls -la',
+                  'args': {'command': 'ls -la'},
+                }),
+              )!
+              as ToolStarted;
+      expect(started.input, 'ls -la');
+    });
+
     test('reads the answer from a tool.complete', () {
       final done =
           ChatEvent.fromEvent(
@@ -322,6 +368,45 @@ void main() {
         )!.surfaceId,
         'status',
       );
+    });
+
+    test('reads the bridge shape a real server stores: a calls list', () {
+      // Recorded from the live check (3.7): `arguments` is an object, and the
+      // key order varies between calls.
+      final nameFirst = jsonEncode({
+        'calls': [
+          {'name': 'iris_ui', 'arguments': args},
+        ],
+      });
+      final argsFirst = jsonEncode({
+        'calls': [
+          {'arguments': args, 'name': 'iris_ui'},
+        ],
+      });
+      for (final input in [nameFirst, argsFirst]) {
+        final ref = GenUiParser.surfaceRef(name: 'tool_call', input: input)!;
+        expect(ref.surfaceId, 'status');
+        expect(ref.code, _program);
+      }
+    });
+
+    test('a calls list reads its iris_ui entry and skips other tools', () {
+      final input = jsonEncode({
+        'calls': [
+          {'name': 'web_search', 'arguments': <String, Object?>{}},
+          {'name': 'iris_ui', 'arguments': args},
+        ],
+      });
+      expect(
+        GenUiParser.surfaceRef(name: 'tool_call', input: input)!.surfaceId,
+        'status',
+      );
+      final none = jsonEncode({
+        'calls': [
+          {'name': 'web_search', 'arguments': <String, Object?>{}},
+        ],
+      });
+      expect(GenUiParser.surfaceRef(name: 'tool_call', input: none), isNull);
     });
 
     test('a bridge call to another tool is not a surface', () {

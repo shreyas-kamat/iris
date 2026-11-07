@@ -29,9 +29,21 @@ abstract final class GenUiParser {
     if (!mayBeSurface(name) || input == null) return null;
     var args = _object(input);
     if (_bridges.contains(name)) {
-      final inner = args.any(const ['tool_name', 'name', 'tool']).stringOrNull;
-      if (inner != toolName) return null;
-      args = _object(args.any(const ['arguments', 'args', 'input']).raw);
+      // A real server stores `{"calls": [{"name": "iris_ui", "arguments": {...}}]}`
+      // (seen in the 3.7 live check); a lone call at the top level is also read.
+      // With several `iris_ui` calls the last one wins, as the newest does.
+      final calls = args['calls'].isList ? args['calls'].list : [args];
+      Json? mine;
+      for (final call in calls) {
+        final inner = call.any(const [
+          'tool_name',
+          'name',
+          'tool',
+        ]).stringOrNull;
+        if (inner == toolName) mine = call;
+      }
+      if (mine == null) return null;
+      args = _object(mine.any(const ['arguments', 'args', 'input']).raw);
     }
     final id = args['surface_id'].stringOrNull;
     if (id == null || id.isEmpty) return null;

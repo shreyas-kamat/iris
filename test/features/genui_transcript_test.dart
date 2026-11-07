@@ -188,6 +188,24 @@ void main() {
       expect(items.whereType<UiSurfaceItem>().single.ref.code, _program);
     });
 
+    test('the calls-list bridge shape a real server stores is drawn', () {
+      final items = _parse([
+        _assistantCall(
+          'a1',
+          'c1',
+          name: 'tool_call',
+          arguments: jsonEncode({
+            'calls': [
+              {'name': 'iris_ui', 'arguments': _args()},
+            ],
+          }),
+        ),
+        _toolRow('t1', 'c1', _ok('status', 1)),
+      ]);
+      expect(items.whereType<ToolCall>(), isEmpty);
+      expect(items.whereType<UiSurfaceItem>().single.ref.code, _program);
+    });
+
     test('other tools are untouched', () {
       final items = _parse([
         _assistantCall('a1', 'c1', name: 'terminal', arguments: '{"cmd":"ls"}'),
