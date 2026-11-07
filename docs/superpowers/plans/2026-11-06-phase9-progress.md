@@ -13,7 +13,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G3 | 1.5–1.6: streaming parser, evaluator, store | Opus | done | `f040585` |
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
-| G6 | Phase 4: actions, inputs, reply kits | Sonnet | todo | |
+| G6 | Phase 4: actions, inputs, reply kits | Sonnet | doing | |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | todo | |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
@@ -251,3 +251,14 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) `INSUFFICIENT_STORAGE`: the emulator's `/data` was too small even for a 159 MB x86_64-only debug APK, so with the user's yes I uninstalled the other user app on it (`com.asturii.asturii_mobile`; its data is gone) and installed; the app's own data was wiped by the first uninstall too, as agreed. The APK was built with `--target-platform android-x64` for the emulator. (2) Signed in by typing the live-test config values over adb input; nothing from the config is in the log or repo.
 - Decisions for later tasks: the bridge shape and the preview-vs-args rule above are now confirmed against a real server, so the Phase 0 "assumption" notes are closed. `tool.complete.result` is still not relied on; the stored `iris_ui` tool row (`ok`, `rev`) is what marks a refusal in history. The model's first call often misses a prop value (tone, gap); it recovers after `skill_view`, which costs a few seconds per display.
 - segment G5 complete. Next: G6 (Sonnet), Phase 4, task 4.1.
+
+### G6 — doing — 2026-11-07
+- Running as Sonnet 5.5. Git matches the log (G5 `44259c1`; HEAD `cf8dbc8`, clean apart from `store/screenshots/`).
+- Next: 4.1 library part 2 (Tabs, Expander and Diff already exist from 3.1/3.2; charts remain).
+
+### G6 — 4.1 — done — 2026-11-07 — Sonnet 5.5
+- Commits: fe3872b feat(genui): charts for the Iris library (Sparkline, LineChart, BarChart, Donut)
+- Verified: `flutter test test/features/genui/charts_test.dart` red first (undefined chart widgets), then 19 pass; `flutter test test/features/genui test/data/genui_test.dart` -> 124 pass; `flutter analyze lib/features/genui test/features/genui` -> No issues found!; `server/hermes-iris/.venv/Scripts/python -m pytest` -> 265 pass, 1 skipped; `tools/build_skill_refs.py --check` clean. Charts goldens (light and dark) opened and looked at: first pass showed flat lines and sliver bars (the plot `Row` centred a zero-height painter) and clashing x labels; both fixed before committing.
+- Deviations: (1) Tabs, Expander and Diff already shipped in 3.1/3.2, so 4.1 was the charts only. (2) The spec's `LineChart(series, labels?)` needs names, so there are two sub-components: `Series(name, values)` and `Slice(label, value)`; `Donut(slices)`. (3) Limits: 4 series, 12 slices, 200 points per series; non-positive slices are dropped; a line chart with no series of 2+ points is "can't show". Text inside a number list never reaches the widget (the validator rejects it); `cleanValues` is the second line of defence. (4) Colour: accent first, then that hue turned round the wheel (`chartColors`), with every series named in a legend. (5) The two plugin context goldens were regenerated on purpose (1,641 and 1,750 characters, cap 2,500); catalog and skill `library.md` regenerated.
+- Decisions for later tasks: chart widgets live in `lib/features/genui/render/chart_widgets.dart` and take plain Dart values. The golden canvas stays 390x1200.
+- Next: 4.2 inputs.
