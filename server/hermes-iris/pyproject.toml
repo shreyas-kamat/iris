@@ -1,6 +1,6 @@
 [project]
 name = "hermes-iris"
-version = "0.1.0"
+version = "0.2.0"
 description = "Hermes plugin for the Iris app: validated OpenUI Lang displays, reply kits and a per-profile store."
 requires-python = ">=3.11"
 dependencies = []

@@ -5,6 +5,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/chat/chat_backend.dart';
+import '../data/genui/genui_api.dart';
 import '../data/genui/genui_models.dart';
 import '../data/net/capabilities.dart';
 import '../data/prefs/preferences_store.dart';
@@ -64,4 +65,13 @@ final genUiPluginProvider = FutureProvider.autoDispose<GenUiCapabilities?>((
   final chat = await ref.watch(activeChatProvider.future);
   if (chat is! SurfaceBackend) return null;
   return (await (chat as SurfaceBackend).genUiCapabilities()).valueOrNull;
+});
+
+/// The plugin's REST routes for the active server and profile: the profile, the templates and their review. Null when
+/// there is no live server (the demo has none).
+final genUiApiProvider = FutureProvider<GenUiApi?>((ref) async {
+  final profile = ref.watch(activeProfileProvider);
+  final session = await ref.watch(activeSessionProvider.future);
+  if (session == null) return null;
+  return DashboardGenUiApi(session.connection.client, profile: profile);
 });

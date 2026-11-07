@@ -16,6 +16,7 @@ import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/prefs/preferences_store.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/components/controls.dart';
+import 'package:iris/features/genui/study_screen.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 
 import '../../support/fake_chat_backend.dart';
@@ -132,6 +133,53 @@ void main() {
     final container = containerOf(tester);
     container.read(genUiEnabledProvider.notifier).set(enabled: true);
     expect(container.read(genUiActiveProvider), isFalse);
+  });
+
+  group('Study my work', () {
+    Future<void> enable(WidgetTester tester) async {
+      containerOf(
+        tester,
+      ).read(genUiEnabledProvider.notifier).set(enabled: true);
+      await settle(tester);
+      await tester.ensureVisible(find.text('Plugin'));
+    }
+
+    testWidgets('is offered once displays are on and the plugin can study', (
+      tester,
+    ) async {
+      backend.genUiCapabilitiesResult = const Ok(
+        GenUiCapabilities(
+          version: '0.2.0',
+          openui: '1.0',
+          libraryIds: ['v1'],
+          features: {'capabilities', 'profile', 'templates'},
+        ),
+      );
+      await tester.pumpWidget(settings(installed: true));
+      await settle(tester);
+      expect(find.text('Study my work'), findsNothing, reason: 'switch is off');
+
+      await enable(tester);
+      expect(find.text('Study my work'), findsOneWidget);
+      await tester.tap(find.text('Study my work'));
+      await settle(tester);
+      expect(find.byType(StudyScreen), findsOneWidget);
+    });
+
+    testWidgets('asks an older plugin to be updated', (tester) async {
+      await tester.pumpWidget(settings(installed: true));
+      await settle(tester);
+      await enable(tester);
+
+      expect(find.text('Study my work'), findsOneWidget);
+      expect(
+        find.textContaining('Update the hermes-iris plugin'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Study my work'));
+      await settle(tester);
+      expect(find.byType(StudyScreen), findsNothing);
+    });
   });
 }
 

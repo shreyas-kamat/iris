@@ -21,7 +21,7 @@ Check it is up (the dashboard login or Cloudflare Access headers are needed; plu
 
 ```sh
 curl -s https://<server>/api/plugins/iris/capabilities
-# {"version":"0.1.0","openui":"1.0","library_ids":[...],"features":[...]}
+# {"version":"0.2.0","openui":"1.0","library_ids":[...],"features":[...]}
 ```
 
 Hermes imports `dashboard/plugin_api.py` only when the plugin is in `plugins.enabled`.

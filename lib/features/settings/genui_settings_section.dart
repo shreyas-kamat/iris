@@ -2,13 +2,18 @@
 /// Hermes answer with cards, tables and checklists instead of text alone.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/genui_providers.dart';
+import '../../data/genui/genui_models.dart';
 import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/settings_list.dart';
+import '../../design/platform/platform_feel.dart';
+import '../genui/study_screen.dart';
 
 class GenUiSettingsSection extends ConsumerWidget {
   const GenUiSettingsSection({super.key});
@@ -25,6 +30,7 @@ class GenUiSettingsSection extends ConsumerWidget {
     // The demo has no server to draw for.
     if (ref.watch(demoModeProvider)) return const SizedBox.shrink();
     final installed = ref.watch(genUiAvailableProvider);
+    final plugin = ref.watch(genUiPluginProvider).value;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 22),
@@ -43,10 +49,8 @@ class GenUiSettingsSection extends ConsumerWidget {
                         .set(enabled: on),
                   ),
                 ),
-                IrisSettingsRow(
-                  label: 'Plugin',
-                  value: ref.watch(genUiPluginProvider).value?.version ?? '—',
-                ),
+                if (ref.watch(genUiEnabledProvider)) _studyRow(context, plugin),
+                IrisSettingsRow(label: 'Plugin', value: plugin?.version ?? '—'),
               ]
             : const [
                 IrisSettingsRow(
@@ -55,6 +59,26 @@ class GenUiSettingsSection extends ConsumerWidget {
                 ),
                 IrisSettingsRow(label: 'How to install', sub: installHelp),
               ],
+      ),
+    );
+  }
+
+  /// Starting a study needs a plugin that stores profiles and templates; an older one is told to update.
+  Widget _studyRow(BuildContext context, GenUiCapabilities? plugin) {
+    if (plugin == null) return const SizedBox.shrink();
+    if (!plugin.has('templates')) {
+      return const IrisSettingsRow(
+        label: 'Study my work',
+        sub: 'Update the hermes-iris plugin on your server to use this',
+      );
+    }
+    return IrisSettingsRow(
+      label: 'Study my work',
+      sub: 'Let Hermes learn what you do and propose displays for it',
+      onTap: () => unawaited(
+        Navigator.of(
+          context,
+        ).push(IrisPageRoute<void>(builder: (_) => const StudyScreen())),
       ),
     );
   }

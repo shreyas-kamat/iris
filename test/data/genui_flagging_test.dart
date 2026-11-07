@@ -13,11 +13,12 @@ import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/net/server_connection.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 
+import '../support/fake_genui_api.dart';
 import '../support/fake_http.dart';
 import '../support/fake_wire_socket.dart';
 
 /// Records the sessions it was asked to flag.
-final class _RecordingApi implements GenUiApi {
+final class _RecordingApi extends FakeGenUiApi {
   final flagged = <String>[];
   Result<void> flagResult = const Ok(null);
 
