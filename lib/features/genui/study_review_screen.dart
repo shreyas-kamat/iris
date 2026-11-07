@@ -112,7 +112,7 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
   Future<void> _rename(UiTemplate template) async {
     final name = await showIrisSheet<String>(
       context: context,
-      builder: (_) => _RenameSheet(current: template.name),
+      builder: (_) => RenameTemplateSheet(current: template.name),
     );
     if (name == null || name.trim().isEmpty || name.trim() == template.name) {
       return;
@@ -414,16 +414,17 @@ class _Actions extends StatelessWidget {
   }
 }
 
-class _RenameSheet extends StatefulWidget {
-  const _RenameSheet({required this.current});
+/// Asks for a new name for a template; pops with the text, or null when cancelled.
+class RenameTemplateSheet extends StatefulWidget {
+  const RenameTemplateSheet({required this.current, super.key});
 
   final String current;
 
   @override
-  State<_RenameSheet> createState() => _RenameSheetState();
+  State<RenameTemplateSheet> createState() => _RenameTemplateSheetState();
 }
 
-class _RenameSheetState extends State<_RenameSheet> {
+class _RenameTemplateSheetState extends State<RenameTemplateSheet> {
   late final _controller = TextEditingController(text: widget.current);
 
   @override

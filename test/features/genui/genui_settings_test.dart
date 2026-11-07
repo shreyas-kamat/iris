@@ -16,10 +16,12 @@ import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/prefs/preferences_store.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/components/controls.dart';
+import 'package:iris/features/genui/displays_screen.dart';
 import 'package:iris/features/genui/study_screen.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 
 import '../../support/fake_chat_backend.dart';
+import '../../support/fake_genui_api.dart';
 import '../../support/harness.dart';
 
 void main() {
@@ -42,6 +44,7 @@ void main() {
       ProviderScope(
         overrides: [
           if (store != null) preferencesStoreProvider.overrideWithValue(store),
+          genUiApiProvider.overrideWith((ref) async => FakeGenUiApi()),
           activeServerIdProvider.overrideWith(() => _FixedServer('s')),
           activeServerProvider.overrideWithValue(
             const ServerConfig(
@@ -164,6 +167,27 @@ void main() {
       await tester.tap(find.text('Study my work'));
       await settle(tester);
       expect(find.byType(StudyScreen), findsOneWidget);
+    });
+
+    testWidgets('opens the kept displays when the plugin has templates', (
+      tester,
+    ) async {
+      backend.genUiCapabilitiesResult = const Ok(
+        GenUiCapabilities(
+          version: '0.2.0',
+          openui: '1.0',
+          libraryIds: ['v1'],
+          features: {'capabilities', 'profile', 'templates'},
+        ),
+      );
+      await tester.pumpWidget(settings(installed: true));
+      await settle(tester);
+      await enable(tester);
+
+      expect(find.text('Displays'), findsOneWidget);
+      await tester.tap(find.text('Displays'));
+      await settle(tester);
+      expect(find.byType(DisplaysScreen), findsOneWidget);
     });
 
     testWidgets('asks an older plugin to be updated', (tester) async {

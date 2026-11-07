@@ -13,6 +13,7 @@ import '../../demo/demo_mode.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/settings_list.dart';
 import '../../design/platform/platform_feel.dart';
+import '../genui/displays_screen.dart';
 import '../genui/study_review_screen.dart';
 import '../genui/study_screen.dart';
 
@@ -50,7 +51,10 @@ class GenUiSettingsSection extends ConsumerWidget {
                         .set(enabled: on),
                   ),
                 ),
-                if (ref.watch(genUiEnabledProvider)) _studyRow(context, plugin),
+                if (ref.watch(genUiEnabledProvider)) ...[
+                  _studyRow(context, plugin),
+                  _displaysRow(context, plugin),
+                ],
                 IrisSettingsRow(label: 'Plugin', value: plugin?.version ?? '—'),
               ]
             : const [
@@ -90,6 +94,22 @@ class GenUiSettingsSection extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// What the person has kept, from a plugin that stores templates.
+  Widget _displaysRow(BuildContext context, GenUiCapabilities? plugin) {
+    if (plugin == null || !plugin.has('templates')) {
+      return const SizedBox.shrink();
+    }
+    return IrisSettingsRow(
+      label: 'Displays',
+      sub: 'The displays and reply kits you have kept',
+      onTap: () => unawaited(
+        Navigator.of(
+          context,
+        ).push(IrisPageRoute<void>(builder: (_) => const DisplaysScreen())),
       ),
     );
   }
