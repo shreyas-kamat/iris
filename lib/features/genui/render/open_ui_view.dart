@@ -126,7 +126,7 @@ class _OpenUiViewState extends State<OpenUiView> {
       ...evaluated.errors,
     }.where((e) => !e.isFatal).length;
     final content = NodeBuilder(
-      env: widget.env,
+      env: widget.env.withStore(_store),
     ).surface(context, root, pending: pending, errorCount: dropped);
     return _clamped(context, content);
   }

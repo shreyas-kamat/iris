@@ -55,6 +55,19 @@ bar = Card([BarChart([Series("Revenue", [120, 90, 150, -20]), Series("Costs", [8
 donut = Card([Donut([Slice("Docs", 40), Slice("Code", 35), Slice("Chat", 20), Slice("Other", 0.5)])], "Donut")
 ''';
 
+const _inputs = r'''
+$name = "Ada"
+$cadence = "Weekly"
+$days = ["Mon", "Wed"]
+$on = true
+$volume = 40
+$guests = 2
+$due = "2026-11-15"
+root = Stack([head, form])
+head = Text("Inputs", "title")
+form = Card([Input("Name", $name, "Who is this for?"), ChoiceChips(["Daily", "Weekly", "Monthly"], $cadence, false, "How often"), ChoiceChips(["Mon", "Tue", "Wed", "Thu"], $days, true, "Which days"), Toggle("Tell me when it is done", $on), Slider("Volume", 0, 100, $volume), Stepper("Guests", $guests, 1, 8), DatePicker("Due on", $due), ApproveReject("Approve", "Hold", "Ask me first"), Submit("Send", @Ask("Here is my answer", {name: $name}))], "A form")
+''';
+
 Widget _host(String code, {required bool dark}) {
   final theme = IrisThemeData(skin: IrisSkin.aperture, isDark: dark);
   return MediaQuery(
@@ -98,6 +111,7 @@ void main() {
     'data': _data,
     'more': _more,
     'charts': _charts,
+    'inputs': _inputs,
   }.entries) {
     for (final dark in [true, false]) {
       testWidgets('${entry.key}, ${dark ? 'dark' : 'light'}', (tester) async {

@@ -53,6 +53,34 @@ def test_a_realistic_display_validates_against_the_catalog(plugin):
     assert result.ok, result.lines
 
 
+def test_charts_and_a_bound_form_validate_against_the_catalog(plugin):
+    from hermes_iris.genui import catalog
+    from hermes_iris.openui import validate_program
+
+    charts = "\n".join(
+        [
+            "root = Stack([spark, line, bars, donut])",
+            "spark = Sparkline([3, 5, 4, 8])",
+            'line = LineChart([Series("Requests", [10, 14, 9]), Series("Errors", [1, 0, 2])], ["Mon", "Tue", "Wed"])',
+            'bars = BarChart([Series("Revenue", [120, 90, -20])], ["Q1", "Q2", "Q3"])',
+            'donut = Donut([Slice("Docs", 40), Slice("Code", 35)])',
+        ]
+    )
+    result = validate_program(catalog.v1(), charts)
+    assert result.ok, result.lines
+
+    form = "\n".join(
+        [
+            '$cadence = "Weekly"',
+            '$note = ""',
+            "root = Card([ChoiceChips([\"Daily\", \"Weekly\"], $cadence), Input(\"Note\", $note), "
+            'Submit("Send", @Ask("Here is my answer", {cadence: $cadence, note: $note}))], "A form")',
+        ]
+    )
+    result = validate_program(catalog.v1(), form)
+    assert result.ok, result.lines
+
+
 def test_the_catalog_prompt_is_stable_and_complete(plugin):
     from hermes_iris.genui import catalog
     from hermes_iris.openui.prompt import PromptOptions, generate_system_prompt

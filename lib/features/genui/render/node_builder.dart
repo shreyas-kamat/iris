@@ -17,6 +17,7 @@ import '../../../design/theme/iris_theme.dart';
 import '../../../design/tokens/metrics.dart';
 import '../../../design/tokens/palette.dart';
 import 'chart_widgets.dart';
+import 'input_widgets.dart';
 import 'node_widgets.dart';
 
 /// The OpenUI tree's element, named apart from Flutter's.
@@ -25,13 +26,24 @@ typedef UiElement = oul.Element;
 /// What a component may ask of the surface it sits in. Phase 4 supplies the real ones; without them buttons are
 /// disabled and links are plain text.
 class NodeEnv {
-  const NodeEnv({this.onAction, this.onOpenUrl, this.maxDepth = 8});
+  const NodeEnv({this.onAction, this.onOpenUrl, this.store, this.maxDepth = 8});
 
   /// Runs an action. `component` is the component type that raised it, for the `<iris-action>` envelope.
   final void Function(ActionValue action, String component)? onAction;
 
   /// Opens a web address after the host has asked the person to confirm it.
   final ValueChanged<String>? onOpenUrl;
+
+  /// The display's variables. Inputs bound to a `$variable` read and write it; without one they keep their value
+  /// locally. `OpenUiView` supplies its own.
+  final StateStore? store;
+
+  NodeEnv withStore(StateStore store) => NodeEnv(
+    onAction: onAction,
+    onOpenUrl: onOpenUrl,
+    store: store,
+    maxDepth: maxDepth,
+  );
 
   /// Nesting beyond this is not drawn (the plugin enforces the same limit).
   final int maxDepth;
@@ -493,6 +505,155 @@ class NodeBuilder {
       case 'Slice':
         return null;
 
+      case 'ChoiceChips':
+        final options = [
+          for (final o in _list(e, 'options'))
+            if (o != null) jsString(o),
+        ];
+        if (options.isEmpty) return null;
+        final multi = _b(e, 'multi');
+        return _bound(
+          e,
+          (value, set) => IrisChoiceChips(
+            options: options,
+            value: value,
+            onChanged: set,
+            multi: multi,
+            label: _s(e, 'label'),
+          ),
+        );
+
+      case 'Input':
+        final label = _s(e, 'label');
+        if (label == null) return null;
+        return _bound(
+          e,
+          (value, set) => IrisTextInput(
+            label: label,
+            value: value,
+            onChanged: set,
+            placeholder: _s(e, 'placeholder'),
+            kind: switch (_s(e, 'kind')) {
+              'number' => InputKind.number,
+              'multiline' => InputKind.multiline,
+              _ => InputKind.text,
+            },
+          ),
+        );
+
+      case 'Slider':
+        final label = _s(e, 'label');
+        final lo = _n(e, 'min');
+        final hi = _n(e, 'max');
+        if (label == null || lo == null || hi == null || !(hi > lo)) {
+          return null;
+        }
+        return _bound(
+          e,
+          (value, set) => IrisSliderRow(
+            label: label,
+            min: lo,
+            max: hi,
+            value: value is num ? value : null,
+            step: _n(e, 'step'),
+            onChanged: set,
+          ),
+        );
+
+      case 'Toggle':
+        final label = _s(e, 'label');
+        if (label == null) return null;
+        return _bound(
+          e,
+          (value, set) =>
+              IrisToggleRow(label: label, value: value == true, onChanged: set),
+        );
+
+      case 'DatePicker':
+        final label = _s(e, 'label');
+        if (label == null) return null;
+        return _bound(
+          e,
+          (value, set) =>
+              IrisDatePickerRow(label: label, value: value, onChanged: set),
+        );
+
+      case 'Stepper':
+        final label = _s(e, 'label');
+        if (label == null) return null;
+        final step = _n(e, 'step');
+        return _bound(
+          e,
+          (value, set) => IrisStepperRow(
+            label: label,
+            value: value is num ? value : null,
+            min: _n(e, 'min'),
+            max: _n(e, 'max'),
+            step: step != null && step > 0 ? step : 1,
+            onChanged: set,
+          ),
+        );
+
+      case 'ApproveReject':
+        final approve = _s(e, 'approveLabel');
+        final reject = _s(e, 'rejectLabel');
+        if (approve == null || reject == null) return null;
+        final ask = _s(e, 'askLabel');
+        final run = env.onAction;
+        VoidCallback? send(String label, String decision) => run == null
+            ? null
+            : () => run(
+                ActionValue([
+                  CustomStep('Ask', {
+                    'text': label,
+                    'context': {'decision': decision},
+                  }),
+                ]),
+                'ApproveReject',
+              );
+        // At large text three buttons side by side would clip their labels, so they stack and fill the width.
+        final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+        // IrisButton centres its content, so side by side each needs to shrink to fit its label.
+        Widget button(String label, String decision, IrisButtonTone tone) {
+          final b = IrisButton(
+            label: label,
+            tone: tone,
+            expand: stacked,
+            onPressed: send(label, decision),
+          );
+          return stacked ? b : IntrinsicWidth(child: b);
+        }
+
+        final buttons = [
+          button(approve, 'approve', IrisButtonTone.primary),
+          button(reject, 'reject', IrisButtonTone.secondary),
+          if (ask != null) button(ask, 'ask', IrisButtonTone.secondary),
+        ];
+        return stacked
+            ? _column(buttons, gap: IrisSpace.sm)
+            : Wrap(
+                spacing: IrisSpace.sm,
+                runSpacing: IrisSpace.sm,
+                children: buttons,
+              );
+
+      case 'Submit':
+        final label = _s(e, 'label');
+        final action = e.props['action'];
+        if (label == null || action is! ActionValue) return null;
+        final run = env.onAction;
+        return Align(
+          alignment: Alignment.centerLeft,
+          widthFactor: 1,
+          child: IrisButton(
+            label: label,
+            tone: IrisButtonTone.primary,
+            onPressed: run == null || action.steps.isEmpty
+                ? null
+                : () => run(action, 'Submit'),
+          ),
+        );
+
       case 'Button':
         final label = _s(e, 'label');
         if (label == null) return null;
@@ -519,6 +680,20 @@ class NodeBuilder {
         );
     }
     return null; // a component this app does not know yet
+  }
+
+  /// An input's value: the `$variable` the program bound, else the literal it wrote, else nothing.
+  Widget _bound(
+    UiElement e,
+    Widget Function(Object? value, ValueChanged<Object?> set) build,
+  ) {
+    final v = e.props['value'];
+    return BoundValue(
+      store: env.store,
+      name: v is Binding ? v.name : null,
+      initial: v is Binding ? null : v,
+      builder: (context, value, set) => build(value, set),
+    );
   }
 
   List<ChartSeries> _series(UiElement e) => [

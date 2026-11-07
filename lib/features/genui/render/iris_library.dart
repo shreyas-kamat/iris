@@ -115,14 +115,28 @@ class _ComponentList extends IrisType {
 }
 
 class IrisProp {
-  const IrisProp(this.name, this.type, {this.required = true});
+  const IrisProp(this.name, this.type, {this.required = true})
+    : bindable = false;
 
   /// An optional prop; it must come after every required one.
-  const IrisProp.optional(this.name, this.type) : required = false;
+  const IrisProp.optional(this.name, this.type)
+    : required = false,
+      bindable = false;
+
+  /// An optional prop that takes a `$variable` for two-way binding. Printed `name?: $binding<type>`; the JSON Schema
+  /// has no marker for it (language.md §6.4).
+  const IrisProp.bound(this.name, this.type)
+    : required = false,
+      bindable = true;
 
   final String name;
   final IrisType type;
   final bool required;
+  final bool bindable;
+
+  /// How a signature prints this prop.
+  String get signature =>
+      '$name${required ? '' : '?'}: ${bindable ? '\$binding<${type.signature}>' : type.signature}';
 }
 
 class IrisComponent {
@@ -141,8 +155,7 @@ class IrisComponent {
   final String description;
   final List<IrisProp> props;
 
-  String get signature =>
-      '$name(${props.map((p) => '${p.name}${p.required ? '' : '?'}: ${p.type.signature}').join(', ')})';
+  String get signature => '$name(${props.map((p) => p.signature).join(', ')})';
 
   Map<String, Object?> get schema => {
     'type': 'object',
@@ -438,7 +451,88 @@ abstract final class IrisLibrary {
       ],
     ),
 
-    // Actions (the inputs and reply kits arrive in Phase 4)
+    // Inputs. A bound `value` takes a $variable; whatever the person enters is theirs, and a new revision of the
+    // display never overwrites it.
+    IrisComponent(
+      'ChoiceChips',
+      'A row of options to pick from. value is the chosen option, or with multi the list of chosen options. Use for a few short choices',
+      [
+        IrisProp('options', IrisType.listOf(IrisType.string)),
+        const IrisProp.bound('value', IrisType.any),
+        const IrisProp.optional('multi', IrisType.boolean),
+        const IrisProp.optional('label', IrisType.string),
+      ],
+    ),
+    IrisComponent(
+      'Input',
+      'A text field. kind "number" stores a number, "multiline" gives room for a paragraph',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp.bound('value', IrisType.string),
+        const IrisProp.optional('placeholder', IrisType.string),
+        IrisProp.optional(
+          'kind',
+          IrisType.oneOf(const ['text', 'number', 'multiline']),
+        ),
+      ],
+    ),
+    IrisComponent(
+      'Slider',
+      'Pick a number between min and max by dragging. step makes it move in whole steps. Use when the exact value matters less than the rough amount',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp('min', IrisType.number),
+        const IrisProp('max', IrisType.number),
+        const IrisProp.bound('value', IrisType.number),
+        const IrisProp.optional('step', IrisType.number),
+      ],
+    ),
+    IrisComponent(
+      'Toggle',
+      'An on/off switch with a label. value is true or false',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp.bound('value', IrisType.boolean),
+      ],
+    ),
+    IrisComponent(
+      'DatePicker',
+      'Pick a calendar date. value is written as text like "2026-11-07"',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp.bound('value', IrisType.string),
+      ],
+    ),
+    IrisComponent(
+      'Stepper',
+      'A number with minus and plus buttons, for small counts such as guests or retries',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp.bound('value', IrisType.number),
+        const IrisProp.optional('min', IrisType.number),
+        const IrisProp.optional('max', IrisType.number),
+        const IrisProp.optional('step', IrisType.number),
+      ],
+    ),
+    IrisComponent(
+      'ApproveReject',
+      'Two buttons for a yes-or-no decision, plus an optional third for asking first. Each sends its own label as the reply, so write each label as a sentence the person would say',
+      [
+        const IrisProp('approveLabel', IrisType.string),
+        const IrisProp('rejectLabel', IrisType.string),
+        const IrisProp.optional('askLabel', IrisType.string),
+      ],
+    ),
+    IrisComponent(
+      'Submit',
+      'The primary button that ends a form. Its action runs with the values the person has entered, e.g. @Ask("Here is my answer", {choice: \$choice})',
+      [
+        const IrisProp('label', IrisType.string),
+        const IrisProp('action', IrisType.action),
+      ],
+    ),
+
+    // Actions
     IrisComponent(
       'Button',
       'A button. Without an action it sends its label to the assistant as the person\'s next message',
@@ -528,7 +622,16 @@ abstract final class IrisLibrary {
       'Donut',
       'Slice',
     ]),
-    IrisComponentGroup('Actions', const ['Button']),
+    IrisComponentGroup('Inputs', const [
+      'ChoiceChips',
+      'Input',
+      'Slider',
+      'Toggle',
+      'DatePicker',
+      'Stepper',
+      'ApproveReject',
+    ]),
+    IrisComponentGroup('Actions', const ['Button', 'Submit']),
   ];
 
   /// The library as OpenUI's `library.json`: the JSON Schema plus the pre-built signature text.

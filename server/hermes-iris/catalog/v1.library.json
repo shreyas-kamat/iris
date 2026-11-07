@@ -94,6 +94,30 @@
       "Slice": {
         "$ref": "#/$defs/Slice"
       },
+      "ChoiceChips": {
+        "$ref": "#/$defs/ChoiceChips"
+      },
+      "Input": {
+        "$ref": "#/$defs/Input"
+      },
+      "Slider": {
+        "$ref": "#/$defs/Slider"
+      },
+      "Toggle": {
+        "$ref": "#/$defs/Toggle"
+      },
+      "DatePicker": {
+        "$ref": "#/$defs/DatePicker"
+      },
+      "Stepper": {
+        "$ref": "#/$defs/Stepper"
+      },
+      "ApproveReject": {
+        "$ref": "#/$defs/ApproveReject"
+      },
+      "Submit": {
+        "$ref": "#/$defs/Submit"
+      },
       "Button": {
         "$ref": "#/$defs/Button"
       }
@@ -635,6 +659,169 @@
           "value"
         ]
       },
+      "ChoiceChips": {
+        "type": "object",
+        "description": "A row of options to pick from. value is the chosen option, or with multi the list of chosen options. Use for a few short choices",
+        "properties": {
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "value": {},
+          "multi": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "options"
+        ]
+      },
+      "Input": {
+        "type": "object",
+        "description": "A text field. kind \"number\" stores a number, \"multiline\" gives room for a paragraph",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "multiline"
+            ]
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "Slider": {
+        "type": "object",
+        "description": "Pick a number between min and max by dragging. step makes it move in whole steps. Use when the exact value matters less than the rough amount",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          },
+          "step": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "min",
+          "max"
+        ]
+      },
+      "Toggle": {
+        "type": "object",
+        "description": "An on/off switch with a label. value is true or false",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "DatePicker": {
+        "type": "object",
+        "description": "Pick a calendar date. value is written as text like \"2026-11-07\"",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "Stepper": {
+        "type": "object",
+        "description": "A number with minus and plus buttons, for small counts such as guests or retries",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "step": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      },
+      "ApproveReject": {
+        "type": "object",
+        "description": "Two buttons for a yes-or-no decision, plus an optional third for asking first. Each sends its own label as the reply, so write each label as a sentence the person would say",
+        "properties": {
+          "approveLabel": {
+            "type": "string"
+          },
+          "rejectLabel": {
+            "type": "string"
+          },
+          "askLabel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "approveLabel",
+          "rejectLabel"
+        ]
+      },
+      "Submit": {
+        "type": "object",
+        "description": "The primary button that ends a form. Its action runs with the values the person has entered, e.g. @Ask(\"Here is my answer\", {choice: $choice})",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/$defs/ActionExpression"
+          }
+        },
+        "required": [
+          "label",
+          "action"
+        ]
+      },
       "Button": {
         "type": "object",
         "description": "A button. Without an action it sends its label to the assistant as the person's next message",
@@ -748,6 +935,30 @@
           },
           {
             "$ref": "#/$defs/Slice"
+          },
+          {
+            "$ref": "#/$defs/ChoiceChips"
+          },
+          {
+            "$ref": "#/$defs/Input"
+          },
+          {
+            "$ref": "#/$defs/Slider"
+          },
+          {
+            "$ref": "#/$defs/Toggle"
+          },
+          {
+            "$ref": "#/$defs/DatePicker"
+          },
+          {
+            "$ref": "#/$defs/Stepper"
+          },
+          {
+            "$ref": "#/$defs/ApproveReject"
+          },
+          {
+            "$ref": "#/$defs/Submit"
           },
           {
             "$ref": "#/$defs/Button"
@@ -1002,6 +1213,38 @@
       "signature": "Slice(label: string, value: number)",
       "description": "One share of a Donut; value is any positive amount and the percentage is worked out for you"
     },
+    "ChoiceChips": {
+      "signature": "ChoiceChips(options: string[], value?: $binding<any>, multi?: boolean, label?: string)",
+      "description": "A row of options to pick from. value is the chosen option, or with multi the list of chosen options. Use for a few short choices"
+    },
+    "Input": {
+      "signature": "Input(label: string, value?: $binding<string>, placeholder?: string, kind?: \"text\" | \"number\" | \"multiline\")",
+      "description": "A text field. kind \"number\" stores a number, \"multiline\" gives room for a paragraph"
+    },
+    "Slider": {
+      "signature": "Slider(label: string, min: number, max: number, value?: $binding<number>, step?: number)",
+      "description": "Pick a number between min and max by dragging. step makes it move in whole steps. Use when the exact value matters less than the rough amount"
+    },
+    "Toggle": {
+      "signature": "Toggle(label: string, value?: $binding<boolean>)",
+      "description": "An on/off switch with a label. value is true or false"
+    },
+    "DatePicker": {
+      "signature": "DatePicker(label: string, value?: $binding<string>)",
+      "description": "Pick a calendar date. value is written as text like \"2026-11-07\""
+    },
+    "Stepper": {
+      "signature": "Stepper(label: string, value?: $binding<number>, min?: number, max?: number, step?: number)",
+      "description": "A number with minus and plus buttons, for small counts such as guests or retries"
+    },
+    "ApproveReject": {
+      "signature": "ApproveReject(approveLabel: string, rejectLabel: string, askLabel?: string)",
+      "description": "Two buttons for a yes-or-no decision, plus an optional third for asking first. Each sends its own label as the reply, so write each label as a sentence the person would say"
+    },
+    "Submit": {
+      "signature": "Submit(label: string, action: ActionExpression)",
+      "description": "The primary button that ends a form. Its action runs with the values the person has entered, e.g. @Ask(\"Here is my answer\", {choice: $choice})"
+    },
     "Button": {
       "signature": "Button(label: string, action?: ActionExpression, variant?: \"primary\" | \"secondary\")",
       "description": "A button. Without an action it sends its label to the assistant as the person's next message"
@@ -1074,9 +1317,22 @@
       ]
     },
     {
+      "name": "Inputs",
+      "components": [
+        "ChoiceChips",
+        "Input",
+        "Slider",
+        "Toggle",
+        "DatePicker",
+        "Stepper",
+        "ApproveReject"
+      ]
+    },
+    {
       "name": "Actions",
       "components": [
-        "Button"
+        "Button",
+        "Submit"
       ]
     }
   ]

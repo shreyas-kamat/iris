@@ -95,9 +95,16 @@ class IrisButton extends StatelessWidget {
           ),
           const SizedBox(width: IrisSpace.sm),
         ],
-        Text(
-          label,
-          style: context.type.heading.copyWith(color: foreground, fontSize: 15),
+        // Flexible so a long label wraps rather than overflowing: some are written by the model.
+        Flexible(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: context.type.heading.copyWith(
+              color: foreground,
+              fontSize: 15,
+            ),
+          ),
         ),
       ],
     );
@@ -158,6 +165,7 @@ class IrisField extends StatefulWidget {
     this.minLines,
     this.keyboardType,
     this.onSubmitted,
+    this.onChanged,
     this.autofocus = false,
     this.errorText,
     this.trailing,
@@ -195,6 +203,9 @@ class IrisField extends StatefulWidget {
   final int? minLines;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onSubmitted;
+
+  /// Called with the whole text after every edit.
+  final ValueChanged<String>? onChanged;
   final bool autofocus;
   final String? errorText;
 
@@ -347,6 +358,7 @@ class _IrisFieldState extends State<IrisField> {
                         minLines: widget.minLines,
                         keyboardType: widget.keyboardType,
                         onSubmitted: widget.onSubmitted,
+                        onChanged: widget.onChanged,
                         style: textStyle,
                         cursorColor: palette.accent,
                         backgroundCursorColor: palette.inkFaint,

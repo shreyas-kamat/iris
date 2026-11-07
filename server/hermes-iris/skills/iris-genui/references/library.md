@@ -66,8 +66,18 @@ BarChart(series: Series[], labels?: string[]) — One to four Series as grouped 
 Donut(slices: Slice[]) — Shares of a whole, up to 12 Slice values, shown as a ring with a legend. Use for parts of a total, not for trends
 Slice(label: string, value: number) — One share of a Donut; value is any positive amount and the percentage is worked out for you
 
+### Inputs
+ChoiceChips(options: string[], value?: $binding<any>, multi?: boolean, label?: string) — A row of options to pick from. value is the chosen option, or with multi the list of chosen options. Use for a few short choices
+Input(label: string, value?: $binding<string>, placeholder?: string, kind?: "text" | "number" | "multiline") — A text field. kind "number" stores a number, "multiline" gives room for a paragraph
+Slider(label: string, min: number, max: number, value?: $binding<number>, step?: number) — Pick a number between min and max by dragging. step makes it move in whole steps. Use when the exact value matters less than the rough amount
+Toggle(label: string, value?: $binding<boolean>) — An on/off switch with a label. value is true or false
+DatePicker(label: string, value?: $binding<string>) — Pick a calendar date. value is written as text like "2026-11-07"
+Stepper(label: string, value?: $binding<number>, min?: number, max?: number, step?: number) — A number with minus and plus buttons, for small counts such as guests or retries
+ApproveReject(approveLabel: string, rejectLabel: string, askLabel?: string) — Two buttons for a yes-or-no decision, plus an optional third for asking first. Each sends its own label as the reply, so write each label as a sentence the person would say
+
 ### Actions
 Button(label: string, action?: ActionExpression, variant?: "primary" | "secondary") — A button. Without an action it sends its label to the assistant as the person's next message
+Submit(label: string, action: ActionExpression) — The primary button that ends a form. Its action runs with the values the person has entered, e.g. @Ask("Here is my answer", {choice: $choice})
 
 ## Built-in Functions
 
