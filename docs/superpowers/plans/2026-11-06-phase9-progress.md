@@ -431,7 +431,7 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Next: G9 (Sonnet), 7.3 accessibility.
 
 ### G8 — 7.2 search — decision recorded — 2026-11-09
-- The user chose "leave search as it is" (the default I recommended). The display text is searchable only as far as the reply text carries it; that is written into the README's privacy-free feature text only where it applies, and no server change was made.
+- The user chose "leave search as it is" (the option I recommended). Hermes search finds a display through the reply text around it, not through the display's own text. No server change was made, and no doc claims that displays are searchable.
 
 ### segment G8 complete — 2026-11-09
 - Next: G9 (Sonnet), task 7.3 accessibility pass. 7.4 (the device pass) needs the user and a phone.
