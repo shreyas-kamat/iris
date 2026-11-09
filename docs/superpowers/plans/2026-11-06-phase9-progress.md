@@ -446,3 +446,8 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Findings: (1) the code block's "Copy" label (shared markdown component) was 4.49:1 in light mode, a hair under AA; its text now mixes 20 % ink into the accent. 13 chat goldens and 2 genui "more" goldens were regenerated for that. (2) The Expander header is 44 pt, below Android's 48 pt guideline; Iris's floor is `IrisSize.minTapTarget` = 44 app-wide, so the Android guideline is not asserted and nothing was changed.
 - Deviations: the plan's "screen-reader pass both platforms" (TalkBack, VoiceOver) needs a device, so it moves to 7.4 with the user. The full suite was re-run only for the goldens, not once more after regenerating.
 - Next: 7.4 device pass (needs the user and a phone; include a TalkBack and VoiceOver pass, and the 0.3.0 plugin install on the server).
+
+### G9 — 7.4 — doing — 2026-11-10
+- User approved (this chat): device = Moto G45 5G (`ZN4226ZPW5`, arm64, Android only for now), install plugin 0.3.0 on the server and restart `hermes-dashboard`, real turns (>= 240 s each), and a TalkBack checklist for the user.
+- Done: plugin 0.3.0 copied to `~/.hermes/plugins/iris` (tests, tools, venv left out), `hermes-dashboard` restarted: active, no plugin errors in the journal. Debug APK (arm64) built and installed over the existing app with `adb install -r` (data kept, no uninstall needed).
+- Next: live checks on the phone (displays, reply kit, study, review changes, weekly refine switch), screenshots to `docs/superpowers/plans/2026-10-31-genui-device/`, TalkBack checklist for the user. iOS/VoiceOver: no device known; ask.
