@@ -54,3 +54,9 @@ The evaluator follows the reference runtime, with these deliberate differences (
 G3): a runtime throw makes that prop `null`; `@Sort` uses a root-collation stand-in for `localeCompare` that is right
 for Latin text; the `url` validation rule requires a host; references nest at most 64 deep and `@Each` visits at most
 1,000 elements.
+
+## Licence and attribution
+
+OpenUI Lang is an open specification from Thesys Inc. (MIT). This package implements it in Dart and checks it against
+OpenUI's conformance fixtures and prompt goldens at commit `eea983e`. The attribution and the exact files are in
+`NOTICE`; the fixtures' licence text is `test/fixtures/LICENSE`.

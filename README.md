@@ -35,12 +35,18 @@ There is an offline demo if you want a look first.
   from the ⋯ button in the chat header.
 - **Profiles and usage.** Switch between the server's agent profiles, and create, rename, edit the SOUL of
   or delete them; search across every profile; see how much of a provider's quota is used on the home screen.
+- **Generated displays.** Off by default; turn them on in Settings with the `hermes-iris` plugin on your server.
+  Hermes can answer with cards, tables, checklists, charts and inputs that Iris draws itself, and a short question
+  with answer buttons docks above the composer. Taps send a message back to Hermes. **Study my work** reads your
+  work on your server and proposes a profile and displays; you keep, rename or drop each one, and a weekly
+  refinement (off by default) proposes changes to the ones you keep. See
+  [`server/hermes-iris/README.md`](server/hermes-iris/README.md).
 - **Look and feel.** Ten skins, light and dark, honours reduced motion and large text, touch targets of at
   least 44 points. See [`docs/design-language.md`](docs/design-language.md).
-- **Try the demo.** From the first screen, with no server and no network: sample conversations and five
-  scripted turns that show tool calls, approvals, the sudo prompt, a failed turn and retry, and the
-  password-manager and connection prompts. Nothing from it
-  is saved.
+- **Try the demo.** From the first screen, with no server and no network: sample conversations and eight
+  scripted turns that show tool calls, approvals, the sudo prompt, a failed turn and retry, the
+  password-manager and connection prompts, and generated displays (a status card, a reply kit and a study
+  result). Nothing from it is saved.
 
 ## Privacy and security in brief
 

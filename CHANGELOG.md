@@ -7,6 +7,15 @@ All notable changes to Iris are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Generated displays (off by default; Settings > Generated displays, with the `hermes-iris` plugin on your server).
+  Hermes answers with cards, tables, checklists, charts and inputs that Iris draws natively; taps send a message
+  back to Hermes. The study needs plugin 0.2.0 and the weekly refinement 0.3.0; Settings shows what your server has.
+- Reply kits: a short question with answer buttons docks above the composer until you answer or dismiss it.
+- Study my work: Hermes reads your work on your server and proposes a profile and displays; you keep, rename or
+  drop each one. A Displays screen lists what you kept, with previews, rename and retire.
+- Refinement: a weekly switch (off by default) proposes changes to kept displays from how they were used.
+  Changes show beside the display, and you apply or discard them.
+- The demo shows a status card, a reply kit and a study result.
 - Voice mode: a live voice call from any chat, with the voice orb as the microphone. Chained servers run
   speech-to-text, the agent and text-to-speech; GPT-Live servers talk through OpenAI's realtime model. A call
   starts only after its parts answer, with live captions, approvals and questions answered by voice, and
