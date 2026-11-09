@@ -76,6 +76,46 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('a scripted display draws in the demo chat, natively', (
+    tester,
+  ) async {
+    final handle = await enterDemo(tester);
+    await tester.tap(find.bySemanticsLabel('New conversation'));
+    await settle(tester);
+    await tester.pump(const Duration(seconds: 9));
+    await tester.ensureVisible(find.text('Show me my deploy status'));
+    await tester.pump();
+    await tester.tap(find.text('Show me my deploy status'));
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    // The card's rows, drawn as Iris widgets rather than a tool card.
+    expect(find.text('Production'), findsOneWidget);
+    expect(find.text('v2.14.0 · p95 640 ms'), findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets(
+    'a scripted reply kit docks above the composer with its answers',
+    (tester) async {
+      final handle = await enterDemo(tester);
+      await tester.tap(find.bySemanticsLabel('New conversation'));
+      await settle(tester);
+      await tester.pump(const Duration(seconds: 9));
+      await tester.ensureVisible(
+        find.text('Should I deploy the API to production?'),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Should I deploy the API to production?'));
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(find.text('Deploy now'), findsOneWidget);
+      expect(find.text('Hold off'), findsOneWidget);
+      handle.dispose();
+    },
+  );
+
   testWidgets('the fallback link leaves the demo from inside a chat', (
     tester,
   ) async {
