@@ -15,7 +15,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | done | `ed515c8` |
-| G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | doing | |
+| G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | done | `9f6b719` |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
 | G10 | 7.6 final review, release, PR | Opus | todo | |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
@@ -422,3 +422,16 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Verified: `flutter test test/features/chat_export_test.dart` -> 10 pass.
 - Deviations: 7.2 is a partial change: the export was already in the app and is now tested. Search was not changed, by decision.
 - Next: 7.5 docs.
+
+### G8 — 7.5 — done — 2026-11-09 — Haiku 5.5
+- Commits: 9f6b719 docs(genui): changelog, feature section, plugin and package READMEs, and a privacy note for generated displays
+- Verified: `server/hermes-iris/.venv/Scripts/python -m pytest` -> 395 pass, 1 skipped (docs only, no code changed); the README and NOTICE diffs were read against the code: the plugin routes and features (`FEATURES` in `dashboard/plugin_api.py`), the guard's any-session tools (`genui/guards.py` `ANY_SESSION`), the file list (`genui/store.py`), and the demo script count (5 + 3 = 8).
+- Deviations: (1) The plan says `packages/openui_lang/NOTICE`; it now also credits the prompt goldens and the reference runtime (both MIT, Thesys Inc.), and the package README has a licence section. (2) The privacy paragraph in `site-src/src/pages/Privacy.tsx` is user-facing legal copy: it needs the user's review before it is published. The built site (`site-src/dist`) is not tracked and was not rebuilt; it changes when the site is deployed from source. (3) The server README had gone out of date (routes, skills, features); it is updated, and its "Nothing logs" line no longer claims more than the tests check. (4) The root README's demo bullet now says eight scripted turns.
+- Decisions for later tasks: the privacy wording names the study's reads (memory, chats from the last 90 days, skills, scheduled jobs, task board) and the usage signals; keep them in step with `study.md` if those change.
+- Next: G9 (Sonnet), 7.3 accessibility.
+
+### G8 — 7.2 search — decision recorded — 2026-11-09
+- The user chose "leave search as it is" (the default I recommended). The display text is searchable only as far as the reply text carries it; that is written into the README's privacy-free feature text only where it applies, and no server change was made.
+
+### segment G8 complete — 2026-11-09
+- Next: G9 (Sonnet), task 7.3 accessibility pass. 7.4 (the device pass) needs the user and a phone.
