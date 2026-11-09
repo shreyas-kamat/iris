@@ -16,7 +16,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | done | `ed515c8` |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | done | `9f6b719` |
-| G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
+| G9 | 7.3, 7.4: accessibility and device pass | Sonnet | doing | `7bb3825` |
 | G10 | 7.6 final review, release, PR | Opus | todo | |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
 | P-spec | Brainstorm and design | Opus | todo | |
@@ -435,3 +435,14 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 
 ### segment G8 complete — 2026-11-09
 - Next: G9 (Sonnet), task 7.3 accessibility pass. 7.4 (the device pass) needs the user and a phone.
+
+### G9 — doing — 2026-11-09
+- Running as Sonnet 5.5. Git matches the log (G8 `9f6b719` in history; HEAD `e5378aa`, clean apart from `store/screenshots/`).
+- Next: 7.3 accessibility pass (semantics for every component, 200 % text scale, screen-reader pass).
+
+### G9 — 7.3 — done (automated part) — 2026-11-09 — Sonnet 5.5
+- Commits: 7bb3825 test(genui): accessibility pass over every component at 200% text and 320pt; code-block Copy label meets AA contrast
+- Verified: `flutter test test/features/genui/accessibility_test.dart` -> 10 pass (one program using every library component, light and dark: draws with no exception at 200 % and 100 % text and 320 pt wide; Flutter's labelled-tap-target, 44 pt tap-target and WCAG text-contrast guidelines). `flutter analyze lib/design test/features/genui` -> No issues found!. Full `flutter test --exclude-tags live -j 2` showed 15 golden diffs only (all from the Copy label change); regenerated those two files' goldens; they then passed. The rest of the suite had passed.
+- Findings: (1) the code block's "Copy" label (shared markdown component) was 4.49:1 in light mode, a hair under AA; its text now mixes 20 % ink into the accent. 13 chat goldens and 2 genui "more" goldens were regenerated for that. (2) The Expander header is 44 pt, below Android's 48 pt guideline; Iris's floor is `IrisSize.minTapTarget` = 44 app-wide, so the Android guideline is not asserted and nothing was changed.
+- Deviations: the plan's "screen-reader pass both platforms" (TalkBack, VoiceOver) needs a device, so it moves to 7.4 with the user. The full suite was re-run only for the goldens, not once more after regenerating.
+- Next: 7.4 device pass (needs the user and a phone; include a TalkBack and VoiceOver pass, and the 0.3.0 plugin install on the server).
