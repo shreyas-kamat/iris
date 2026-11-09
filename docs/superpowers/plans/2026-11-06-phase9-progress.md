@@ -415,3 +415,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Search: blocked on a decision. Search is Hermes's own `session_search` on the server, so the app cannot index fallback text itself. A display's fallback sits in the `iris_ui` call's arguments; the plugin's answer is only `{ok, surface_id, rev}`. Whether Hermes search reads tool-call arguments or tool results is not known from here. Only a live check can show it.
 - Options for the user: (a) the plugin also returns the fallback in its answer, so the stored tool row carries it (plugin 0.3.1; needs the server updated and a live search check); (b) leave search as it is, so displays are found through the reply text, which D7 already requires to make sense on its own.
 - Next: the user's answer on search; then the search part of 7.2; then 7.5 (docs, noting how search treats displays).
+
+### G8 — 7.2 — done — 2026-11-09 — Haiku 5.5
+- Commits: 10dfafe (export test); the search decision is logged here, with no code change.
+- Decision (the user, this chat): search stays as it is. Hermes search finds displays through their reply text (D7); the plugin does not echo fallback text into its answer and the server is not changed.
+- Verified: `flutter test test/features/chat_export_test.dart` -> 10 pass.
+- Deviations: 7.2 is a partial change: the export was already in the app and is now tested. Search was not changed, by decision.
+- Next: 7.5 docs.
