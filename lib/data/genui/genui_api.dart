@@ -3,6 +3,7 @@
 library;
 
 import '../../core/failure.dart';
+import '../../core/json.dart';
 import '../../core/result.dart';
 import '../net/api_client.dart';
 import 'genui_models.dart';
@@ -44,6 +45,10 @@ abstract interface class GenUiApi {
     PersonalStatus? status,
     TemplateKind? kind,
   });
+
+  /// The person's answer to a change waiting beside a kept template: apply it (or retire, for a retire suggestion) or
+  /// discard it. Answers the template as it now stands.
+  Future<Result<UiTemplate>> decideProposal(String id, {required bool apply});
 
   Future<Result<void>> deleteTemplate(String id);
 
@@ -161,24 +166,35 @@ final class DashboardGenUiApi implements GenUiApi {
     String? when,
     PersonalStatus? status,
     TemplateKind? kind,
-  }) async =>
-      (await _client.put(
-        '$_base/templates/${_part(id)}',
-        query: _query,
-        body: {
-          'name': ?name,
-          'when': ?when,
-          'status': ?status?.wire,
-          'kind': ?kind?.wire,
-        },
-      )).flatMap((body) {
-        final template = UiTemplate.fromJsonOrNull(body['template']);
-        return template == null
-            ? const Err(
-                IrisFailure.malformed(message: 'No template in the response'),
-              )
-            : Ok(template);
-      });
+  }) async => (await _client.put(
+    '$_base/templates/${_part(id)}',
+    query: _query,
+    body: {
+      'name': ?name,
+      'when': ?when,
+      'status': ?status?.wire,
+      'kind': ?kind?.wire,
+    },
+  )).flatMap(_template);
+
+  @override
+  Future<Result<UiTemplate>> decideProposal(
+    String id, {
+    required bool apply,
+  }) async => (await _client.put(
+    '$_base/templates/${_part(id)}',
+    query: _query,
+    body: {'proposal': apply ? 'apply' : 'discard'},
+  )).flatMap(_template);
+
+  static Result<UiTemplate> _template(Json body) {
+    final template = UiTemplate.fromJsonOrNull(body['template']);
+    return template == null
+        ? const Err(
+            IrisFailure.malformed(message: 'No template in the response'),
+          )
+        : Ok(template);
+  }
 
   @override
   Future<Result<void>> deleteTemplate(String id) async => (await _client.delete(

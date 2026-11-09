@@ -79,7 +79,7 @@ void main() {
     expect(find.byType(OpenUiView), findsNWidgets(2));
     expect(find.text('api'), findsOneWidget);
     expect(find.text('DOCKS ABOVE THE COMPOSER'), findsOneWidget);
-    expect(api.calls, contains('templates:proposed'));
+    expect(api.calls, contains('templates:all'));
   });
 
   testWidgets('keeping a template approves it and takes it off the list', (
@@ -178,5 +178,131 @@ void main() {
 
     expect(find.text('Nothing left to review'), findsOneWidget);
     expect(find.widgetWithText(IrisButton, 'Keep all'), findsNothing);
+  });
+
+  group('changes to kept displays', () {
+    UiTemplate kept({TemplateProposal? proposal}) => sampleTemplate(
+      'deploy',
+      status: PersonalStatus.approved,
+      proposal: proposal,
+    );
+
+    TemplateProposal refine() => const TemplateProposal(
+      retire: false,
+      reason: 'Opened in full 6 of 8 times.',
+      name: 'Deploy status',
+      when: 'When reporting a deploy',
+      kind: TemplateKind.display,
+      program: 'root = Card([Text("Now: " + data.service)], "Deploy")',
+      sampleData: {'service': 'web'},
+    );
+
+    testWidgets('shows what changes next to what it is now, with why', (
+      tester,
+    ) async {
+      api
+        ..profile = null
+        ..stored = [kept(proposal: refine())];
+      await tester.pumpWidget(screen());
+      await settle(tester);
+
+      expect(find.text('Opened in full 6 of 8 times.'), findsOneWidget);
+      expect(find.text('NOW'), findsOneWidget);
+      expect(find.text('PROPOSED'), findsOneWidget);
+      // Before and after are both drawn live.
+      expect(find.byType(OpenUiView), findsNWidgets(2));
+      expect(find.text('api'), findsOneWidget);
+      expect(find.text('Now: web'), findsOneWidget);
+      expect(api.calls, contains('templates:all'));
+      expect(find.text('Nothing left to review'), findsNothing);
+    });
+
+    testWidgets('applying makes it the display and takes it off the list', (
+      tester,
+    ) async {
+      api
+        ..profile = null
+        ..stored = [kept(proposal: refine())];
+      await tester.pumpWidget(screen());
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('apply-deploy')));
+      await settle(tester);
+
+      expect(api.calls, contains('decideProposal:deploy:apply'));
+      expect(api.stored.single.proposal, isNull);
+      expect(find.text('Nothing left to review'), findsOneWidget);
+    });
+
+    testWidgets('discarding leaves the display as it was', (tester) async {
+      api
+        ..profile = null
+        ..stored = [kept(proposal: refine())];
+      await tester.pumpWidget(screen());
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('discard-deploy')));
+      await settle(tester);
+
+      expect(api.calls, contains('decideProposal:deploy:discard'));
+      expect(api.stored.single.status, PersonalStatus.approved);
+      expect(find.text('Nothing left to review'), findsOneWidget);
+    });
+
+    testWidgets('a suggestion to retire says so and asks', (tester) async {
+      api
+        ..profile = null
+        ..stored = [
+          kept(
+            proposal: const TemplateProposal(
+              retire: true,
+              reason: 'Never opened in a month.',
+            ),
+          ),
+        ];
+      await tester.pumpWidget(screen());
+      await settle(tester);
+
+      expect(find.text('Never opened in a month.'), findsOneWidget);
+      expect(find.textContaining('retire'), findsWidgets);
+      expect(find.text('PROPOSED'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('apply-deploy')));
+      await settle(tester);
+
+      expect(api.calls, contains('decideProposal:deploy:apply'));
+      expect(api.stored.single.status, PersonalStatus.retired);
+    });
+
+    testWidgets('new proposals and changes are listed together', (
+      tester,
+    ) async {
+      api.stored = [
+        sampleTemplate('fresh', name: 'Fresh card'),
+        kept(proposal: refine()),
+      ];
+      await tester.pumpWidget(screen());
+      await settle(tester);
+
+      expect(find.text('Fresh card'), findsOneWidget);
+      expect(find.byKey(const ValueKey('keep-fresh')), findsOneWidget);
+      expect(find.byKey(const ValueKey('apply-deploy')), findsOneWidget);
+    });
+
+    testWidgets('a refused apply says why and leaves the change there', (
+      tester,
+    ) async {
+      api
+        ..profile = null
+        ..stored = [kept(proposal: refine())];
+      await tester.pumpWidget(screen());
+      await settle(tester);
+      api.refuse = 'The program no longer validates.';
+
+      await tester.tap(find.byKey(const ValueKey('apply-deploy')));
+      await settle(tester);
+
+      expect(find.text('The program no longer validates.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('apply-deploy')), findsOneWidget);
+    });
   });
 }

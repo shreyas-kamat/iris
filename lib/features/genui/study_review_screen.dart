@@ -1,5 +1,6 @@
-/// Review of what a study proposed: the profile and each template, drawn live with its made-up sample, to keep, rename
-/// or drop. Nothing is used by the agent until it is kept.
+/// Review of what Hermes proposed: the profile and each new template, drawn live with its made-up sample, to keep,
+/// rename or drop; and, in "changes" mode, a revision of a kept display set beside what it is now, to apply or discard.
+/// Nothing is used by the agent until the person says so.
 library;
 
 import 'dart:async';
@@ -36,6 +37,9 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
   WorkProfile? _profile;
   List<UiTemplate> _templates = const [];
 
+  /// Kept templates with a change waiting beside them.
+  List<UiTemplate> _changes = const [];
+
   /// Why the last change was refused, in the plugin's words.
   String? _message;
 
@@ -54,7 +58,7 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
       return;
     }
     final profile = await api.workProfile();
-    final templates = await api.templates(status: PersonalStatus.proposed);
+    final templates = await api.templates();
     if (!mounted) return;
     setState(() {
       _loading = false;
@@ -62,7 +66,15 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
       _profile = found != null && found.status == PersonalStatus.proposed
           ? found
           : null;
-      _templates = templates.valueOrNull ?? const [];
+      final all = templates.valueOrNull ?? const <UiTemplate>[];
+      _templates = [
+        for (final t in all)
+          if (t.status == PersonalStatus.proposed) t,
+      ];
+      _changes = [
+        for (final t in all)
+          if (t.status == PersonalStatus.approved && t.proposal != null) t,
+      ];
       if (profile is Err<WorkProfile?> && templates is Err<List<UiTemplate>>) {
         _message = 'Could not load what Hermes proposed.';
       }
@@ -109,6 +121,19 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
     }
   }
 
+  /// Applies or discards the change waiting beside a kept template.
+  Future<void> _decide(UiTemplate template, {required bool apply}) async {
+    unawaited(IrisHaptics.selection());
+    if (await _run((api) => api.decideProposal(template.id, apply: apply))) {
+      setState(
+        () => _changes = [
+          for (final t in _changes)
+            if (t.id != template.id) t,
+        ],
+      );
+    }
+  }
+
   Future<void> _rename(UiTemplate template) async {
     final name = await showIrisSheet<String>(
       context: context,
@@ -147,7 +172,8 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
     final theme = context.iris;
     final palette = context.palette;
     final type = context.type;
-    final empty = !_loading && _profile == null && _templates.isEmpty;
+    final hasNew = _profile != null || _templates.isNotEmpty;
+    final empty = !_loading && !hasNew && _changes.isEmpty;
     return IrisScaffold(
       onBack: () => unawaited(Navigator.of(context).maybePop()),
       header: Padding(
@@ -201,13 +227,15 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
                 ),
               )
             else ...[
-              IrisButton(
-                label: 'Keep all',
-                tone: IrisButtonTone.primary,
-                busy: _busy,
-                onPressed: _keepAll,
-              ),
-              const SizedBox(height: IrisSpace.lg),
+              if (hasNew) ...[
+                IrisButton(
+                  label: 'Keep all',
+                  tone: IrisButtonTone.primary,
+                  busy: _busy,
+                  onPressed: _keepAll,
+                ),
+                const SizedBox(height: IrisSpace.lg),
+              ],
               if (_message case final message?)
                 Padding(
                   padding: const EdgeInsets.only(bottom: IrisSpace.md),
@@ -239,6 +267,16 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
                   onRename: () => unawaited(_rename(template)),
                   onDrop: () =>
                       unawaited(_setTemplate(template, PersonalStatus.retired)),
+                ),
+                const SizedBox(height: IrisSpace.md),
+              ],
+              for (final template in _changes) ...[
+                _ChangeCard(
+                  key: ValueKey('change-${template.id}-${template.rev}'),
+                  template: template,
+                  busy: _busy,
+                  onApply: () => unawaited(_decide(template, apply: true)),
+                  onDiscard: () => unawaited(_decide(template, apply: false)),
                 ),
                 const SizedBox(height: IrisSpace.md),
               ],
@@ -352,6 +390,106 @@ class _TemplateCard extends StatelessWidget {
             onKeep: onKeep,
             onRename: onRename,
             onDrop: onDrop,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A change waiting beside a kept template: why, what it is now and what it would become, drawn live; or a suggestion
+/// to retire it.
+class _ChangeCard extends StatelessWidget {
+  const _ChangeCard({
+    required this.template,
+    required this.busy,
+    required this.onApply,
+    required this.onDiscard,
+    super.key,
+  });
+
+  final UiTemplate template;
+  final bool busy;
+  final VoidCallback onApply;
+  final VoidCallback onDiscard;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final type = context.type;
+    final proposal = template.proposal!;
+    final after = proposal.retire ? null : proposal.after(template);
+    final renamed = after != null && after.name != template.name;
+    return IrisCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(template.name, style: type.title)),
+              IrisChip(proposal.retire ? 'Retire?' : 'Change'),
+            ],
+          ),
+          if (proposal.reason.isNotEmpty) ...[
+            const SizedBox(height: IrisSpace.xs),
+            Text(
+              proposal.reason,
+              style: type.body.copyWith(color: palette.inkMuted),
+            ),
+          ],
+          if (proposal.retire) ...[
+            const SizedBox(height: IrisSpace.sm),
+            Text(
+              'Hermes suggests you retire this display. Until you do, it '
+              'keeps being used.',
+              style: type.body,
+            ),
+          ],
+          if (renamed) ...[
+            const SizedBox(height: IrisSpace.sm),
+            Text('Renamed to "${after.name}"', style: type.body),
+          ],
+          const SizedBox(height: IrisSpace.md),
+          const IrisLabel('Now'),
+          const SizedBox(height: IrisSpace.xs),
+          OpenUiView(
+            code: template.expanded(),
+            fallback: template.name,
+            maxHeight: 220,
+          ),
+          if (after != null) ...[
+            const SizedBox(height: IrisSpace.md),
+            const IrisLabel('Proposed'),
+            const SizedBox(height: IrisSpace.xs),
+            OpenUiView(
+              code: after.expanded(),
+              fallback: after.name,
+              maxHeight: 220,
+            ),
+          ],
+          const SizedBox(height: IrisSpace.md),
+          Row(
+            children: [
+              Expanded(
+                child: IrisButton(
+                  key: ValueKey('apply-${template.id}'),
+                  label: proposal.retire ? 'Retire' : 'Apply',
+                  tone: IrisButtonTone.primary,
+                  expand: true,
+                  onPressed: busy ? null : onApply,
+                ),
+              ),
+              const SizedBox(width: IrisSpace.sm),
+              Expanded(
+                child: IrisButton(
+                  key: ValueKey('discard-${template.id}'),
+                  label: proposal.retire ? 'Keep it' : 'Discard',
+                  tone: IrisButtonTone.ghost,
+                  expand: true,
+                  onPressed: busy ? null : onDiscard,
+                ),
+              ),
+            ],
           ),
         ],
       ),

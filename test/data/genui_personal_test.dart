@@ -79,7 +79,10 @@ void main() {
     });
 
     test('a record without a summary is not a profile', () {
-      expect(WorkProfile.fromJsonOrNull(Json.of({'chips': <Object?>[]})), isNull);
+      expect(
+        WorkProfile.fromJsonOrNull(Json.of({'chips': <Object?>[]})),
+        isNull,
+      );
       expect(WorkProfile.fromJsonOrNull(Json.of(null)), isNull);
     });
   });
@@ -210,6 +213,69 @@ void main() {
       final failure = (saved as Err<UiTemplate>).failure;
       expect(failure.kind, FailureKind.rejected);
       expect(failure.message, 'program is required');
+    });
+
+    test('reads a change waiting beside an approved template', () {
+      final refine = UiTemplate.fromJsonOrNull(
+        Json.of({
+          ..._template,
+          'status': 'approved',
+          'proposal': {
+            'name': 'Deploy status v2',
+            'when': 'When reporting a deploy',
+            'kind': 'display',
+            'program': 'root = Card([Text(data.service)], "Deploy now")',
+            'data_schema': _template['data_schema'],
+            'sample_data': {'service': 'web'},
+            'reason': 'Opened in full 6 of 8 times.',
+            'created': 1794000200.5,
+          },
+        }),
+      )!;
+      final proposal = refine.proposal!;
+      expect(proposal.retire, isFalse);
+      expect(proposal.reason, 'Opened in full 6 of 8 times.');
+      expect(proposal.name, 'Deploy status v2');
+      expect(proposal.sampleData, {'service': 'web'});
+      expect(proposal.after(refine).program, contains('Deploy now'));
+      expect(proposal.after(refine).sampleData, {'service': 'web'});
+
+      final retire = UiTemplate.fromJsonOrNull(
+        Json.of({
+          ..._template,
+          'status': 'approved',
+          'proposal': {
+            'retire': true,
+            'reason': 'Never opened in a month.',
+            'created': 1794000200.5,
+          },
+        }),
+      )!;
+      expect(retire.proposal!.retire, isTrue);
+      expect(retire.proposal!.reason, 'Never opened in a month.');
+
+      expect(UiTemplate.fromJsonOrNull(Json.of(_template))!.proposal, isNull);
+    });
+
+    test('applies or discards a waiting change', () async {
+      http.on(
+        'PUT',
+        '/api/plugins/iris/templates/deploy-status',
+        (_) => FakeReply.json({
+          'ok': true,
+          'template': {..._template, 'status': 'approved', 'rev': 3},
+        }),
+      );
+      final applied = await api(
+        profile: 'work',
+      ).decideProposal('deploy-status', apply: true);
+      expect(applied.valueOrNull!.rev, 3);
+      expect(http.requests.single.data, {'proposal': 'apply'});
+      expect(http.requests.single.uri.queryParameters['profile'], 'work');
+
+      http.requests.clear();
+      await api().decideProposal('deploy-status', apply: false);
+      expect(http.requests.single.data, {'proposal': 'discard'});
     });
 
     test('deletes a template', () async {

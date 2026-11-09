@@ -88,6 +88,51 @@ class FakeGenUiApi implements GenUiApi {
   }
 
   @override
+  Future<Result<UiTemplate>> decideProposal(
+    String id, {
+    required bool apply,
+  }) async {
+    calls.add('decideProposal:$id:${apply ? 'apply' : 'discard'}');
+    final refused = refuse;
+    if (refused != null) {
+      refuse = null;
+      return Err(IrisFailure(FailureKind.rejected, message: refused));
+    }
+    final index = stored.indexWhere((t) => t.id == id);
+    final t = index < 0 ? null : stored[index];
+    final proposal = t?.proposal;
+    if (t == null || proposal == null) {
+      return const Err(IrisFailure(FailureKind.notFound));
+    }
+    if (!apply) {
+      return Ok(stored[index] = _withProposal(t, null));
+    }
+    if (proposal.retire) {
+      return Ok(
+        stored[index] = _withProposal(t, null, status: PersonalStatus.retired),
+      );
+    }
+    return Ok(stored[index] = _withProposal(proposal.after(t), null));
+  }
+
+  static UiTemplate _withProposal(
+    UiTemplate t,
+    TemplateProposal? proposal, {
+    PersonalStatus? status,
+  }) => UiTemplate(
+    id: t.id,
+    name: t.name,
+    when: t.when,
+    kind: t.kind,
+    status: status ?? t.status,
+    rev: t.rev + 1,
+    program: t.program,
+    dataSchema: t.dataSchema,
+    sampleData: t.sampleData,
+    proposal: proposal,
+  );
+
+  @override
   Future<Result<void>> deleteTemplate(String id) async {
     calls.add('deleteTemplate:$id');
     stored.removeWhere((t) => t.id == id);
@@ -134,6 +179,7 @@ UiTemplate sampleTemplate(
   PersonalStatus status = PersonalStatus.proposed,
   String program = 'root = Card([Text(data.service)], "Deploy")',
   Map<String, Object?> sample = const {'service': 'api'},
+  TemplateProposal? proposal,
 }) => UiTemplate(
   id: id,
   name: name,
@@ -149,4 +195,5 @@ UiTemplate sampleTemplate(
     },
   },
   sampleData: sample,
+  proposal: proposal,
 );

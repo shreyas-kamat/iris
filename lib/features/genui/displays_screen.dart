@@ -40,6 +40,7 @@ class _DisplaysScreenState extends ConsumerState<DisplaysScreen> {
 
   /// Proposals the person has not looked at yet.
   int _waiting = 0;
+  int _changes = 0;
   String? _message;
 
   @override
@@ -72,6 +73,11 @@ class _DisplaysScreenState extends ConsumerState<DisplaysScreen> {
       ];
       _waiting = templates
           .where((t) => t.status == PersonalStatus.proposed)
+          .length;
+      _changes = templates
+          .where(
+            (t) => t.status == PersonalStatus.approved && t.proposal != null,
+          )
           .length;
       _message = all is Err<List<UiTemplate>>
           ? 'Could not load your displays.'
@@ -197,9 +203,10 @@ class _DisplaysScreenState extends ConsumerState<DisplaysScreen> {
             if (_loading)
               const IrisSkeleton(height: 120)
             else ...[
-              if (_waiting > 0) ...[
+              if (_waiting + _changes > 0) ...[
                 _Waiting(
-                  count: _waiting,
+                  proposals: _waiting,
+                  changes: _changes,
                   onTap: () =>
                       unawaited(_open((_) => const StudyReviewScreen())),
                 ),
@@ -284,19 +291,30 @@ class _DisplaysScreenState extends ConsumerState<DisplaysScreen> {
   }
 }
 
-/// "3 proposals waiting for you": the badge that opens the review.
+/// "3 proposals waiting for you", "1 change waiting for you" or both: the badge that opens the review. A change is a
+/// revision of a display the person already kept.
 class _Waiting extends StatelessWidget {
-  const _Waiting({required this.count, required this.onTap});
+  const _Waiting({
+    required this.proposals,
+    required this.changes,
+    required this.onTap,
+  });
 
-  final int count;
+  final int proposals;
+  final int changes;
   final VoidCallback onTap;
+
+  static String _count(int n, String noun) =>
+      n == 1 ? '1 $noun' : '$n ${noun}s';
 
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final text = count == 1
-        ? '1 proposal waiting for you'
-        : '$count proposals waiting for you';
+    final what = [
+      if (proposals > 0) _count(proposals, 'proposal'),
+      if (changes > 0) _count(changes, 'change'),
+    ].join(' and ');
+    final text = '$what waiting for you';
     return IrisPressable(
       onTap: onTap,
       child: Semantics(

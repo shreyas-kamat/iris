@@ -92,6 +92,7 @@ final class UiTemplate {
     required this.dataSchema,
     required this.sampleData,
     this.updated,
+    this.proposal,
   });
 
   static UiTemplate? fromJsonOrNull(Json json) {
@@ -109,6 +110,7 @@ final class UiTemplate {
       dataSchema: _object(json['data_schema']),
       sampleData: _object(json['sample_data']),
       updated: json['updated'].dateTimeOrNull,
+      proposal: TemplateProposal.fromJsonOrNull(json['proposal']),
     );
   }
 
@@ -132,6 +134,10 @@ final class UiTemplate {
   final Map<String, Object?> sampleData;
   final DateTime? updated;
 
+  /// A change the agent suggests to this kept template (or a suggestion to retire it). The kept version stays in use
+  /// until the person applies it.
+  final TemplateProposal? proposal;
+
   /// The program with [data] (the sample by default) bound as `data = {...}`, as the plugin expands it for a reply.
   String expanded([Map<String, Object?>? data]) =>
       'data = ${jsonEncode(data ?? sampleData)}\n$program';
@@ -143,4 +149,68 @@ final class UiTemplate {
         ? [for (final key in properties.keys) '$key']
         : const [];
   }
+}
+
+/// A change the agent proposes to a kept template, with its reason: either a complete revised set of fields, or a
+/// suggestion to retire it. Nothing changes until the person applies it.
+final class TemplateProposal {
+  const TemplateProposal({
+    required this.retire,
+    required this.reason,
+    this.name,
+    this.when,
+    this.kind,
+    this.program,
+    this.dataSchema = const {},
+    this.sampleData = const {},
+  });
+
+  static TemplateProposal? fromJsonOrNull(Json json) {
+    if (!json.isMap) return null;
+    final retire = json['retire'].boolean();
+    final program = json['program'].stringOrNull;
+    // A revision with no program cannot be drawn or applied.
+    if (!retire && program == null) return null;
+    return TemplateProposal(
+      retire: retire,
+      reason: json['reason'].string(),
+      name: json['name'].stringOrNull,
+      when: json['when'].stringOrNull,
+      kind: json['kind'].stringOrNull == null
+          ? null
+          : TemplateKind.parse(json['kind'].stringOrNull),
+      program: program,
+      dataSchema: UiTemplate._object(json['data_schema']),
+      sampleData: UiTemplate._object(json['sample_data']),
+    );
+  }
+
+  /// True for a suggestion to stop using the template; the revised fields are then empty.
+  final bool retire;
+
+  /// One line on what the use and the signals showed.
+  final String reason;
+  final String? name;
+  final String? when;
+  final TemplateKind? kind;
+  final String? program;
+  final Map<String, Object?> dataSchema;
+  final Map<String, Object?> sampleData;
+
+  /// What [before] would become if this were applied, for drawing the "proposed" side. Its status and revision are
+  /// those of [before]; the proposal itself is dropped.
+  UiTemplate after(UiTemplate before) => UiTemplate(
+    id: before.id,
+    name: name ?? before.name,
+    when: when ?? before.when,
+    kind: kind ?? before.kind,
+    status: before.status,
+    rev: before.rev,
+    program: program ?? before.program,
+    dataSchema: dataSchema.isEmpty ? before.dataSchema : dataSchema,
+    sampleData: sampleData.isEmpty && program == null
+        ? before.sampleData
+        : sampleData,
+    updated: before.updated,
+  );
 }

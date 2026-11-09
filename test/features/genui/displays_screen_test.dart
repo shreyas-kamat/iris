@@ -96,6 +96,35 @@ void main() {
     expect(find.byType(StudyReviewScreen), findsOneWidget);
   });
 
+  testWidgets('counts changes to kept displays apart from new proposals', (
+    tester,
+  ) async {
+    api.stored = [
+      sampleTemplate('deploy', status: PersonalStatus.approved),
+      sampleTemplate(
+        'hold',
+        status: PersonalStatus.approved,
+        proposal: const TemplateProposal(retire: true, reason: 'Unused.'),
+      ),
+    ];
+    await tester.pumpWidget(screen());
+    await settle(tester);
+    expect(find.text('1 change waiting for you'), findsOneWidget);
+
+    api.stored = [
+      ...api.stored,
+      sampleTemplate('new1'),
+      sampleTemplate('new2'),
+    ];
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(screen());
+    await settle(tester);
+    expect(
+      find.text('2 proposals and 1 change waiting for you'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('no badge when nothing is waiting', (tester) async {
     api.stored = [sampleTemplate('deploy', status: PersonalStatus.approved)];
     await tester.pumpWidget(screen());
