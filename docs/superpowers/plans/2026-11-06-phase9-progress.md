@@ -14,7 +14,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G4 | 1.7–1.8 prompt generator; Phase 2 server plugin | Sonnet | done | `39cff19` |
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
-| G7 | Phases 5–6: study, Displays, learning loop | Sonnet | doing | |
+| G7 | Phases 5–6: study, Displays, learning loop | Sonnet | done | `ed515c8` |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
 | G10 | 7.6 final review, release, PR | Opus | todo | |
@@ -391,3 +391,11 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) The Settings gate is the new `refine` feature, not `feedback`. (2) The cron schedule string `0 9 * * 1` and Hermes accepting a plain cron expression are assumptions from `CronJob.schedule`; not tried live. A scheduled run's session is unflagged, so its displays are never drawn, which is the intent; whether `post_llm_call` usage rows matter there is moot (not flagged, no row).
 - Decisions for later tasks: the server still runs 0.2.0; before any live check of 6.x, copy the plugin (0.3.0) over SSH as in 5.6 and restart `hermes-dashboard`.
 - Next: 6.4 refinement proposals in the review screen ("changes" mode, before/after; `PUT templates/{id}` with `{"proposal": "apply"|"discard"}`; `UiTemplate` needs a `proposal` field).
+
+### G7 — 6.4 — done — 2026-11-09 — Sonnet 5.5
+- Commits: ed515c8 feat(genui): review changes to kept displays beside what they are now, apply or discard, with a badge in Displays
+- Verified: new tests red first (compile errors: no `TemplateProposal`, `decideProposal`, `proposal:`), then `flutter test test/features/genui test/data/genui_personal_test.dart` -> 233 pass; `flutter analyze lib test` -> the 3 pre-existing infos plus 2 redundant-argument infos of mine, removed (tests re-run, not re-analyzed); **full `flutter test --exclude-tags live -j 2` -> 1,745 pass, 4 skipped, exit 0** (the run owed since 6.1 and 6.3). No server change, so pytest was not re-run (last: 395 pass, 1 skipped). New goldens `study_changes_{dark,light}.png` opened and looked at; the existing review goldens are unchanged.
+- What it does: `UiTemplate.proposal` (`TemplateProposal`: `retire`, `reason`, revised fields; `after(template)` gives the proposed side). `GenUiApi.decideProposal(id, apply:)` sends `PUT templates/{id}` `{"proposal": "apply"|"discard"}`. The review screen now loads all templates and shows new proposals (Keep / Rename / Drop) and, below them, a card per kept template with a waiting change: reason, "Now" and "Proposed" both drawn live, Apply / Discard; a retire suggestion shows "Now" only with Retire / Keep it. "Keep all" covers only new proposals and the profile, never changes. The Displays badge counts both: "2 proposals and 1 change waiting for you".
+- Deviations: (1) The review screen's request changed from `templates?status=proposed` to all templates (filtered on the device) so changes are found in the same call. (2) A refinement of the profile has no UI: the plugin keeps the profile's `previous` text only; the plan names templates.
+- Decisions for later tasks: not checked live: the server still runs plugin 0.2.0 (no refine routes); a live check of 6.x needs the 0.3.0 copy installed over SSH as in 5.6, and is for the G9 device pass.
+- segment G7 complete. Next: G8 (Haiku), task 7.1 demo mode.
