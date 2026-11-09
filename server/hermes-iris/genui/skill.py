@@ -19,6 +19,10 @@ STUDY_SKILL_NAME = "iris-study"
 STUDY_SKILL_DIR = SKILL_DIR.parent / STUDY_SKILL_NAME
 STUDY_SKILL_DESCRIPTION = "Study the person's work and propose a profile, templates and reply kits for them to review in Iris."
 
+REFINE_SKILL_NAME = "iris-refine"
+REFINE_SKILL_DIR = SKILL_DIR.parent / REFINE_SKILL_NAME
+REFINE_SKILL_DESCRIPTION = "Refine the person's displays from how they were used: propose changes, new templates and retirements for them to review in Iris."
+
 PREAMBLE = (
     "This is the component library for the iris_ui tool. Pass the program as the `code` argument; your reply itself "
     "stays ordinary text, and `fallback` carries the same content as Markdown. The rules below describe the language "

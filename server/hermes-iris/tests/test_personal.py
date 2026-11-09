@@ -259,6 +259,7 @@ def test_list_templates_gives_summaries_with_the_data_keys(env):
         "kind": "display",
         "status": "proposed",
         "rev": 1,
+        "has_proposal": False,
         "keys": ["title", "rows"],
     }
     assert by["other"]["status"] == "approved"
@@ -284,7 +285,14 @@ def test_tool_schemas_and_registration(plugin):
     from hermes_iris.genui import personal_tools as pt
 
     names = {s["name"] for s in pt.SCHEMAS}
-    assert names == {"iris_profile_get", "iris_profile_propose", "iris_template_list", "iris_template_propose"}
+    assert names == {
+        "iris_profile_get",
+        "iris_profile_propose",
+        "iris_template_list",
+        "iris_template_propose",
+        "iris_usage_summary",
+        "iris_template_refine",
+    }
     calls = []
 
     class Ctx:

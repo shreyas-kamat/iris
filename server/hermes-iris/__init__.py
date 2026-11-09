@@ -30,6 +30,7 @@ def register(ctx) -> None:
     for name, directory, description in (
         (skill.SKILL_NAME, skill.SKILL_DIR, skill.SKILL_DESCRIPTION),
         (skill.STUDY_SKILL_NAME, skill.STUDY_SKILL_DIR, skill.STUDY_SKILL_DESCRIPTION),
+        (skill.REFINE_SKILL_NAME, skill.REFINE_SKILL_DIR, skill.REFINE_SKILL_DESCRIPTION),
     ):
         try:
             ctx.register_skill(name, directory / "SKILL.md", description=description)

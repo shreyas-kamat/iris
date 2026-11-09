@@ -87,7 +87,7 @@ def test_the_profile_example_is_valid(plugin, hermes_home):
     assert personal.propose_profile(p, json.loads(blocks[0]))["ok"]
 
 
-def test_register_adds_both_skills(plugin):
+def test_register_adds_the_study_skill(plugin):
     skills = []
 
     class Ctx:
@@ -102,6 +102,6 @@ def test_register_adds_both_skills(plugin):
 
     plugin.register(Ctx())
     by = {name: (path, description) for name, path, description in skills}
-    assert set(by) == {"iris-genui", "iris-study"}
+    assert {"iris-genui", "iris-study"} <= set(by)
     path, description = by["iris-study"]
     assert path.name == "SKILL.md" and path.exists() and description

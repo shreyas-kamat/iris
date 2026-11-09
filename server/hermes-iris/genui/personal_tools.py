@@ -75,7 +75,48 @@ TEMPLATE_PROPOSE: dict[str, Any] = {
     },
 }
 
-SCHEMAS: list[dict[str, Any]] = [PROFILE_GET, PROFILE_PROPOSE, TEMPLATE_LIST, TEMPLATE_PROPOSE]
+USAGE_SUMMARY: dict[str, Any] = {
+    "name": "iris_usage_summary",
+    "description": (
+        "Counts of how the person's approved templates were used: turns, how often each was shown, and how often the "
+        "app saw it used, opened in full, dismissed or marked not useful. Counts only, no content."
+    ),
+    "parameters": {"type": "object", "properties": {}},
+}
+
+TEMPLATE_REFINE: dict[str, Any] = {
+    "name": "iris_template_refine",
+    "description": (
+        "Propose a change to an APPROVED template, or suggest retiring it. The approved version stays in use until the "
+        "person applies the change in Iris. Give the template `id`, a one-line `reason` from the usage, and either the "
+        "fields you want different (any of name, when, kind, data_schema, program, sample_data; the rest are kept) or "
+        "`retire: true`. It is checked like a new template. Returns {ok, id, proposal} or {ok: false, errors}."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "The approved template's id."},
+            "reason": {"type": "string", "description": "What the usage showed, one line, at most 300 characters."},
+            "retire": {"type": "boolean", "description": "Suggest retiring it instead of changing it."},
+            "name": {"type": "string"},
+            "when": {"type": "string"},
+            "kind": {"type": "string", "enum": list(personal.KINDS)},
+            "data_schema": {"type": "object"},
+            "program": {"type": "string", "description": "OpenUI Lang, root first, reading `data`."},
+            "sample_data": {"type": "object", "description": "Made-up data that fits data_schema."},
+        },
+        "required": ["id", "reason"],
+    },
+}
+
+SCHEMAS: list[dict[str, Any]] = [
+    PROFILE_GET,
+    PROFILE_PROPOSE,
+    TEMPLATE_LIST,
+    TEMPLATE_PROPOSE,
+    USAGE_SUMMARY,
+    TEMPLATE_REFINE,
+]
 
 
 def _profile_store():
@@ -116,10 +157,20 @@ def handle_template_propose(args: Any, **kw: Any) -> str:
     return _safely("iris_template_propose", lambda: personal.propose_template(_profile_store(), catalog.v1(), args))
 
 
+def handle_usage_summary(args: Any = None, **kw: Any) -> str:
+    return _safely("iris_usage_summary", lambda: personal.usage_summary(_profile_store()))
+
+
+def handle_template_refine(args: Any, **kw: Any) -> str:
+    return _safely("iris_template_refine", lambda: personal.propose_refinement(_profile_store(), catalog.v1(), args))
+
+
 #: (schema, handler) pairs for ``register``.
 TOOLS = [
     (PROFILE_GET, handle_profile_get),
     (PROFILE_PROPOSE, handle_profile_propose),
     (TEMPLATE_LIST, handle_template_list),
     (TEMPLATE_PROPOSE, handle_template_propose),
+    (USAGE_SUMMARY, handle_usage_summary),
+    (TEMPLATE_REFINE, handle_template_refine),
 ]

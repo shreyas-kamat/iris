@@ -2,7 +2,8 @@
 
 Both are proposals until the person approves them in Iris (D8). A record's ``status`` is ``proposed``, ``approved`` or
 ``retired``; only ``approved`` templates are offered to the model (context) or usable by ``iris_ui``. The agent may only
-*propose*, and a proposal never replaces an approved template, because that one is in use; refining one is Phase 6.
+*propose*, and a proposal never replaces an approved template, because that one is in use. A change to an approved one
+(``propose_refinement``) waits beside it in ``proposal`` until the person applies or discards it.
 The app writes through :func:`put_profile` and :func:`put_template`, which merge the fields they are given.
 
 Every function returns a plain dict: ``{"ok": True, ...}`` or ``{"ok": False, "errors": [one line each]}``. Nothing here
@@ -206,7 +207,10 @@ def propose_template(profile: ProfileStore, library: Library, args: Any) -> dict
         with _LOCK:
             old = profile.get_template(template_id)
             if old and old.get("status") == "approved":
-                return _fail(f'template "{template_id}" is already approved and in use; propose a new id instead')
+                return _fail(
+                    f'template "{template_id}" is already approved and in use; change it with iris_template_refine, '
+                    "or propose a new id"
+                )
             if old is None and _count(profile) >= MAX_TEMPLATES:
                 return _fail(f"there are already {MAX_TEMPLATES} templates; the person must retire some first")
             now = time.time()
@@ -232,6 +236,8 @@ def put_template(profile: ProfileStore, library: Library, template_id: Any, body
     if problems:
         return _fail(*problems)
     assert tid is not None
+    if "proposal" in body:
+        return decide_proposal(profile, library, tid, body["proposal"])
     try:
         with _LOCK:
             old = profile.get_template(tid)
@@ -256,10 +262,167 @@ def put_template(profile: ProfileStore, library: Library, template_id: Any, body
                 "created": old.get("created", now) if old else now,
                 "updated": now,
             }
+            waiting = old.get("proposal") if old else None
+            if isinstance(waiting, dict) and record["status"] == "approved":
+                # The person's own edit stays in a waiting proposal wherever the agent left that field as it was.
+                carried = dict(waiting)
+                for key in _TEMPLATE_FIELDS:
+                    if old is not None and waiting.get(key) == old.get(key):
+                        carried[key] = record[key]
+                record["proposal"] = carried
             profile.put_template(tid, record)
     except StoreError:
         return _fail("the template could not be saved; try again")
     return {"ok": True, "template": record}
+
+
+# ---- refinement (Phase 6): a waiting change to an approved template, decided by the person --------------------------------
+
+REASON_MAX = 300
+
+
+def propose_refinement(profile: ProfileStore, library: Library, args: Any) -> dict[str, Any]:
+    """The agent's change to an approved template, or its suggestion to retire it.
+
+    The approved version stays in use; the change waits in ``template["proposal"]`` until the person applies or discards
+    it in Iris. A later proposal for the same template replaces an earlier one.
+    """
+    if not isinstance(args, dict):
+        return _fail("the arguments must be an object")
+    template_id, problems = _template_id(args.get("id"))
+    reason = args.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        problems.append("reason is required: one line on what the use and the signals showed")
+    elif len(reason) > REASON_MAX:
+        problems.append(f"reason is longer than {REASON_MAX} characters")
+    retire = args.get("retire")
+    if retire is not None and not isinstance(retire, bool):
+        problems.append("retire must be true or false")
+    changed = {k: args[k] for k in _TEMPLATE_FIELDS if args.get(k) is not None}
+    if retire and changed:
+        problems.append("a suggestion to retire carries no changes: leave out the template fields")
+    if problems:
+        return _fail(*problems)
+    assert template_id is not None and isinstance(reason, str)
+    try:
+        with _LOCK:
+            old = profile.get_template(template_id)
+            if old is None or old.get("status") != "approved":
+                return _fail(f'template "{template_id}" is not an approved template; only approved ones can be refined')
+            now = time.time()
+            if retire:
+                proposal: dict[str, Any] = {"retire": True, "reason": reason.strip(), "created": now}
+            else:
+                merged = {k: old.get(k) for k in _TEMPLATE_FIELDS}
+                merged["kind"] = merged.get("kind") or "display"
+                merged.update(changed)
+                if all(merged.get(k) == (old.get(k) or ("display" if k == "kind" else None)) for k in _TEMPLATE_FIELDS):
+                    return _fail("nothing would change: give the fields you want different")
+                problems = _template_problems(library, merged)
+                if problems:
+                    return _fail(*problems)
+                proposal = {**merged, "reason": reason.strip(), "created": now}
+            profile.put_template(template_id, {**old, "proposal": proposal, "updated": now})
+    except StoreError:
+        return _fail("the change could not be saved; try again")
+    return {"ok": True, "id": template_id, "status": "approved", "proposal": "retire" if retire else "refine"}
+
+
+def decide_proposal(profile: ProfileStore, library: Library, tid: str, decision: Any) -> dict[str, Any]:
+    """The person's answer to a waiting change: ``"apply"`` makes it the template (or retires it), ``"discard"`` drops it."""
+    if decision not in ("apply", "discard"):
+        return _fail('proposal must be "apply" or "discard"')
+    try:
+        with _LOCK:
+            old = profile.get_template(tid)
+            proposal = old.get("proposal") if old else None
+            if old is None or not isinstance(proposal, dict):
+                return _fail("no change is waiting for this template")
+            record = {k: v for k, v in old.items() if k != "proposal"}
+            now = time.time()
+            if decision == "apply":
+                record["rev"] = old.get("rev", 0) + 1
+                if proposal.get("retire"):
+                    record["status"] = "retired"
+                else:
+                    fields = {k: proposal.get(k) for k in _TEMPLATE_FIELDS}
+                    problems = _template_problems(library, fields)
+                    if problems:
+                        return _fail(*problems)
+                    record.update(fields)
+            record["updated"] = now
+            profile.put_template(tid, record)
+    except StoreError:
+        return _fail("the template could not be saved; try again")
+    return {"ok": True, "template": record}
+
+
+# ---- what the agent reads before it refines -----------------------------------------------------------------------------
+
+_COUNTED = ("used", "expanded", "dismissed", "not_useful")
+
+
+def _clean_ids(value: Any) -> list[str]:
+    return [v for v in value if isinstance(v, str)] if isinstance(value, list) else []
+
+
+def usage_summary(profile: ProfileStore) -> dict[str, Any]:
+    """Counts only, per approved template and for displays made without one, from ``usage.jsonl``. No content."""
+    rows = [r for r in profile.read_usage() if isinstance(r, dict)]
+    approved = [t for t in list_templates(profile, "approved")]
+    stats: dict[str, dict[str, int]] = {
+        str(t["id"]): {"shown": 0, **{k: 0 for k in _COUNTED}} for t in approved if isinstance(t.get("id"), str)
+    }
+    plain = {"shown": 0, **{k: 0 for k in _COUNTED}}
+    turns = with_display = 0
+    first = last = None
+    surface_template: dict[tuple[str, str], str | None] = {}
+
+    def template_of(session: Any, surface: Any) -> str | None:
+        key = (str(session), str(surface))
+        if key not in surface_template:
+            try:
+                record = profile.get_surface(session, surface)
+            except InvalidName:
+                record = None
+            tid = record.get("template") if record else None
+            surface_template[key] = tid if isinstance(tid, str) else None
+        return surface_template[key]
+
+    for row in rows:
+        ts = row.get("ts")
+        if isinstance(ts, (int, float)):
+            first = ts if first is None else min(first, ts)
+            last = ts if last is None else max(last, ts)
+        if row.get("kind") == "use":
+            turns += 1
+            templates_used = _clean_ids(row.get("templates_used"))
+            surfaces_shown = _clean_ids(row.get("surfaces"))
+            if surfaces_shown:
+                with_display += 1
+            for tid in templates_used:
+                if tid in stats:
+                    stats[tid]["shown"] += 1
+            if len(surfaces_shown) > len(templates_used):
+                plain["shown"] += len(surfaces_shown) - len(templates_used)
+        elif row.get("kind") == "signal" and row.get("signal") in _COUNTED:
+            tid = row.get("template") if isinstance(row.get("template"), str) else None
+            if tid is None and row.get("session") is not None and row.get("surface") is not None:
+                tid = template_of(row["session"], row["surface"])
+            if tid is not None and tid in stats:
+                stats[tid][row["signal"]] += 1
+            elif tid is None:
+                plain[row["signal"]] += 1
+    names = {str(t["id"]): t.get("name") for t in approved}
+    return {
+        "ok": True,
+        "turns": turns,
+        "turns_with_display": with_display,
+        "first_ts": first,
+        "last_ts": last,
+        "templates": [{"id": tid, "name": names.get(tid), **counts} for tid, counts in stats.items()],
+        "plain_displays": plain,
+    }
 
 
 def list_templates(profile: ProfileStore, status: str | None = None) -> list[dict[str, Any]]:
@@ -286,6 +449,7 @@ def list_template_summaries(profile: ProfileStore, status: str | None = None) ->
                 "kind": t.get("kind") or "display",
                 "status": t.get("status"),
                 "rev": t.get("rev"),
+                "has_proposal": isinstance(t.get("proposal"), dict),
                 "keys": list(props) if isinstance(props, dict) else [],
             }
         )
