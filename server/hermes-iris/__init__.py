@@ -18,7 +18,7 @@ _log = logging.getLogger("hermes_iris")
 
 def register(ctx) -> None:
     """Called by Hermes when the plugin is enabled. Tools, hooks and the skill are registered here as they land."""
-    from .genui import context, guards, personal_tools, skill, tool
+    from .genui import context, guards, personal_tools, skill, tool, usage
 
     ctx.register_tool(name="iris_ui", toolset="iris", schema=tool.SCHEMA, handler=tool.handle_iris_ui)
     for schema, handler in personal_tools.TOOLS:
@@ -26,6 +26,7 @@ def register(ctx) -> None:
     ctx.register_hook("pre_llm_call", context.on_pre_llm_call)
     ctx.register_hook("pre_tool_call", guards.on_pre_tool_call)
     ctx.register_hook("transform_tool_result", guards.on_transform_tool_result)
+    ctx.register_hook("post_llm_call", usage.on_post_llm_call)
     for name, directory, description in (
         (skill.SKILL_NAME, skill.SKILL_DIR, skill.SKILL_DESCRIPTION),
         (skill.STUDY_SKILL_NAME, skill.STUDY_SKILL_DIR, skill.STUDY_SKILL_DESCRIPTION),

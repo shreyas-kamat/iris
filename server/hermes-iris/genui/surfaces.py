@@ -11,7 +11,7 @@ import time
 from typing import Any
 
 from ..openui import Library, validate_program
-from . import templates
+from . import templates, usage
 from .store import InvalidName, ProfileStore, StoreError, safe_component
 
 PLACEMENTS = ("inline", "reply_kit")
@@ -113,4 +113,5 @@ def submit(profile: ProfileStore, library: Library, session_id: Any, args: Any) 
             )
     except StoreError:
         return _fail("the display could not be saved; try again")
+    usage.note_display(session, surface_id, template_id)
     return {"ok": True, "surface_id": surface_id, "rev": rev}
