@@ -15,7 +15,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G5 | Phase 3: rendering surfaces in Iris | Sonnet | done | `44259c1` |
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | done | `ed515c8` |
-| G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | todo | |
+| G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | doing | |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | todo | |
 | G10 | 7.6 final review, release, PR | Opus | todo | |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
@@ -399,3 +399,19 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) The review screen's request changed from `templates?status=proposed` to all templates (filtered on the device) so changes are found in the same call. (2) A refinement of the profile has no UI: the plugin keeps the profile's `previous` text only; the plan names templates.
 - Decisions for later tasks: not checked live: the server still runs plugin 0.2.0 (no refine routes); a live check of 6.x needs the 0.3.0 copy installed over SSH as in 5.6, and is for the G9 device pass.
 - segment G7 complete. Next: G8 (Haiku), task 7.1 demo mode.
+
+### G8 — doing — 2026-11-09
+- Running as Haiku 5.5 (G8 needs Haiku). Git matches the log (G7 `ed515c8`, in history; HEAD `2f053db`, clean apart from `store/screenshots/`).
+- Next: 7.1 demo mode.
+
+### G8 — 7.1 — done — 2026-11-09 — Haiku 5.5
+- Commits: dd9953a feat(genui): demo mode shows a card, a reply kit and a study result
+- Verified: `flutter test test/demo/demo_genui_test.dart` red first (no GenUI scripts; then the count was 2, not 3, and the test was corrected to the real count), then 4 pass; `flutter test test/demo` -> 45 pass; `flutter test test/features/demo_flow_test.dart` red first (the new prompts were off-screen, fixed with `ensureVisible`), then 10 pass; `flutter test test/features/demo_flow_test.dart test/design/welcome_demo_golden_test.dart` -> pass (no golden changed); `flutter analyze lib/demo test/demo test/features/demo_flow_test.dart` -> No issues found!
+- Deviations: (1) Demo displays are scripted `iris_ui` tool steps; progressive rendering in chunks (the plan's optional part) is not done. (2) The "fake study result" is a scripted study chat: a profile and two proposed templates (`deploy-status`, `daily-plan`) with a reply. It does not fill the Displays or Review screens, because Settings is hidden in the demo and those screens need `GenUiApi`, which the demo does not have. (3) `demoScripts` is now `final` (it spreads `demoGenUiScripts`).
+- Decisions for later tasks: demo programs live in `lib/demo/demo_genui_content.dart`; `test/demo/demo_genui_test.dart` checks them against the Iris library, so edit them only through that test.
+
+### G8 — 7.2 — blocked — 2026-11-09
+- Export: already done in the app. `chat_export.dart` writes each display's `fallback`, never its program. A test was added (`10dfafe test(genui): a shared transcript exports a display's fallback text, not its program`); `flutter test test/features/chat_export_test.dart` -> 10 pass.
+- Search: blocked on a decision. Search is Hermes's own `session_search` on the server, so the app cannot index fallback text itself. A display's fallback sits in the `iris_ui` call's arguments; the plugin's answer is only `{ok, surface_id, rev}`. Whether Hermes search reads tool-call arguments or tool results is not known from here. Only a live check can show it.
+- Options for the user: (a) the plugin also returns the fallback in its answer, so the stored tool row carries it (plugin 0.3.1; needs the server updated and a live search check); (b) leave search as it is, so displays are found through the reply text, which D7 already requires to make sense on its own.
+- Next: the user's answer on search; then the search part of 7.2; then 7.5 (docs, noting how search treats displays).
