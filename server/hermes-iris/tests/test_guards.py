@@ -34,12 +34,30 @@ def test_blocks_in_an_unflagged_session(g):
 
 
 def test_blocks_every_iris_tool_in_an_unflagged_session(g):
-    for name in ("iris_ui", "iris_profile_get", "iris_template_propose"):
+    for name in ("iris_ui", "iris_profile_propose", "iris_made_up_tool"):
         assert call(g, name)["action"] == "block", name
 
 
 def test_allows_a_flagged_session(g, flagged):
     assert call(g) is None
+
+
+def test_learning_tools_work_in_any_session(g):
+    """A scheduled /iris-refine run is not an Iris-flagged session; the tools it needs still work there."""
+    for name in (
+        "iris_usage_summary",
+        "iris_template_refine",
+        "iris_template_list",
+        "iris_template_propose",
+        "iris_profile_get",
+    ):
+        assert call(g, name, session="cron_20261109_090000") is None, name
+        assert call(g, name, session=None) is None, name
+
+
+def test_display_and_profile_writes_stay_in_flagged_sessions(g):
+    for name in ("iris_ui", "iris_profile_propose"):
+        assert call(g, name, session="cron_20261109_090000")["action"] == "block", name
 
 
 def test_ignores_other_tools(g):

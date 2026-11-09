@@ -1,5 +1,5 @@
 name: iris
-version: 0.2.0
+version: 0.3.0
 description: "Personal generated UI for the Iris app: displays and reply kits written in OpenUI Lang, validated here and rendered natively in Iris."
 author: shreyas-kamat
 kind: backend

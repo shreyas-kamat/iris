@@ -22,6 +22,19 @@ MAX_SURFACES_PER_TURN = 4
 TURNS_REMEMBERED = 64
 RECEIPT_ERRORS_MAX_CHARS = 1200
 
+#: The learning tools a scheduled ``/iris-refine`` run needs. A cron run is not a session Iris flagged, so these are
+#: allowed anywhere. They only read counts or *propose*; nothing they write is used until the person approves it.
+#: ``iris_ui`` and ``iris_profile_propose`` stay in flagged sessions.
+ANY_SESSION = frozenset(
+    {
+        "iris_usage_summary",
+        "iris_template_refine",
+        "iris_template_list",
+        "iris_template_propose",
+        "iris_profile_get",
+    }
+)
+
 _LOCK = threading.Lock()
 #: turn id -> the distinct surface ids it has used, oldest turn first.
 _TURNS: OrderedDict[str, set[str]] = OrderedDict()
@@ -50,6 +63,8 @@ def on_pre_tool_call(**kw: Any) -> dict[str, str] | None:
     try:
         name = kw.get("tool_name")
         if not isinstance(name, str) or not name.startswith("iris_"):
+            return None
+        if name in ANY_SESSION:
             return None
         if not flags.is_flagged(kw.get("session_id")):  # type: ignore[arg-type]
             return _block(_NOT_IRIS)

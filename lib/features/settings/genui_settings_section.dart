@@ -54,6 +54,7 @@ class GenUiSettingsSection extends ConsumerWidget {
                 if (ref.watch(genUiEnabledProvider)) ...[
                   _studyRow(context, plugin),
                   _displaysRow(context, plugin),
+                  _refineRow(ref, plugin),
                 ],
                 IrisSettingsRow(label: 'Plugin', value: plugin?.version ?? '—'),
               ]
@@ -94,6 +95,22 @@ class GenUiSettingsSection extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// The optional weekly refinement, off until switched on. Needs a plugin that has the refine tools.
+  Widget _refineRow(WidgetRef ref, GenUiCapabilities? plugin) {
+    if (plugin == null || !plugin.has('refine')) return const SizedBox.shrink();
+    return IrisSettingsRow(
+      label: 'Refine every week',
+      sub:
+          'Hermes looks at how your displays were used and proposes changes. You approve them.',
+      trailing: IrisSwitch(
+        value: ref.watch(weeklyRefineProvider).value ?? false,
+        semanticLabel: 'Refine every week',
+        onChanged: (on) =>
+            unawaited(ref.read(weeklyRefineProvider.notifier).set(on: on)),
       ),
     );
   }

@@ -8,8 +8,10 @@ import '../data/chat/chat_backend.dart';
 import '../data/genui/genui_api.dart';
 import '../data/genui/genui_models.dart';
 import '../data/genui/signals.dart';
+import '../data/genui/weekly_refine.dart';
 import '../data/net/capabilities.dart';
 import '../data/prefs/preferences_store.dart';
+import 'automation_providers.dart';
 import 'preferences.dart';
 import 'providers.dart';
 
@@ -85,3 +87,27 @@ final signalReporterProvider = Provider<SignalReporter?>((ref) {
   ref.onDispose(reporter.dispose);
   return reporter;
 });
+
+/// Whether the weekly refinement job runs on this profile. Off until the person turns it on; the state lives on the
+/// server (the cron job), so this reads it, and a change that fails puts the switch back.
+final weeklyRefineProvider = AsyncNotifierProvider<WeeklyRefineSwitch, bool>(
+  WeeklyRefineSwitch.new,
+);
+
+class WeeklyRefineSwitch extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() async {
+    final cron = await ref.watch(cronRepositoryProvider.future);
+    if (cron == null) return false;
+    return (await WeeklyRefine(cron).isOn()).or(false);
+  }
+
+  Future<void> set({required bool on}) async {
+    final cron = await ref.read(cronRepositoryProvider.future);
+    if (cron == null) return;
+    final before = state.value ?? false;
+    state = AsyncData(on);
+    final result = await WeeklyRefine(cron).setOn(on: on);
+    state = AsyncData(result.valueOrNull ?? before);
+  }
+}

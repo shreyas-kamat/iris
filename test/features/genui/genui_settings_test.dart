@@ -5,12 +5,15 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:iris/app/automation_providers.dart';
 import 'package:iris/app/genui_providers.dart';
 import 'package:iris/app/preferences.dart';
 import 'package:iris/app/providers.dart';
+import 'package:iris/core/failure.dart';
 import 'package:iris/core/result.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/genui/genui_models.dart';
+import 'package:iris/data/genui/weekly_refine.dart';
 import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/prefs/preferences_store.dart';
@@ -20,6 +23,7 @@ import 'package:iris/features/genui/displays_screen.dart';
 import 'package:iris/features/genui/study_screen.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 
+import '../../support/fake_automation.dart';
 import '../../support/fake_chat_backend.dart';
 import '../../support/fake_genui_api.dart';
 import '../../support/harness.dart';
@@ -40,38 +44,43 @@ void main() {
   });
   tearDown(() => backend.close());
 
-  Widget settings({required bool installed, MemoryPreferencesStore? store}) =>
-      ProviderScope(
-        overrides: [
-          if (store != null) preferencesStoreProvider.overrideWithValue(store),
-          genUiApiProvider.overrideWith((ref) async => FakeGenUiApi()),
-          activeServerIdProvider.overrideWith(() => _FixedServer('s')),
-          activeServerProvider.overrideWithValue(
-            const ServerConfig(
-              id: 's',
-              baseUrl: 'https://h.example',
-              label: 'Home',
-            ),
+  Widget settings({
+    required bool installed,
+    MemoryPreferencesStore? store,
+    FakeCronRepository? cron,
+  }) => ProviderScope(
+    overrides: [
+      if (store != null) preferencesStoreProvider.overrideWithValue(store),
+      genUiApiProvider.overrideWith((ref) async => FakeGenUiApi()),
+      if (cron != null)
+        cronRepositoryProvider.overrideWith((ref) async => cron),
+      activeServerIdProvider.overrideWith(() => _FixedServer('s')),
+      activeServerProvider.overrideWithValue(
+        const ServerConfig(
+          id: 's',
+          baseUrl: 'https://h.example',
+          label: 'Home',
+        ),
+      ),
+      activeLinkProvider.overrideWith(
+        (ref) => Stream.value(const LinkState(LinkPhase.live)),
+      ),
+      activeCapabilitiesProvider.overrideWith(
+        (ref) => Stream.value(
+          ServerCapabilities(
+            available: {if (installed) ServerCapability.irisGenui},
+            probedAt: DateTime(2026, 11, 7),
           ),
-          activeLinkProvider.overrideWith(
-            (ref) => Stream.value(const LinkState(LinkPhase.live)),
-          ),
-          activeCapabilitiesProvider.overrideWith(
-            (ref) => Stream.value(
-              ServerCapabilities(
-                available: {if (installed) ServerCapability.irisGenui},
-                probedAt: DateTime(2026, 11, 7),
-              ),
-            ),
-          ),
-          activeChatProvider.overrideWith((ref) async => backend),
-          conversationsProvider.overrideWith(
-            (ref) async => const ConversationPage(items: [], total: 0),
-          ),
-          profilesProvider.overrideWith((ref) async => const []),
-        ],
-        child: themed(const SettingsScreen()),
-      );
+        ),
+      ),
+      activeChatProvider.overrideWith((ref) async => backend),
+      conversationsProvider.overrideWith(
+        (ref) async => const ConversationPage(items: [], total: 0),
+      ),
+      profilesProvider.overrideWith((ref) async => const []),
+    ],
+    child: themed(const SettingsScreen()),
+  );
 
   Future<void> settle(WidgetTester tester) async {
     await tester.pump();
@@ -203,6 +212,97 @@ void main() {
       await tester.tap(find.text('Study my work'));
       await settle(tester);
       expect(find.byType(StudyScreen), findsNothing);
+    });
+  });
+
+  group('Weekly refinement', () {
+    const refineCaps = GenUiCapabilities(
+      version: '0.3.0',
+      openui: '1.0',
+      libraryIds: ['v1'],
+      features: {'capabilities', 'profile', 'templates', 'refine'},
+    );
+
+    bool isRefineSwitch(Widget w) =>
+        w is IrisSwitch && w.semanticLabel == 'Refine every week';
+
+    Future<void> open(WidgetTester tester, FakeCronRepository cron) async {
+      backend.genUiCapabilitiesResult = const Ok(refineCaps);
+      await tester.pumpWidget(settings(installed: true, cron: cron));
+      await settle(tester);
+      containerOf(
+        tester,
+      ).read(genUiEnabledProvider.notifier).set(enabled: true);
+      await settle(tester);
+      await tester.ensureVisible(find.text('Plugin'));
+    }
+
+    testWidgets('is off by default and creates nothing', (tester) async {
+      final cron = FakeCronRepository();
+      await open(tester, cron);
+      expect(find.text('Refine every week'), findsOneWidget);
+      expect(
+        tester.widget<IrisSwitch>(find.byWidgetPredicate(isRefineSwitch)).value,
+        isFalse,
+      );
+      expect(cron.calls.where((c) => c != 'jobs'), isEmpty);
+    });
+
+    testWidgets('turning it on creates the weekly job', (tester) async {
+      final cron = FakeCronRepository();
+      await open(tester, cron);
+      await tester.tap(find.byWidgetPredicate(isRefineSwitch));
+      await settle(tester);
+      expect(cron.calls, contains('create'));
+      expect(cron.drafts.single.name, WeeklyRefine.jobName);
+      expect(
+        tester.widget<IrisSwitch>(find.byWidgetPredicate(isRefineSwitch)).value,
+        isTrue,
+      );
+    });
+
+    testWidgets('shows on when the job already runs', (tester) async {
+      final cron = FakeCronRepository()
+        ..jobsResult = Ok([fakeJob('w', name: WeeklyRefine.jobName)]);
+      await open(tester, cron);
+      expect(
+        tester.widget<IrisSwitch>(find.byWidgetPredicate(isRefineSwitch)).value,
+        isTrue,
+      );
+    });
+
+    testWidgets('a failed change puts the switch back', (tester) async {
+      final cron = FakeCronRepository()
+        ..writeResult = const Err(
+          IrisFailure(FailureKind.offline, message: 'down'),
+        );
+      await open(tester, cron);
+      await tester.tap(find.byWidgetPredicate(isRefineSwitch));
+      await settle(tester);
+      expect(
+        tester.widget<IrisSwitch>(find.byWidgetPredicate(isRefineSwitch)).value,
+        isFalse,
+      );
+    });
+
+    testWidgets('is not offered by a plugin without refine', (tester) async {
+      backend.genUiCapabilitiesResult = const Ok(
+        GenUiCapabilities(
+          version: '0.2.0',
+          openui: '1.0',
+          libraryIds: ['v1'],
+          features: {'capabilities', 'profile', 'templates'},
+        ),
+      );
+      await tester.pumpWidget(
+        settings(installed: true, cron: FakeCronRepository()),
+      );
+      await settle(tester);
+      containerOf(
+        tester,
+      ).read(genUiEnabledProvider.notifier).set(enabled: true);
+      await settle(tester);
+      expect(find.text('Refine every week'), findsNothing);
     });
   });
 }

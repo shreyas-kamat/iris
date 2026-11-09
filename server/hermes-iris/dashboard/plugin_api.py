@@ -54,7 +54,7 @@ def _profile_store(profile: str | None):
 
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback"]
+FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback", "refine"]
 
 
 @router.get("/capabilities")
