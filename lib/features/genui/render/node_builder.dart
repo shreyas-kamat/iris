@@ -309,16 +309,41 @@ class NodeBuilder {
         if (big || stats.length > 4) {
           return _column(stats);
         }
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < stats.length; i++) ...[
-                if (i > 0) const SizedBox(width: IrisSpace.md),
-                Expanded(child: stats[i]),
-              ],
-            ],
-          ),
+        final values = [
+          for (final s in _elements(e, 'stats', 'Stat')) _s(s, 'value') ?? '',
+        ];
+        final valueStyle = context.type.title;
+        final scaler = MediaQuery.textScalerOf(context);
+        final direction = Directionality.of(context);
+        return LayoutBuilder(
+          builder: (context, box) {
+            // Side by side only while every value fits its cell on one line: a value must never break inside a word.
+            final cell =
+                (box.maxWidth - IrisSpace.md * (stats.length - 1)) /
+                stats.length;
+            final fits = values.every((v) {
+              final painter = TextPainter(
+                text: TextSpan(text: v, style: valueStyle),
+                textDirection: direction,
+                textScaler: scaler,
+              )..layout();
+              final width = painter.width;
+              painter.dispose();
+              return width <= cell;
+            });
+            if (!fits) return _column(stats);
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < stats.length; i++) ...[
+                    if (i > 0) const SizedBox(width: IrisSpace.md),
+                    Expanded(child: stats[i]),
+                  ],
+                ],
+              ),
+            );
+          },
         );
 
       case 'StatusPill':

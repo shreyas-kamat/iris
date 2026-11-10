@@ -48,6 +48,31 @@ void main() {
       expect(currentReplyKit(items)!.ref.surfaceId, 'b');
     });
 
+    test('is the kit the assistant sends again after the person replied', () {
+      // The model reuses a kit's id for its next question; the new offer must dock, not hide behind the old reply.
+      var items = <TranscriptItem>[
+        _surface('next', rev: 1),
+        const UserTurn(id: 'u', text: 'Alpha'),
+        const AssistantTurn(id: 't', text: 'Next?'),
+      ];
+      items = UiSurfaceItem.add(items, _surface('next', rev: 2));
+      expect(currentReplyKit(items)!.ref.rev, 2);
+      expect(items.whereType<UiSurfaceItem>(), hasLength(1));
+    });
+
+    test('an inline display updated in place keeps its position', () {
+      var items = <TranscriptItem>[
+        _surface('card', placement: SurfacePlacement.inline),
+        const UserTurn(id: 'u', text: 'More'),
+      ];
+      items = UiSurfaceItem.add(
+        items,
+        _surface('card', placement: SurfacePlacement.inline, rev: 2),
+      );
+      expect(items.first, isA<UiSurfaceItem>());
+      expect(items.last, isA<UserTurn>());
+    });
+
     test('ignores displays that sit in the transcript', () {
       expect(
         currentReplyKit([_surface('a', placement: SurfacePlacement.inline)]),

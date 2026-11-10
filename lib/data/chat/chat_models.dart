@@ -213,6 +213,15 @@ final class UiSurfaceItem extends TranscriptItem {
       updated: true,
       previous: old.ref,
     );
+    // A reply kit is an offer for the next turn: sent again, it goes to the end so it can dock below whatever the
+    // person said in between. Any other display stays where it first appeared.
+    if (item.ref.placement == SurfacePlacement.replyKit) {
+      return [
+        for (final other in items)
+          if (!same(other)) other,
+        merged,
+      ];
+    }
     return [
       for (var i = 0; i < items.length; i++)
         if (i == at) merged else if (!same(items[i])) items[i],
