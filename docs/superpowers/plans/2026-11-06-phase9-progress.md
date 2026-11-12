@@ -19,7 +19,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | done | `da9be8e` |
 | G10 | 7.6 final review, release, PR | Opus | done | `1115dc1` |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
-| P-spec | Brainstorm and design | Opus | todo | |
+| P-spec | Brainstorm and design | Opus | doing | |
 | P-plan | Implementation plan with segment table | Opus | todo | |
 | P-build | Per the plan (Opus for the relay) | per plan | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
@@ -513,3 +513,8 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Done: annotated tag `hermes-iris-v0.3.0` on `1115dc1`; pushed `feat/genui` and the tag to origin; PR #42 to `main`: https://github.com/shreyas-kamat/iris/pull/42 (body lists the known gaps from G9). Not merged: merging is the user's.
 - Plan 7.6 ticked.
 - 9.1 GenUI complete. Next: 9.2 Push notifications, P-spec (Opus): `superpowers:brainstorming`, branch `feat/push` from `main` (after #42 merges, or from `main` as it is if the user prefers).
+
+### P-spec — doing — 2026-11-13 — Opus 5.5
+- Running as Opus 5.5. Git matched the log (G10 `1115dc1` in history; HEAD `3750bda`). Branch `feat/push` cut from `feat/genui` at `3750bda` (the plugin lives there); retarget to `main` after PR #42 merges.
+- Brainstormed with the user; recon read hermes-agent `f97608f` (hooks `on_session_end` per turn incl. cron, `pre_approval_request`, `post_approval_response`). Draft design: `docs/superpowers/specs/2026-11-13-push-notifications-design.md`.
+- Next: the user reviews and approves the design; then P-plan (`superpowers:writing-plans`, Opus).
