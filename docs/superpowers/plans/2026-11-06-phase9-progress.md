@@ -17,7 +17,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | done | `ed515c8` |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | done | `9f6b719` |
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | done | `da9be8e` |
-| G10 | 7.6 final review, release, PR | Opus | blocked | `1115dc1` |
+| G10 | 7.6 final review, release, PR | Opus | done | `1115dc1` |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
 | P-spec | Brainstorm and design | Opus | todo | |
 | P-plan | Implementation plan with segment table | Opus | todo | |
@@ -507,3 +507,9 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Noted, not changed (low risk): `usage.jsonl` rotation is locked per process only, so the agent and dashboard processes could both rotate at once and lose a few rows; signals with an unsafe template id make the plugin refuse the whole batch (the app drops it); `ANY_SESSION` lets `iris_template_propose` run from any platform's session (the user's decision in 6.3; proposals still need approval in Iris).
 - **Blocked on the user:** (1) the plan's tag is `hermes-iris-v0.1.0`, but the plugin is 0.3.0 (`plugin.yaml`, `pyproject.toml`, `__init__`, manifest, CHANGELOG), so the tag name as written would mislabel it; proposed `hermes-iris-v0.3.0`. (2) Tagging, pushing and opening the PR to `main` wait for the user's say-so (run book).
 - Next: the user's answers, then tag, push, PR; then G10 done and 9.2 P-spec (Opus).
+
+### G10 — 7.6 release — done — 2026-11-13 — Opus 5.5
+- User answers (this chat): tag `hermes-iris-v0.3.0` (not the plan's v0.1.0, to match the plugin version); tag, push and open the PR.
+- Done: annotated tag `hermes-iris-v0.3.0` on `1115dc1`; pushed `feat/genui` and the tag to origin; PR #42 to `main`: https://github.com/shreyas-kamat/iris/pull/42 (body lists the known gaps from G9). Not merged: merging is the user's.
+- Plan 7.6 ticked.
+- 9.1 GenUI complete. Next: 9.2 Push notifications, P-spec (Opus): `superpowers:brainstorming`, branch `feat/push` from `main` (after #42 merges, or from `main` as it is if the user prefers).
