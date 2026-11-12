@@ -439,7 +439,6 @@ class _ChatScreenState extends State<ChatScreen> {
     return null;
   }
 
-  /// The command catalogue is read the first time the person types a slash.
   /// Reply kits the person has dismissed, tapped or typed past. A kit the assistant updates has a new key and returns.
   final _dismissedKits = <String>{};
 
@@ -486,6 +485,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (kit != null) setState(() => _dismissedKits.add(replyKitKey(kit)));
   }
 
+  /// The command catalogue is read the first time the person types a slash.
   void _watchForSlash() {
     if (_text.text.startsWith('/')) unawaited(_chat.loadCommands());
   }

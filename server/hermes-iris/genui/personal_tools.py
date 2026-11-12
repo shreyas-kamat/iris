@@ -1,7 +1,8 @@
 """The study tools: the agent proposes a work profile and personal templates; the person approves them in Iris.
 
-Handlers return a string and must never raise. They are registered in toolset ``iris``, so the ``pre_tool_call`` guard
-keeps them to flagged sessions like ``iris_ui``.
+Handlers return a string and must never raise. They are registered in toolset ``iris``. The ``pre_tool_call`` guard
+keeps ``iris_profile_propose`` to flagged sessions like ``iris_ui``; the rest may run anywhere (``guards.ANY_SESSION``),
+so a scheduled refine run can use them.
 """
 
 from __future__ import annotations

@@ -737,6 +737,12 @@ final class ChatState {
             (item) => item is UiSurfaceItem && item.callId == toolId,
           );
     if (at < 0) {
+      // A card of its own (another tool through the bridge, or a display call whose arguments arrived cut short) is
+      // finished the ordinary way.
+      if (toolId != null &&
+          items.any((item) => item is ToolCall && item.id == toolId)) {
+        return null;
+      }
       // The display was removed or replaced by a later call; its answer needs no card of its own. A failure still
       // gets one.
       final answered = GenUiParser.surfaceRef(

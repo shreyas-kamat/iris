@@ -1,7 +1,7 @@
 """Hooks that keep ``iris_*`` tools to Iris sessions and keep their results small.
 
-* ``pre_tool_call`` vetoes any ``iris_*`` tool in a session Iris did not flag (D3), and the fifth distinct surface of
-  one turn. The model gets a sentence it can act on.
+* ``pre_tool_call`` vetoes ``iris_*`` tools in a session Iris did not flag (D3), except the learning tools in
+  :data:`ANY_SESSION`, and the fifth distinct surface of one turn. The model gets a sentence it can act on.
 * ``transform_tool_result`` trims ``iris_ui``'s receipt before it enters the model's context.
 
 Hermes contracts (release 2026.9.24): ``pre_tool_call`` returns ``{"action": "block", "message": ...}`` or None;
@@ -40,7 +40,7 @@ _LOCK = threading.Lock()
 _TURNS: OrderedDict[str, set[str]] = OrderedDict()
 
 _NOT_IRIS = (
-    "iris_ui is only available when the person is chatting in the Iris app, and this is not an Iris session. "
+    "This tool is only available when the person is chatting in the Iris app, and this is not an Iris session. "
     "Answer in plain Markdown instead."
 )
 

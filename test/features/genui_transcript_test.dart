@@ -390,6 +390,48 @@ void main() {
       );
       expect(state.items.single, isA<ToolCall>());
     });
+
+    test(
+      'a bridged call to another tool finishes its card on an ok answer',
+      () {
+        final bridged = jsonEncode({
+          'calls': [
+            {
+              'name': 'web_search',
+              'arguments': {'q': 'x'},
+            },
+          ],
+        });
+        final state = ready
+            .apply(
+              ToolStarted('r', toolId: 'b1', name: 'tool_call', input: bridged),
+            )
+            .apply(
+              ToolCompleted(
+                'r',
+                toolId: 'b1',
+                name: 'tool_call',
+                output: jsonEncode({'ok': true, 'results': <Object?>[]}),
+              ),
+            );
+        expect((state.items.single as ToolCall).status, ToolStatus.done);
+      },
+    );
+
+    test('a cut-short display call finishes its card on an ok answer', () {
+      final cut = _args().substring(0, 40);
+      final state = ready
+          .apply(ToolStarted('r', toolId: 't', name: 'iris_ui', input: cut))
+          .apply(
+            ToolCompleted(
+              'r',
+              toolId: 't',
+              name: 'iris_ui',
+              output: _ok('status', 1),
+            ),
+          );
+      expect((state.items.single as ToolCall).status, ToolStatus.done);
+    });
   });
 
   group('export', () {
