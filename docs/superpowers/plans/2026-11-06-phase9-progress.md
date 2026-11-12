@@ -19,9 +19,15 @@ newest last. Models are the minimum; a higher one is fine.
 | G9 | 7.3, 7.4: accessibility and device pass | Sonnet | done | `da9be8e` |
 | G10 | 7.6 final review, release, PR | Opus | done | `1115dc1` |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
-| P-spec | Brainstorm and design | Opus | doing | |
-| P-plan | Implementation plan with segment table | Opus | todo | |
-| P-build | Per the plan (Opus for the relay) | per plan | todo | |
+| P-spec | Brainstorm and design | Opus | done | `57f5882` |
+| P-plan | Implementation plan with segment table | Opus | done | see journal |
+| PS1 | Task 1: live probe (hooks, approval answering) | Opus | todo | |
+| PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | todo | |
+| PS3 | Task 6: APNs sender and worker | Opus | todo | |
+| PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | todo | |
+| PS5 | Tasks 9–10: Android service, iOS native | Opus | todo | |
+| PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | todo | |
+| PS7 | Task 12: final review, release, PR | Opus | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
 | C-plan | Implementation plan with segment table | Opus | todo | |
@@ -518,3 +524,14 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Running as Opus 5.5. Git matched the log (G10 `1115dc1` in history; HEAD `3750bda`). Branch `feat/push` cut from `feat/genui` at `3750bda` (the plugin lives there); retarget to `main` after PR #42 merges.
 - Brainstormed with the user; recon read hermes-agent `f97608f` (hooks `on_session_end` per turn incl. cron, `pre_approval_request`, `post_approval_response`). Draft design: `docs/superpowers/specs/2026-11-13-push-notifications-design.md`.
 - Next: the user reviews and approves the design; then P-plan (`superpowers:writing-plans`, Opus).
+
+### P-spec — done — 2026-11-13 — Opus 5.5
+- Commits: 57f5882 docs(push): draft push notifications design; log P-spec
+- Verified: the user approved the design in chat ("Approved").
+- Deviations: none.
+- Next: P-plan (Opus), same chat per the run book.
+
+### P-plan — done — 2026-11-13 — Opus 5.5
+- Plan: `docs/superpowers/plans/2026-11-13-push.md` (12 tasks, segments PS1–PS7). Self-reviewed against the spec.
+- Plan-level decisions for the user to check: approval actions open Iris after unlock and answer there (no native WebSocket client); Iris marks active chats explicitly; device settings stored on the server; replay 15 min (stream) / 10 min (APNs); `flutter_local_notifications` on Android only; the one `flutter_foreground_task` service is shared with voice through an arbiter (`microphone|remoteMessaging`).
+- Next: the user reviews the plan; then PS1 (Opus), Task 1 live probe — ask before touching the server.

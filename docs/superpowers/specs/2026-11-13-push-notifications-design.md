@@ -1,6 +1,6 @@
 # Push notifications — design (Phase 9.2)
 
-Status: draft for the user's approval. Branch `feat/push` (cut from `feat/genui` at `3750bda`, because the
+Status: approved by the user 2026-11-13. Branch `feat/push` (cut from `feat/genui` at `3750bda`, because the
 `hermes-iris` plugin lives there; retarget to `main` once PR #42 merges).
 
 ## Intent
