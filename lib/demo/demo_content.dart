@@ -4,6 +4,7 @@
 library;
 
 import '../data/chat/chat_models.dart';
+import 'demo_genui_content.dart';
 import 'demo_script.dart';
 
 /// The link in the fallback reply that leaves the demo.
@@ -281,7 +282,7 @@ ModelOptions demoModelOptions(
   ],
 );
 
-const demoScripts = [
+final List<DemoScript> demoScripts = [
   DemoScript(
     prompt: 'Check disk space on my server',
     title: 'Disk space on the server',
@@ -518,6 +519,7 @@ const demoScripts = [
       ),
     ],
   ),
+  ...demoGenUiScripts,
 ];
 
 /// The script for [text], if it is one of the suggested prompts.

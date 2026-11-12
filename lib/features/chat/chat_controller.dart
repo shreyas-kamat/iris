@@ -16,6 +16,7 @@ import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/chat/connection_models.dart';
+import '../../data/genui/genui_parser.dart';
 import '../../data/rpc/rpc_frame.dart';
 import 'chat_state.dart';
 import 'links.dart';
@@ -304,23 +305,27 @@ final class ChatController extends ValueNotifier<ChatState> {
   /// Sends [text], creating the conversation first if this is a new chat.
   /// Text that starts with a slash runs as a command. During a run, text
   /// steers the turn instead; a command cannot steer, so it waits.
+  ///
+  /// [literal] sends [text] as words and never as a command: a display's button may say anything, and `/undo` on a
+  /// button must not undo.
   Future<void> send(
     String text, {
     List<Attachment> attachments = const [],
+    bool literal = false,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return;
-    if (trimmed == '/undo') {
+    if (!literal && trimmed == '/undo') {
       await undo();
       return;
     }
-    if (trimmed == '/branch') {
+    if (!literal && trimmed == '/branch') {
       onBranchRequested?.call();
       return;
     }
-    final command = _busyCommand.firstMatch(trimmed);
+    final command = literal ? null : _busyCommand.firstMatch(trimmed);
     if (value.running) {
-      await _sendWhileRunning(trimmed, command);
+      await _sendWhileRunning(trimmed, command, literal: literal);
       return;
     }
     // Idle, "/queue x" and "/steer x" are an ordinary send of x.
@@ -333,7 +338,10 @@ final class ChatController extends ValueNotifier<ChatState> {
     );
     final runtimeId = _runtimeId ?? await _create();
     if (runtimeId == null) return;
-    if (attachments.isEmpty && body.startsWith('/') && body.length > 1) {
+    if (!literal &&
+        attachments.isEmpty &&
+        body.startsWith('/') &&
+        body.length > 1) {
       await _slash(runtimeId, body, depth: 0);
       return;
     }
@@ -351,6 +359,12 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
     await _submit(runtimeId, promptWithReferences(body, references));
   }
+
+  /// A tap in a generated display. The person sees [text] as their message; Hermes gets it with the hidden
+  /// `<iris-action>` block, so it knows which display and component it came from and what they had filled in. It goes
+  /// through [send], so busy mode, the queue and a new chat's creation all apply as they do to typing.
+  Future<void> sendUiAction(String text, IrisActionEnvelope action) =>
+      send(action.attachTo(text.trim()), literal: true);
 
   /// Sends words heard on a call: the user turn appears as for [send], a new
   /// chat is created first, and the submit carries [voice]. Never a slash
@@ -603,7 +617,11 @@ final class ChatController extends ValueNotifier<ChatState> {
     return true;
   }
 
-  Future<void> _sendWhileRunning(String text, RegExpMatch? command) async {
+  Future<void> _sendWhileRunning(
+    String text,
+    RegExpMatch? command, {
+    bool literal = false,
+  }) async {
     if (command != null) {
       final argument = command.group(2)!.trim();
       if (command.group(1) == 'queue') {
@@ -614,7 +632,7 @@ final class ChatController extends ValueNotifier<ChatState> {
       return;
     }
     // Any other command waits for the turn to end.
-    if (text.startsWith('/')) return;
+    if (!literal && text.startsWith('/')) return;
     switch (value.busyMode) {
       case BusyMode.queue:
         _enqueue(text);
@@ -654,7 +672,7 @@ final class ChatController extends ValueNotifier<ChatState> {
         if (failure.rpcError?.code == 4009) {
           await _steer(text);
         } else {
-          onSteerReturned?.call(text);
+          onSteerReturned?.call(IrisActionEnvelope.strip(text));
           onToast?.call('Could not send: ${describe(failure)}');
         }
     }
@@ -722,14 +740,14 @@ final class ChatController extends ValueNotifier<ChatState> {
         _update(value.withUserTurn(text));
         await _submit(runtimeId, text);
       case Ok():
-        onSteerReturned?.call(text);
+        onSteerReturned?.call(IrisActionEnvelope.strip(text));
         _update(
           value.withNotice(
             "Hermes couldn't take that mid-turn — send it when the turn ends.",
           ),
         );
       case Err(:final failure):
-        onSteerReturned?.call(text);
+        onSteerReturned?.call(IrisActionEnvelope.strip(text));
         _update(value.withNotice('Could not steer: ${describe(failure)}'));
     }
   }
@@ -1133,9 +1151,7 @@ final class ChatController extends ValueNotifier<ChatState> {
         );
       case Ok(value: final change) when change.confirmRequired:
         _update(
-          value.withNotice(
-            '$model needs confirming. Pick it again to switch.',
-          ),
+          value.withNotice('$model needs confirming. Pick it again to switch.'),
         );
       case Ok():
         break;

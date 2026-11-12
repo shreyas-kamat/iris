@@ -119,7 +119,7 @@ class _QueueTrayState extends State<QueueTray> {
                   const SizedBox(width: IrisSpace.md),
                   Expanded(
                     child: Text(
-                      item.text,
+                      item.shown,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: type.body.copyWith(

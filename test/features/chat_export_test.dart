@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/data/chat/chat_models.dart';
+import 'package:iris/data/genui/genui_models.dart';
 import 'package:iris/features/chat/chat_export.dart';
 
 void main() {
@@ -20,6 +21,23 @@ void main() {
         UserTurn(id: '1', text: 'See these', attachments: ['a.png', 'b.pdf']),
       ]);
       expect(text, contains('_Attached: a.png, b.pdf_'));
+    });
+
+    test('a display exports its fallback text, never its program', () {
+      final text = transcriptMarkdown('t', const [
+        UserTurn(id: '1', text: 'Status?'),
+        UiSurfaceItem(
+          id: 'a',
+          ref: UiSurfaceRef(
+            surfaceId: 'deploy-status',
+            code: 'root = Text("secret program")',
+            fallback: 'Deploy status: api ok, web slow.',
+          ),
+        ),
+      ]);
+      expect(text, contains('Deploy status: api ok, web slow.'));
+      expect(text, isNot(contains('root =')));
+      expect(text, isNot(contains('secret program')));
     });
 
     test('a tool call becomes one quoted line, a failed one says so', () {

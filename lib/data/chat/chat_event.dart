@@ -7,6 +7,7 @@
 library;
 
 import '../../core/json.dart';
+import '../genui/genui_parser.dart';
 import '../rpc/rpc_frame.dart';
 import 'chat_models.dart';
 import 'connection_models.dart';
@@ -59,20 +60,29 @@ sealed class ChatEvent {
           reasoning: payload['reasoning'].stringOrNull,
         );
       case 'tool.start' || 'tool_call':
+        final toolName =
+            HistoryParser.firstText(payload, const ['name', 'tool_name']) ??
+            'tool';
+        // Hermes sends a short `context` preview next to the full `args`. A
+        // generated display needs the arguments themselves (3.7 live check),
+        // so for those calls they win; every other tool keeps the preview.
+        final wantsArgs = GenUiParser.mayBeSurface(toolName);
         return ToolStarted(
           session,
           toolId: HistoryParser.firstText(payload, _toolIdKeys),
-          name:
-              HistoryParser.firstText(payload, const ['name', 'tool_name']) ??
-              'tool',
+          name: toolName,
           input: _text(
-            payload.any(const [
-              'args_text',
-              'context',
-              'input',
-              'arguments',
-              'args',
-            ]),
+            payload.any(
+              wantsArgs
+                  ? const ['args', 'arguments', 'input', 'args_text', 'context']
+                  : const [
+                      'args_text',
+                      'context',
+                      'input',
+                      'arguments',
+                      'args',
+                    ],
+            ),
           ),
         );
       case 'tool.complete' || 'tool_result':

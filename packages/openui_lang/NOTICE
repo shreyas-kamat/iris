@@ -1,0 +1,9 @@
+The files under test/fixtures/ are the OpenUI 1.0 conformance fixtures from
+https://github.com/thesysdev/openui, spec/fixtures/1.0/, at commit
+eea983e31730677f794f3873e4ee9efa03e065eb. They are MIT licensed, copyright (c) Thesys Inc.;
+the licence text is test/fixtures/LICENSE. Re-syncing them is a deliberate task.
+
+The prompt goldens under test/golden/prompt/ were written by OpenUI's TypeScript system-prompt
+generator at the same commit (eea983e), and the evaluator follows its lang-core runtime where
+the 1.0 spec is silent. Both are MIT licensed, copyright (c) Thesys Inc. This package is a Dart
+implementation of that language; it does not include OpenUI's source code.

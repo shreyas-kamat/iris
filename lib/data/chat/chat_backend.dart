@@ -15,6 +15,9 @@ import 'dart:typed_data';
 import '../../core/failure.dart';
 import '../../core/json.dart';
 import '../../core/result.dart';
+import '../genui/genui_api.dart';
+import '../genui/genui_controller.dart';
+import '../genui/genui_models.dart';
 import '../rpc/dashboard_session.dart';
 import '../rpc/rpc_frame.dart';
 import 'attachment.dart';
@@ -242,10 +245,25 @@ abstract interface class MediaImageBackend {
   Future<Uint8List?> loadMediaImage(String path);
 }
 
-final class DashboardChat implements ChatBackend, MediaImageBackend {
-  DashboardChat(this._session, {this.profile = 'default'})
-    : _live = _session.state.phase == LinkPhase.live,
-      _everLive = _session.state.phase == LinkPhase.live {
+/// Optional capability: the displays the hermes-iris plugin stored for a conversation.
+abstract interface class SurfaceBackend {
+  /// What the hermes-iris plugin on this server reports: its version, and the library it draws with.
+  Future<Result<GenUiCapabilities>> genUiCapabilities();
+
+  /// The display [surfaceId] of the stored conversation [storedSessionId], with its program. The plugin addresses
+  /// conversations by their stored id, never the live one.
+  Future<Result<UiSurface>> surface(String storedSessionId, String surfaceId);
+}
+
+final class DashboardChat
+    implements ChatBackend, MediaImageBackend, SurfaceBackend {
+  DashboardChat(
+    this._session, {
+    this.profile = 'default',
+    GenUiController? genUi,
+  }) : _genUi = genUi,
+       _live = _session.state.phase == LinkPhase.live,
+       _everLive = _session.state.phase == LinkPhase.live {
     _linkSubscription = _session.states.listen(_onLink);
     _eventSubscription = _session.events.listen((event) {
       if (ChatEvent.fromEvent(event) case final parsed?) _events.add(parsed);
@@ -279,6 +297,9 @@ final class DashboardChat implements ChatBackend, MediaImageBackend {
 
   final DashboardSession _session;
 
+  /// Turns generated displays on for each conversation this backend attaches to; null leaves them off.
+  final GenUiController? _genUi;
+
   @override
   Future<Uint8List?> loadMediaImage(String path) async {
     final response = await _session.connection.client.get(
@@ -299,6 +320,19 @@ final class DashboardChat implements ChatBackend, MediaImageBackend {
       return null;
     }
   }
+
+  @override
+  Future<Result<GenUiCapabilities>> genUiCapabilities() => DashboardGenUiApi(
+    _session.connection.client,
+    profile: profile,
+  ).capabilities();
+
+  @override
+  Future<Result<UiSurface>> surface(String storedSessionId, String surfaceId) =>
+      DashboardGenUiApi(
+        _session.connection.client,
+        profile: profile,
+      ).surface(storedSessionId, surfaceId);
 
   final _events = StreamController<ChatEvent>.broadcast();
   late final StreamSubscription<RpcEvent> _eventSubscription;
@@ -475,7 +509,7 @@ final class DashboardChat implements ChatBackend, MediaImageBackend {
         'omit_messages': true,
       }),
     );
-    return result.map((json) {
+    final resumed = result.map((json) {
       final pending = <ChatEvent>[];
       // Decisions asked before Iris attached are re-announced here, under
       // their original server request ids.
@@ -513,16 +547,26 @@ final class DashboardChat implements ChatBackend, MediaImageBackend {
         context: UsageParser.context(info),
       );
     });
+    // Idempotent, and a reconnect resumes again, so every attach re-flags.
+    if (resumed.isOk) await _genUi?.flag(storedId);
+    return resumed;
   }
 
   @override
-  Future<Result<NewConversation>> create() async => _newConversation(
-    await _session.call(
-      'session.create',
-      params: _scoped({'cols': 96, 'source': 'desktop'}),
-    ),
-    endpoint: 'session.create',
-  );
+  Future<Result<NewConversation>> create() async {
+    final created = _newConversation(
+      await _session.call(
+        'session.create',
+        params: _scoped({'cols': 96, 'source': 'desktop'}),
+      ),
+      endpoint: 'session.create',
+    );
+    // Flagged before the first turn is sent, so that turn can already draw a display.
+    if (created case Ok(value: final conversation)) {
+      await _genUi?.flag(conversation.storedId);
+    }
+    return created;
+  }
 
   @override
   Future<Result<SubmitOutcome>> submit(

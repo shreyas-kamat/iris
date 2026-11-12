@@ -51,6 +51,12 @@ export function Privacy() {
   may pass that audio on to the speech providers it is set up to use, under their terms. Iris does not keep the audio.
   In a GPT-Live call the audio goes directly between your phone and OpenAI over an encrypted connection, while the
   agent’s work and your conversation history stay on your server. OpenAI’s terms apply to that audio.</p>
+  <p><strong>Generated displays.</strong> If you turn on generated displays in Settings, Iris tells your server which
+  of your chats can show them, and sends back what you do with a display: that you used it, opened it in full,
+  dismissed a reply kit, or marked a display not useful. When you ask Iris to study your work, the agent on your
+  server reads your memory, your chats from the last 90 days, your skills, your scheduled jobs and your task board,
+  and proposes a profile and displays from them. The profile, the displays and the usage counts are kept on your
+  server. None of it is sent to us.</p>
   <p>If you choose to trust a server that uses a self-signed certificate, Iris accepts that certificate for
   that one server only.</p>
 

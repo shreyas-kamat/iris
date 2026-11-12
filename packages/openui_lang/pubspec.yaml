@@ -1,0 +1,11 @@
+name: openui_lang
+description: Pure-Dart implementation of OpenUI Lang 1.0 (lexer, streaming parser, evaluator, prompt generator) for Iris.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.4
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

@@ -1358,5 +1358,6 @@ bool _mentions(ChatState state, String secret) => state.items.any(
     Notice(:final text) => text,
     ToolCall(:final output) => output ?? '',
     PromptRecord(:final title, :final detail) => '$title $detail',
+    UiSurfaceItem(:final ref) => '${ref.code} ${ref.fallback}',
   }.contains(secret),
 );

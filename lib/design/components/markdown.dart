@@ -429,7 +429,13 @@ class _CodeBlockState extends State<_CodeBlock> {
                               style: type.caption.copyWith(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: palette.accent,
+                                // The plain accent is 4.49:1 on the header in
+                                // light mode, a hair under WCAG AA.
+                                color: Color.lerp(
+                                  palette.accent,
+                                  palette.ink,
+                                  0.2,
+                                ),
                               ),
                             ),
                           ],

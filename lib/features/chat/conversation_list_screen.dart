@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/automation_providers.dart';
 import '../../app/device_state.dart';
+import '../../app/genui_providers.dart';
 import '../../app/providers.dart';
 import '../../app/usage.dart';
 import '../../app/voice_providers.dart';
@@ -240,6 +241,7 @@ class _ConversationListScreenState
             onBranched: (childId, record) =>
                 ref.read(branchRecordsProvider).save(childId, record),
             menu: conversation == null ? null : _menuHooks(chat, conversation),
+            signals: ref.watch(signalReporterProvider),
           ),
         ),
       ),
@@ -636,7 +638,7 @@ class _ConversationListScreenState
         onGateway: openGateway,
       ),
     );
-    
+
     final sessions = NotificationListener<ScrollEndNotification>(
       onNotification: _snap,
       child: _ConversationList(

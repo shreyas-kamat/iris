@@ -9,7 +9,10 @@
 /// as a list of parts; both are read.
 library;
 
+import 'dart:convert';
+
 import '../../core/json.dart';
+import '../genui/genui_parser.dart';
 import 'attachment.dart';
 import 'chat_models.dart';
 
@@ -43,7 +46,7 @@ abstract final class HistoryParser {
     final rows = body.isList ? body.list : body['messages'].list;
     final items = <TranscriptItem>[];
     // Tool results name the call they answer; this finds its card.
-    final callAt = <String, int>{};
+    final surfaceCalls = <String>{};
     for (final (index, row) in rows.indexed) {
       // Model-facing scaffolding that Hermes marks as never shown.
       if (row['display_kind'].string().trim() == 'hidden') continue;
@@ -58,7 +61,10 @@ abstract final class HistoryParser {
       final content = visible;
       switch (role) {
         case 'user':
-          final (files, text) = splitReferences(content);
+          // A tap on a generated display sends the person's words plus a hidden envelope; only the words show.
+          final (files, text) = splitReferences(
+            IrisActionEnvelope.strip(content),
+          );
           if (text.trim().isNotEmpty || files.isNotEmpty) {
             items.add(
               UserTurn(
@@ -83,26 +89,63 @@ abstract final class HistoryParser {
             final callId =
                 firstText(call, const ['id', 'call_id']) ?? '$id-call-$n';
             final function = call['function'];
-            callAt[callId] = items.length;
-            items.add(
-              ToolCall(
-                id: callId,
-                name:
-                    firstText(function, const ['name']) ??
-                    firstText(call, const ['name']) ??
-                    'tool',
-                arguments:
-                    function['arguments'].stringOrNull ??
-                    call['arguments'].stringOrNull,
-              ),
-            );
+            final name =
+                firstText(function, const ['name']) ??
+                firstText(call, const ['name']) ??
+                'tool';
+            final arguments =
+                function['arguments'].stringOrNull ??
+                call['arguments'].stringOrNull;
+            final ref = GenUiParser.surfaceRef(name: name, input: arguments);
+            if (ref != null) {
+              // A generated display: drawn natively, not as a tool card. A later mention of the same display
+              // replaces this one, and a delete removes it.
+              surfaceCalls.add(callId);
+              final next = ref.deleted
+                  ? UiSurfaceItem.remove(items, ref.surfaceId)
+                  : UiSurfaceItem.add(
+                      items,
+                      UiSurfaceItem(id: callId, ref: ref),
+                    );
+              items
+                ..clear()
+                ..addAll(next);
+              continue;
+            }
+            items.add(ToolCall(id: callId, name: name, arguments: arguments));
           }
         case 'tool':
           final callId = firstText(row, const ['tool_call_id', 'call_id']);
-          final at = callId == null ? null : callAt[callId];
-          final matched = at == null ? null : items[at];
-          if (at != null && matched is ToolCall) {
+          final at = callId == null
+              ? -1
+              : items.indexWhere(
+                  (item) => item is UiSurfaceItem
+                      ? item.callId == callId
+                      : item.id == callId,
+                );
+          final matched = at < 0 ? null : items[at];
+          if (matched is ToolCall) {
             items[at] = matched.copyWith(output: content);
+          } else if (matched is UiSurfaceItem) {
+            final answered = GenUiParser.surfaceRef(
+              name: GenUiParser.toolName,
+              input: jsonEncode({'surface_id': matched.ref.surfaceId}),
+              output: content,
+            );
+            if (answered?.accepted == false) {
+              // The plugin refused it: the version it replaced comes back, if there was one, and the failed call
+              // is shown either way.
+              items
+                ..removeAt(at)
+                ..insertAll(at, matched.refused(content));
+            } else if (answered != null) {
+              items[at] = matched.answered(
+                accepted: answered.accepted,
+                rev: answered.rev,
+              );
+            }
+          } else if (callId != null && surfaceCalls.contains(callId)) {
+            // The answer to a display that a later one replaced or deleted.
           } else {
             items.add(
               ToolCall(

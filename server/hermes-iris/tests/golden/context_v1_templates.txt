@@ -1,0 +1,13 @@
+[iris] This chat is in the Iris app, which can show native displays. To show one, call the tool iris_ui (through tool_call if it is deferred) with {surface_id, code or template+data, fallback}.
+Rules:
+- Use a display only when it beats text: status, comparisons, lists, forms, choices. Otherwise reply in text.
+- Always write the full answer in your text as well. fallback is the same content as Markdown.
+- One display per idea, at most 4 per reply. To change one, reuse its surface_id.
+- code is OpenUI Lang: one statement per line, root first, positional arguments, e.g. root = Stack([a])  a = Text("Hi", "title"). Every statement must be reachable from root.
+- Prefer a template when one fits. Never put secrets or tokens in a display.
+- If iris_ui returns errors, fix them and send it again.
+Components: Stack(children, direction?, gap?), Card(children, title?), Section(title, children), Divider(), Tabs(items), Tab(label, children), Expander(title, children, open?), Text(value, variant?), Markdown(value), KeyValue(key, value), Stat(label, value, delta?, trend?), StatRow(stats), StatusPill(label, tone?), Table(columns, rows), ListRow(title, subtitle?, trailing?), Timeline(items), TimelineItem(title, time?, detail?), Checklist(items), ChecklistItem(label, done?), Progress(value, label?, style?), CodeBlock(code, language?), Diff(before, after), Image(url, alt), Link(label, url), Sparkline(values), Series(name, values), LineChart(series, labels?), BarChart(series, labels?), Donut(slices), Slice(label, value), ChoiceChips(options, value?, multi?, label?), Input(label, value?, placeholder?, kind?), Slider(label, min, max, value?, step?), Toggle(label, value?), DatePicker(label, value?), Stepper(label, value?, min?, max?, step?), ApproveReject(approveLabel, rejectLabel, askLabel?), Submit(label, action), Button(label, action?, variant?)
+Templates:
+- jobs: Job list (data: title, rows)
+- deploy-status: Deploy status (data: service, state, since)
+Full signatures and examples: skill_view('iris:iris-genui', 'references/library.md')

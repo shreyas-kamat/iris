@@ -12,6 +12,7 @@ import '../../core/result.dart';
 import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
+import '../../data/genui/signals.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/media_image.dart';
@@ -25,6 +26,8 @@ import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
 import '../../design/tokens/motion.dart';
 import '../../design/tokens/palette.dart';
+import '../genui/reply_kit.dart';
+import '../genui/surface_block.dart';
 import '../voice/mic_permission_sheet.dart';
 import '../voice/voice_call.dart';
 import '../voice/voice_call_screen.dart';
@@ -100,6 +103,7 @@ class ChatScreen extends StatefulWidget {
     this.onBranched,
     this.menu,
     this.shareMarkdown,
+    this.signals,
     super.key,
   });
 
@@ -129,6 +133,9 @@ class ChatScreen extends StatefulWidget {
   /// share sheet.
   final ShareMarkdown? shareMarkdown;
 
+  /// Where signals about generated displays go; null where nothing learns from them.
+  final SignalReporter? signals;
+
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
   final String? title;
@@ -148,6 +155,28 @@ class _ChatScreenState extends State<ChatScreen> {
   MediaImageLoader? get _loadMediaImage => widget.backend is MediaImageBackend
       ? (widget.backend as MediaImageBackend).loadMediaImage
       : null;
+
+  /// Fetches a generated display's stored program, for the conversation that is open. Null when the backend cannot.
+  SurfaceLoader? get _loadSurface => widget.backend is SurfaceBackend
+      ? (surfaceId) async {
+          final stored = _chat.conversationId;
+          if (stored == null) return null;
+          return (await (widget.backend as SurfaceBackend).surface(
+            stored,
+            surfaceId,
+          )).valueOrNull;
+        }
+      : null;
+
+  /// Passes a display's signal on with the stored conversation it happened in. Null when nothing listens.
+  SignalSink? get _signal => widget.signals == null
+      ? null
+      : (signal, {surface, template}) => widget.signals?.record(
+          signal,
+          surface: surface,
+          template: template,
+          session: _chat.conversationId,
+        );
 
   late final ChatController _chat = ChatController(
     widget.backend,
@@ -169,6 +198,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _chat.onBranchRequested = () => unawaited(_branch());
     _chat.onPromptReturned = _prefill;
     _text.addListener(_watchForSlash);
+    _text.addListener(_clearKitOnTyping);
     unawaited(_chat.open());
   }
 
@@ -184,6 +214,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _text.removeListener(_watchForSlash);
+    _text.removeListener(_clearKitOnTyping);
     _clock?.cancel();
     _missedTimer?.cancel();
     unawaited(_recorder.cancel());
@@ -260,6 +291,7 @@ class _ChatScreenState extends State<ChatScreen> {
             pickFiles: widget.pickFiles,
             recorder: widget.recorder,
             shareMarkdown: widget.shareMarkdown,
+            signals: widget.signals,
           ),
         ),
       ),
@@ -302,6 +334,7 @@ class _ChatScreenState extends State<ChatScreen> {
               pickFiles: widget.pickFiles,
               recorder: widget.recorder,
               shareMarkdown: widget.shareMarkdown,
+              signals: widget.signals,
             ),
           ),
         );
@@ -404,6 +437,52 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
     return null;
+  }
+
+  /// Reply kits the person has dismissed, tapped or typed past. A kit the assistant updates has a new key and returns.
+  final _dismissedKits = <String>{};
+
+  /// The kit to show: the newest one, while nothing is running and the person has not put it away.
+  UiSurfaceItem? _replyKitFor(ChatState state) {
+    if (state.running) return null;
+    final kit = currentReplyKit(state.items);
+    return kit == null || _dismissedKits.contains(replyKitKey(kit))
+        ? null
+        : kit;
+  }
+
+  /// The reply kit docked above the composer, if there is one to show.
+  Widget _kitDock(BuildContext context, ChatState state) {
+    final kit = _replyKitFor(state);
+    return IrisAnimatedSize(
+      alignment: Alignment.bottomCenter,
+      child: kit == null
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.window.gutter,
+                IrisSpace.sm,
+                context.window.gutter,
+                0,
+              ),
+              child: ReplyKitDock(
+                key: ValueKey(replyKitKey(kit)),
+                item: kit,
+                loadSurface: _loadSurface,
+                onUiAction: (text, action) =>
+                    unawaited(_chat.sendUiAction(text, action)),
+                onSignal: _signal,
+                onDismiss: () =>
+                    setState(() => _dismissedKits.add(replyKitKey(kit))),
+              ),
+            ),
+    );
+  }
+
+  void _clearKitOnTyping() {
+    if (_text.text.isEmpty || !mounted) return;
+    final kit = _replyKitFor(_chat.value);
+    if (kit != null) setState(() => _dismissedKits.add(replyKitKey(kit)));
   }
 
   /// The command catalogue is read the first time the person types a slash.
@@ -730,6 +809,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
           ),
+          _kitDock(context, state),
           Composer(
             controller: _text,
             running: state.running,
@@ -932,6 +1012,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     TranscriptEntry(
                       item,
                       loadMediaImage: _loadMediaImage,
+                      loadSurface: _loadSurface,
+                      onUiAction: (text, action) =>
+                          unawaited(_chat.sendUiAction(text, action)),
+                      onSignal: _signal,
                       live: live,
                       onRetry: _chat.isLive && !state.running
                           ? () => unawaited(_chat.retry())

@@ -7,6 +7,9 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../genui/genui_models.dart';
+import '../genui/genui_parser.dart';
+
 /// One row of the conversation list.
 @immutable
 final class ConversationSummary {
@@ -88,7 +91,12 @@ final class QueuedMessage {
   const QueuedMessage({required this.id, required this.text});
 
   final String id;
+
+  /// What is sent: a message from a display carries its hidden `<iris-action>` block here.
   final String text;
+
+  /// What the person reads: [text] without that block.
+  String get shown => IrisActionEnvelope.strip(text);
 }
 
 /// Something the agent said, possibly still arriving.
@@ -155,6 +163,101 @@ final class ToolCall extends TranscriptItem {
     output: output ?? this.output,
     status: status ?? this.status,
   );
+}
+
+/// A native display the agent made with the `iris_ui` tool. Drawn from the program in [ref] when the call carried it
+/// whole, otherwise from the stored surface, fetched by id.
+///
+/// One display is one item, wherever the conversation has got to: a later call on the same id updates it **in place**.
+/// It keeps the [id] of the call that first showed it, so its widget (and what the person typed into it) survives the
+/// update, while [callId] follows the latest call so that call's answer finds it.
+final class UiSurfaceItem extends TranscriptItem {
+  const UiSurfaceItem({
+    required String id,
+    required this.ref,
+    String? callId,
+    this.updated = false,
+    this.previous,
+  }) : _callId = callId,
+       super(id);
+
+  final UiSurfaceRef ref;
+
+  /// The latest call that wrote this display; its answer (`rev`, or a refusal) belongs here.
+  String get callId => _callId ?? id;
+  final String? _callId;
+
+  /// A later call replaced an earlier version of this display in this conversation.
+  final bool updated;
+
+  /// The version this one replaced, kept so that a refused update can put it back.
+  final UiSurfaceRef? previous;
+
+  /// Whether to tag it "Updated": it replaced an earlier version, or the plugin says it is past its first revision.
+  bool get isUpdated => updated || (ref.rev ?? 1) > 1;
+
+  /// A later mention of a display already in [items] replaces it where it stands; a new one goes at the end.
+  static List<TranscriptItem> add(
+    List<TranscriptItem> items,
+    UiSurfaceItem item,
+  ) {
+    bool same(TranscriptItem other) =>
+        other is UiSurfaceItem && other.ref.surfaceId == item.ref.surfaceId;
+    final at = items.indexWhere(same);
+    if (at < 0) return [...items, item];
+    final old = items[at] as UiSurfaceItem;
+    final merged = UiSurfaceItem(
+      id: old.id,
+      callId: item.id,
+      ref: item.ref,
+      updated: true,
+      previous: old.ref,
+    );
+    // A reply kit is an offer for the next turn: sent again, it goes to the end so it can dock below whatever the
+    // person said in between. Any other display stays where it first appeared.
+    if (item.ref.placement == SurfacePlacement.replyKit) {
+      return [
+        for (final other in items)
+          if (!same(other)) other,
+        merged,
+      ];
+    }
+    return [
+      for (var i = 0; i < items.length; i++)
+        if (i == at) merged else if (!same(items[i])) items[i],
+    ];
+  }
+
+  /// This display with the answer to its latest call recorded.
+  UiSurfaceItem answered({bool? accepted, int? rev}) => UiSurfaceItem(
+    id: id,
+    callId: callId,
+    ref: ref.copyWith(accepted: accepted, rev: rev),
+    updated: updated,
+    previous: previous,
+  );
+
+  /// What a refusal of this display's latest call leaves: the version it replaced, if there was one, followed by a
+  /// failed card for the call; otherwise just the failed card.
+  List<TranscriptItem> refused(String? output) {
+    final card = ToolCall(
+      id: callId,
+      name: GenUiParser.toolName,
+      output: output,
+      status: ToolStatus.failed,
+    );
+    final back = previous;
+    return back == null ? [card] : [UiSurfaceItem(id: id, ref: back), card];
+  }
+
+  /// [items] without the display named [surfaceId].
+  static List<TranscriptItem> remove(
+    List<TranscriptItem> items,
+    String surfaceId,
+  ) => [
+    for (final other in items)
+      if (!(other is UiSurfaceItem && other.ref.surfaceId == surfaceId)) other,
+  ];
 }
 
 /// A line that is not a turn: an error, a stop.

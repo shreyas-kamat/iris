@@ -32,6 +32,10 @@ String transcriptMarkdown(String title, List<TranscriptItem> items) {
     } else if (item is AssistantTurn) {
       if (item.text.trim().isEmpty) continue;
       out.write('\n## Hermes\n\n${item.text.trim()}\n');
+    } else if (item is UiSurfaceItem) {
+      // A display is drawn only in Iris; the export carries the same content as the Markdown the agent wrote for it.
+      final text = item.ref.fallback?.trim();
+      if (text != null && text.isNotEmpty) out.write('\n$text\n');
     } else if (item is ToolCall) {
       final verb = item.status == ToolStatus.failed ? 'Tool failed' : 'Ran';
       out.write('\n> $verb: `${item.name}`\n');

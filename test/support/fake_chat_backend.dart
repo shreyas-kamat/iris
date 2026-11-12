@@ -12,11 +12,39 @@ import 'package:iris/data/chat/chat_backend.dart';
 import 'package:iris/data/chat/chat_event.dart';
 import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/chat/connection_models.dart';
+import 'package:iris/data/genui/genui_models.dart';
 
-final class FakeChatBackend implements ChatBackend {
+final class FakeChatBackend implements ChatBackend, SurfaceBackend {
   final _events = StreamController<ChatEvent>.broadcast();
   final _reconnects = StreamController<void>.broadcast();
   final _live = StreamController<bool>.broadcast();
+
+  /// The generated displays the plugin has stored, by id.
+  final surfaces = <String, UiSurface>{};
+
+  /// What the plugin reports; not found when it is not installed.
+  Result<GenUiCapabilities> genUiCapabilitiesResult = const Err(
+    IrisFailure(FailureKind.notFound),
+  );
+
+  @override
+  Future<Result<GenUiCapabilities>> genUiCapabilities() async =>
+      genUiCapabilitiesResult;
+
+  /// Every display asked for, as `<stored id>/<surface id>`.
+  final surfacesFetched = <String>[];
+
+  @override
+  Future<Result<UiSurface>> surface(
+    String storedSessionId,
+    String surfaceId,
+  ) async {
+    surfacesFetched.add('$storedSessionId/$surfaceId');
+    final found = surfaces[surfaceId];
+    return found == null
+        ? const Err(IrisFailure(FailureKind.notFound))
+        : Ok(found);
+  }
 
   Result<List<ConversationSummary>> conversationsResult = const Ok([]);
 

@@ -251,11 +251,13 @@ final class ApiClient {
       );
     }
     // FastAPI reports errors as `detail`; older endpoints use `error` or
-    // `message`.
+    // `message`; the hermes-iris plugin answers a refusal with `errors`, one
+    // line each, and the first is the one to fix.
     final message =
         body?['error'].stringOrNull ??
         body?['message'].stringOrNull ??
-        body?['detail'].stringOrNull;
+        body?['detail'].stringOrNull ??
+        body?['errors'].list.firstOrNull?.stringOrNull;
     final kind = switch (status) {
       401 || 403 => FailureKind.unauthorized,
       404 => FailureKind.notFound,
