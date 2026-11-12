@@ -486,3 +486,7 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Left on the server: the approved profile and 4 kept displays from this test, plus the "Iris setup" chat. The user can retire them in Displays.
 - Still open in G9: refine proposals ("changes" review; needs usage and a refine run), the user's TalkBack results, iOS and VoiceOver (no device), the unexplained first-`deploy-next-step` case. Full `flutter test --exclude-tags live` not re-run after this fix (only the genui folder).
 - Next: user decides: refine check, TalkBack results, or close G9.
+
+### G9 — full suite after the Back fix — 2026-11-13 — Sonnet 5.5
+- Verified: `flutter test --exclude-tags live -j 2` -> 1,769 pass, 4 skipped, 0 failed ("All tests passed!"); was 1,766, plus the 3 new Back tests.
+- Still open in G9: the user's TalkBack results, refine proposals check, iOS and VoiceOver (no device), the unexplained first-`deploy-next-step` case.
