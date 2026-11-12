@@ -16,7 +16,7 @@ newest last. Models are the minimum; a higher one is fine.
 | G6 | Phase 4: actions, inputs, reply kits | Sonnet | done | `95c9350` |
 | G7 | Phases 5–6: study, Displays, learning loop | Sonnet | done | `ed515c8` |
 | G8 | 7.1, 7.2, 7.5: demo, export/search, docs | Haiku | done | `9f6b719` |
-| G9 | 7.3, 7.4: accessibility and device pass | Sonnet | doing | `7bb3825` |
+| G9 | 7.3, 7.4: accessibility and device pass | Sonnet | done | `da9be8e` |
 | G10 | 7.6 final review, release, PR | Opus | todo | |
 | 9.2 | **Push notifications** (`feat/push`) | | | |
 | P-spec | Brainstorm and design | Opus | todo | |
@@ -490,3 +490,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 ### G9 — full suite after the Back fix — 2026-11-13 — Sonnet 5.5
 - Verified: `flutter test --exclude-tags live -j 2` -> 1,769 pass, 4 skipped, 0 failed ("All tests passed!"); was 1,766, plus the 3 new Back tests.
 - Still open in G9: the user's TalkBack results, refine proposals check, iOS and VoiceOver (no device), the unexplained first-`deploy-next-step` case.
+
+### G9 — 7.3, 7.4 — done — 2026-11-13 — Sonnet 5.5
+- Commits: 7bb3825 accessibility test pass (7.3); 5496fd3 StatRow and reply-kit fixes; da9be8e Back hang fix; docs: 823fa19 and earlier.
+- Verified: see the entries above. Phone (Moto G45, Android 14, plugin 0.3.0): displays, update in place, hidden action block, reply kit docking, StatRow at 320 dp, weekly switch, Study, Review (Keep all), Displays, Back. `flutter test --exclude-tags live -j 2` -> 1,769 pass, 4 skipped; `flutter analyze` -> the 3 pre-existing infos only.
+- **Known gaps carried to G10 (deliberate, by the user):** (1) **TalkBack pass deferred by the user**: the checklist is `2026-10-31-genui-device/README.md`; TalkBack is installed on the phone but was hidden from its Settings menu, and was enabled and then switched off again over adb on 2026-11-13 (the other accessibility service on the phone was left as it was). (2) iOS and VoiceOver: no device. (3) Refine proposals ("changes" review) not checked on a device; needs usage and a refine run; covered by tests and goldens only. (4) The first `deploy-next-step` kit that did not dock is unexplained; the reused-id fix is verified. (5) The server still holds the approved profile, 4 kept displays and the "Iris setup" chat from the Study test, plus the throwaway chats from earlier.
+- Deviations: the plan's screen-reader pass (7.3/7.4) was not done on either platform.
+- segment G9 complete. Next: G10 (Opus), 7.6 final review, release (tag `hermes-iris-v0.1.0`) and PR. Do not push or open the PR until the user says so.
