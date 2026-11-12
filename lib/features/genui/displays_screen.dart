@@ -158,7 +158,6 @@ class _DisplaysScreenState extends ConsumerState<DisplaysScreen> {
     final type = context.type;
     final nothing = !_loading && _profile == null && _approved.isEmpty;
     return IrisScaffold(
-      onBack: () => unawaited(Navigator.of(context).maybePop()),
       header: Padding(
         padding: EdgeInsets.fromLTRB(
           gutter,

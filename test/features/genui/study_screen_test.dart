@@ -177,4 +177,18 @@ void main() {
     expect(find.widgetWithText(IrisButton, 'Study my work'), findsOneWidget);
     await leave(tester);
   });
+
+  testWidgets('leaving does not loop: the screen lets Back pop it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(screen());
+    await tester.pump();
+    final scopes = tester.widgetList<PopScope<Object?>>(
+      find.descendant(of: find.byType(StudyScreen), matching: find.byWidgetPredicate((w) => w is PopScope)),
+    );
+    expect(scopes, isNotEmpty);
+    // A screen that sets onBack to maybePop makes canPop false, and maybePop then calls
+    // onBack again without end: the app hangs on the UI thread.
+    expect(scopes.every((s) => s.canPop), isTrue);
+  });
 }

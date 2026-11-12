@@ -175,7 +175,6 @@ class _StudyReviewScreenState extends ConsumerState<StudyReviewScreen> {
     final hasNew = _profile != null || _templates.isNotEmpty;
     final empty = !_loading && !hasNew && _changes.isEmpty;
     return IrisScaffold(
-      onBack: () => unawaited(Navigator.of(context).maybePop()),
       header: Padding(
         padding: EdgeInsets.fromLTRB(
           gutter,

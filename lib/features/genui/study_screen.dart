@@ -85,7 +85,6 @@ class _StudyScreenState extends ConsumerState<StudyScreen> {
     final gutter = context.window.gutter;
     final theme = context.iris;
     return IrisScaffold(
-      onBack: () => unawaited(Navigator.of(context).maybePop()),
       header: Padding(
         padding: EdgeInsets.fromLTRB(
           gutter,
