@@ -8,6 +8,7 @@ in Phase 0.2), so none checks credentials, and every one takes ``?profile=``.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -45,7 +46,13 @@ feedback = importlib.import_module(f"{_PACKAGE}.genui.feedback")
 devices_mod = importlib.import_module(f"{_PACKAGE}.push.devices")
 active_mod = importlib.import_module(f"{_PACKAGE}.push.active")
 stream_mod = importlib.import_module(f"{_PACKAGE}.push.stream")
+apns_mod = importlib.import_module(f"{_PACKAGE}.push.apns")
+worker_mod = importlib.import_module(f"{_PACKAGE}.push.worker")
 router = APIRouter()
+
+# The APNs sender runs in this (dashboard) process, once. Tests turn it off with HERMES_IRIS_PUSH_WORKER=0.
+if os.environ.get("HERMES_IRIS_PUSH_WORKER", "1") != "0":
+    worker_mod.start(paths.iris_root())
 
 
 def _profile_store(profile: str | None):
@@ -275,5 +282,21 @@ async def push_stream(device_id: str, after: str | None = None, profile: str | N
 
 @router.get("/push/status")
 def push_status(profile: str | None = None):
-    apns_json = paths.iris_root() / "push" / "apns.json"
-    return {"ok": True, "apns_configured": apns_json.is_file(), "devices": len(_devices(profile).all())}
+    configured = apns_mod.load_config(paths.iris_root()) is not None and apns_mod.available()
+    return {"ok": True, "apns_configured": configured, "devices": len(_devices(profile).all())}
+
+
+@router.post("/push/test/{device_id}")
+def push_test(device_id: str, profile: str | None = None):
+    """Sends one test notification, titled with the device's own reply text, to a registered iPhone."""
+    device = _devices(profile).get(_device_id(device_id))
+    if device is None or device.get("platform") != "ios" or not device.get("apns_token"):
+        raise HTTPException(status_code=404, detail="no such iOS device")
+    cfg = apns_mod.load_config(paths.iris_root())
+    if cfg is None:
+        raise HTTPException(status_code=503, detail="APNs is not configured on this server")
+    text = ((device.get("settings") or {}).get("reply") or {}).get("text") or devices_mod.DEFAULT_TEXT
+    notice = {"event_id": "test", "kind": "test", "session_id": None, "title": text,
+              "body": "Test notification from Iris", "category": None, "collapse": "test"}
+    result = apns_mod.send(cfg, device["apns_token"], notice)
+    return {"ok": result == "ok", "result": result}
