@@ -22,7 +22,7 @@ newest last. Models are the minimum; a higher one is fine.
 | P-spec | Brainstorm and design | Opus | done | `57f5882` |
 | P-plan | Implementation plan with segment table | Opus | done | see journal |
 | PS1 | Task 1: live probe (hooks, approval answering) | Opus | done | `7296630` |
-| PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | doing | |
+| PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | done | `75c0113` |
 | PS3 | Task 6: APNs sender and worker | Opus | todo | |
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | todo | |
 | PS5 | Tasks 9–10: Android service, iOS native | Opus | todo | |
@@ -577,3 +577,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Verified: `tests/test_push_devices.py` red first (no module, no `push_dir`), then 13 pass; `server/hermes-iris/.venv/Scripts/python -m pytest` -> 408 pass, 1 skipped.
 - Deviations: (1) `PATCH push/devices/<id>/settings` merges per event onto the stored settings (partial updates keep the rest); `PUT` replaces via `normalize_settings`. (2) `apns_configured` is for now "`<iris root>/push/apns.json` exists"; Task 6 replaces it with `apns.load_config`. (3) Settings JSON shape: `{"reply": {"on","text","mode"}, "approval": {...}, "job": {...}}`.
 - Next: Task 3 active chats, outbox, rendering.
+
+### PS2 — Tasks 3–5 — done — 2026-11-13 — Sonnet 5.5
+- Commits: 67fbea2 active chats, event outbox and per-device rendering; 8fe5186 capture reply, approval and job events from Hermes hooks; 75c0113 event stream for Android devices with short replay
+- Verified: each task's tests were red first (missing modules), then green. `server/hermes-iris/.venv/Scripts/python -m pytest` -> 478 pass, 2 skipped (POSIX file modes); `tools/build_skill_refs.py --check` clean (exit 0). Not run: a real Hermes (no hook, route or stream was exercised live; that waits for the PS6 device pass). Tests for hooks use the kwargs recorded in the probe, and the approval hook kwargs (`command, description, pattern_key, pattern_keys, session_key, surface`, `coalesced` on followers) were read from hermes-agent `tools/approval*.py` in an earlier scratchpad.
+- Deviations: (1) A third job outcome, `failed` (render: "<name> failed"), for a cron run with `failed` or not `completed`; the plan had only completed/no_output and the hook cannot tell no-output. (2) Interrupted turns clear the active mark and emit nothing; a chat closing (no turn_id) leaves the mark. (3) A brand-new stream (no `after`) starts from the latest event, no replay; a reconnect with a cursor replays up to 15 min. The stream ends if its device is removed. (4) Chat titles: `hooks.title_for` is a stub returning None (no verified Hermes session-title API), so notices use the person's own text and `content` replies fall back to the preview. (5) `approval_done` is emitted only for chats this process announced an approval for (in-memory, cap 50); coalesced follower asks are ignored. (6) Outbox trimming is a cheap newline count plus first-line age; a trim racing another process's append can lose that one event. (7) `paths.hermes_home()` added for `cron/jobs.json`. (8) The stream polls the files from the event loop once a second (small files; not offloaded to a thread).
+- Decisions for later tasks: notice JSON keys are exactly `event_id, kind, session_id, title, body, category, collapse` (`approval_done`: `event_id, kind, session_id, collapse`). Job session ids look like `cron_<job id>_<date>_<time>`: the app derives the job id from them (the notice carries no job id). Routes added: `PUT/PATCH/DELETE push/devices/{id}[/settings]`, `POST push/active/{session}`, `GET push/stream?device_id=&after=`, `GET push/status`; `capabilities.features` has `push`.
+- segment PS2 complete. Next: PS3 (Opus), Task 6 APNs sender and worker.
