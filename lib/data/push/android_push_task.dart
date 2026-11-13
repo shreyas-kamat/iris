@@ -219,7 +219,19 @@ final class PushNotifier {
   /// The stored id of the chat on screen, sent from the app. Its notices are not shown: the person is looking at it.
   String? foregroundChat;
 
-  Future<void> handle(PushNotice notice) async {
+  Future<void> _last = Future<void>.value();
+
+  /// One notice at a time, in the order they arrived: a post and a cancel for the same tag race on the platform
+  /// channel otherwise, and a reconnect replays an approval and its withdrawal back to back.
+  Future<void> handle(PushNotice notice) {
+    final next = _last.then((_) => _handle(notice));
+    _last = next.catchError((Object error) {
+      _log.warn('a notice failed', data: error.runtimeType);
+    });
+    return next;
+  }
+
+  Future<void> _handle(PushNotice notice) async {
     final tag = notice.collapse ?? '${notice.kind}-${notice.sessionId}';
     if (notice.kind == 'approval_done') {
       await _poster.cancel(notice.collapse ?? 'approval-${notice.sessionId}');

@@ -20,6 +20,22 @@ final class _Poster implements NotificationPoster {
   Future<void> cancel(String tag) async => cancelled.add(tag);
 }
 
+/// Posts after a delay and cancels at once, like the platform channel does.
+final class _SlowPoster implements NotificationPoster {
+  _SlowPoster(this.live);
+
+  final Set<String> live;
+
+  @override
+  Future<void> show(PostedNotice notice) async {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    live.add(notice.tag);
+  }
+
+  @override
+  Future<void> cancel(String tag) async => live.remove(tag);
+}
+
 PushNotice _notice({
   String kind = 'reply',
   String session = 's1',
@@ -99,6 +115,24 @@ void main() {
     );
     expect(poster.cancelled, ['approval-s1']);
     expect(poster.shown, isEmpty);
+  });
+
+  test('a replayed approval and its approval_done leave nothing showing', () async {
+    // show() takes longer than cancel(), as it does on the phone; handled back to back, as a reconnect replays them.
+    final live = <String>{};
+    final slow = _SlowPoster(live);
+    final n = PushNotifier(slow);
+    final approval = _notice(kind: 'approval', body: 'curl x | sh');
+    final done = PushNotice.fromJson({
+      'event_id': '13',
+      'kind': 'approval_done',
+      'session_id': 's1',
+      'collapse': 'approval-s1',
+    })!;
+    final first = n.handle(approval);
+    final second = n.handle(done);
+    await Future.wait([first, second]);
+    expect(live, isEmpty);
   });
 
   test('the chat on screen gets no notification; another chat does', () async {
