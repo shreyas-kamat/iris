@@ -700,3 +700,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 ### PS6 - doing - 2026-11-14 04:00 - Sonnet 5.5
 - The user deferred the rest of the Android device pass. Not run yet, and not passed: open chat not notified (clean run), airplane mode 2 min then reconnect replay, voice call during push, Step 4 screenshots.
 - PS6 stays `doing`, not `done`. Resume with `/phase9` on the Moto G45 (serial ZN4226ZPW5, debug APK from `276e0dc` installed), run those four, then log `segment PS6 complete`. PS7 waits for that.
+
+### PS6 - doing - 2026-11-14 - Opus 5.5
+- Resumed on Opus (higher than Sonnet, allowed). Git matches the log (HEAD `5868719`). Moto G45 connected; service up, "Iris is connected"; earlier reply, approval-summary and job notices still in the shade.
+- User's answers for the rest: Claude drives the phone over adb; "a voice call" in Step 2 means Iris voice mode (Phase 8 live voice) during push.
+- "Attention!" as the job notice title is by design ("Only my text" mode swaps the title for a generic phrase), not a defect.
+- The user deferred the remaining four checks again (phone was in a call). Not run: open chat not notified, airplane mode 2 min then replay, Iris voice mode during push, Step 4 screenshots.
+- Next: on the user's go-ahead with the phone free, run those four over adb, then log `segment PS6 complete`. PS7 waits for that.
