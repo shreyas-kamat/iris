@@ -21,7 +21,7 @@ newest last. Models are the minimum; a higher one is fine.
 | 9.2 | **Push notifications** (`feat/push`) | | | |
 | P-spec | Brainstorm and design | Opus | done | `57f5882` |
 | P-plan | Implementation plan with segment table | Opus | done | see journal |
-| PS1 | Task 1: live probe (hooks, approval answering) | Opus | doing | |
+| PS1 | Task 1: live probe (hooks, approval answering) | Opus | done | `7296630` |
 | PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | todo | |
 | PS3 | Task 6: APNs sender and worker | Opus | todo | |
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | todo | |
@@ -563,3 +563,7 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Findings in `docs/superpowers/plans/2026-11-13-push-probe.md`. Task 4 keeps `on_session_end` (ignore rows without `turn_id`) and must skip `surface == "smart"`.
 - Probe removal on the server was refused by the auto-mode classifier; the user runs `remove-probe.ps1` from the scratchpad. Waiting on the user's h2/curl call (Task 1 Step 7).
 - User chose **system `curl`** for APNs HTTP/2. Plan amended: Task 4 (preview from `post_llm_call` by `turn_id`, ignore `on_session_end` without `turn_id`, skip `surface == "smart"`, cron name from `jobs.json`, new tests) and Task 6 (`curl --http2 -K -` via stdin config, nothing secret in argv). First `remove-probe.ps1` run failed: Git Bash put Git's ssh first, which has no key; script now calls `%SystemRoot%\System32\OpenSSH\ssh.exe`. PS1 completes once the user's rerun shows `probe lines left: 0` and `active`.
+
+### PS1 — done — 2026-11-13 — Opus 5.5
+- User reran `remove-probe.ps1`: `probe lines left: 0`, dashboard `active`. Server plugin is back to the backup (`/root/iris-init.py.bak` kept); `push_probe.py` and `probe-push.jsonl` deleted. Findings `7296630`, plan amendments `50ccec3`.
+- **segment PS1 complete.** Next: PS2 (Tasks 2–5) on Sonnet.
