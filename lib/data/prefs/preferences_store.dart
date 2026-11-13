@@ -71,6 +71,10 @@ abstract final class PreferenceKeys {
   /// Per `<server>/<profile>`: the wording and switches per event, as JSON.
   static const pushSettings = 'push.settings';
 
+  /// Per server: `true` once the plugin offer was shown and left (installed or
+  /// "Not now"), so it never comes back by itself.
+  static const pluginOnboarded = 'plugin.onboarded';
+
   /// Per `<server>/<profile>`: `voiceCalls.<id>` → a JSON list of the voice
   /// calls made in one conversation, oldest first.
   static String voiceCalls(String id) => 'voiceCalls.$id';
