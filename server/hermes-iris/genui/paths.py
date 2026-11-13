@@ -35,3 +35,10 @@ def current_profile() -> str:
         return name or "default"
     except Exception:  # noqa: BLE001 - an older Hermes, or no home: the default profile
         return "default"
+
+
+def hermes_home() -> Path:
+    """The Hermes home this process runs in (a named profile's own home, unlike :func:`hermes_root`)."""
+    from hermes_constants import get_hermes_home
+
+    return Path(get_hermes_home())

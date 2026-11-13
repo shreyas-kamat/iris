@@ -21,6 +21,8 @@ def _body(event: dict[str, Any], kind: str) -> str | None:
         name = event.get("job_name") or event.get("job_id") or "A scheduled job"
         if event.get("outcome") == "no_output":
             return f"{name} produced no output"
+        if event.get("outcome") == "failed":
+            return f"{name} failed"
         return f"{name} finished"
     return None
 

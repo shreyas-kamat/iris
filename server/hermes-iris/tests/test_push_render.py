@@ -130,3 +130,9 @@ def test_unknown_kind_renders_none(plugin):
     from hermes_iris.push.render import notice
 
     assert notice({"id": "1", "kind": "wat", "session_id": SID}, _settings(plugin)) is None
+
+
+def test_job_failed_content(plugin):
+    from hermes_iris.push.render import notice
+
+    assert notice({**JOB, "outcome": "failed"}, _settings(plugin, job="content"))["body"] == "Daily plan failed"
