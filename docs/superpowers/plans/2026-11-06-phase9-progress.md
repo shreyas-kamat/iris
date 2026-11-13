@@ -28,7 +28,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS5 | Tasks 9â€“10: Android service, iOS native (Swift compile deferred to PS6) | Opus | done | `03e98aa` |
 | PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | doing | |
 | PS7 | Task 12: final review, release, PR | Opus | todo | |
-| IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | todo | |
+| IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
 | IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | todo | |
 | IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
@@ -651,3 +651,10 @@ written. Reorder 9.2â€“9.6 here if the user changes the order; 9.1 first and 9.7
 - Spec `a7086fd` (approved by the user), plan `docs/superpowers/plans/2026-11-13-plugin-installer.md`. Extra work the user asked for inside 9.2 on `feat/push`: onboarding screen plus Settings row that installs/updates the hermes-iris plugin through Hermes's own `/api/dashboard/agent-plugins/install` (pinned release SHA, `force`).
 - Order: IN1, IN2, then PS6 (Android only), PS7 (release, tag), then IN3 (live reinstall, needs the tag and the user's yes). PS6 stays `doing`, paused.
 - Next: IN1, Task 1.
+
+### IN1 — Tasks 1-2 — done — 2026-11-13 — Sonnet 5.5
+- Commits: fe97dd1 pinned release and installer; fdc3839 install state, onboarding flag and status providers
+- Verified: tests red first (missing modules), then `flutter test test/data/plugin_installer_test.dart` 18 pass and `test/app/plugin_providers_test.dart` 12 pass; `flutter test --exclude-tags live` -> 1,917 pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos only (after fixing my import order).
+- Deviations: (1) Worked on `feat/push` with this log as the ledger, no worktree or sdd scripts (run book rules). (2) Added seams the plan did not name: `pluginReleaseProvider` and `pluginReprobeProvider` (tests pin a release and count re-probes). (3) A 200 with an `error` field arrives as a rejected failure from `ApiClient`; the installer treats a rejected failure without a status as "show the command". (4) `PluginRelease.current.sha` is empty until Task 5, so `released` is false and onboarding stays hidden. (5) The plugin.yaml guard test checks the release version is not lower than the plugin's (the plugin is still 0.3.0).
+- Decisions for later tasks: `pluginStatusProvider` is loading until the first probe, `PluginAbsent` when the plugin is not confirmed, `PluginInstalled(version, updateTo)` otherwise (`unknown` version offers the update). `pluginInstallProvider` states: `PluginInstallIdle/Installing/Failed(result)/Done(result)`; success also marks the offer seen. `PluginInstallResult` has `ok, error, showCommand, installedVersion, recheckFailed`.
+- segment IN1 complete. Next: IN2 (Sonnet), Task 3 Settings section.
