@@ -29,7 +29,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | doing | |
 | PS7 | Task 12: final review, release, PR | Opus | todo | |
 | IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
-| IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | doing | |
+| IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | done | `3b0e344` |
 | IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
@@ -669,3 +669,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) The group shows only once the status provider has data (hidden while the probe is pending, offline, or in the demo), not with a "Checking..." row: that row appeared in four existing Settings goldens (no live session in tests) and would sit there forever offline. (2) Rows: "Iris plugin" (value Not installed / version), then "Add it to your server" + Install, or "Update available" + "Update to X", or "Up to date". (3) The panel's failure view offers "Copy command" only when the release has a pinned sha (else the command would have no ref) plus "Try again". (4) Two extra goldens: the update state.
 - Decisions for later tasks: `PluginInstallPanel(state:, release:, onRetry:)` in `lib/features/plugin/plugin_install_panel.dart` renders installing / done / failed; Task 4 reuses it. Tests override `pluginStatusProvider`, `pluginInstallerProvider` (real installer on FakeHttp) and `pluginInstallProvider` (a slow fake notifier).
 - Next: Task 4 onboarding screen and host.
+
+### IN2 - Task 4 - done - 2026-11-13 - Sonnet 5.5
+- Commits: 3b0e344 feat(plugin): onboarding screen that installs the plugin
+- Verified: tests red first (screen and host missing), then `flutter test test/features/plugin/plugin_ui_test.dart` 15 pass (8 Settings, 7 onboarding), three runs in a row; `flutter test --exclude-tags live` -> 1,942 pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos only. Six new goldens (`screen_plugin_onboarding{,_installing,_failed}_{light,dark}`) opened: offer dark, installing dark, failed light. Not run: the host in the real app on a phone or against a real server (IN3 and the PS6 device pass).
+- Deviations: (1) The host pushes with `Navigator.of(context)` from inside the home route, not `irisNavigatorKey` (it sits under the same Navigator, so it needs no global key). (2) The install buttons sit in the screen's pinned footer, the panel and rows in the scroll body; after a failure the primary button gives way to the panel's "Try again". (3) Tests wait for an install by polling `pluginInstallProvider` in real time (a fixed 50 ms wait flaked under the full suite). (4) The offer screen and the Settings group both stay hidden until the release has a pinned sha (`PluginRelease.released`), so nothing shows in this build until IN3 fills it in.
+- Decisions for later tasks: IN3 only needs the sha in `plugin_release.dart` (`PluginRelease.current.sha`) and the live reinstall; the guard test compares the version with `plugin.yaml`. With `sha` empty the onboarding never appears and the Settings Install button reports "no released plugin yet" with no command (by design).
+- segment IN2 complete. Next: PS6 (Sonnet), the Android device pass (Task 11 on the Moto G45); needs the user's phone connected. IN3 waits for PS7's release.
