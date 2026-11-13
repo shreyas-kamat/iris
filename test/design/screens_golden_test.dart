@@ -28,6 +28,7 @@ import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/plugin/plugin_installer.dart';
+import 'package:iris/data/plugin/plugin_release.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/palette.dart';
@@ -36,6 +37,7 @@ import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/connection_card.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
+import 'package:iris/features/plugin/plugin_onboarding_screen.dart';
 import 'package:iris/features/profiles/profiles_screen.dart';
 import 'package:iris/features/settings/notifications_settings_screen.dart';
 import 'package:iris/features/settings/plugin_settings_section.dart';
@@ -54,6 +56,23 @@ class _PushOn extends PushEnabled {
   @override
   bool build() => true;
 }
+
+/// An install in a fixed state, so the onboarding screen can be drawn mid-install or after a failure.
+class _InstallIn extends PluginInstall {
+  _InstallIn(this._state);
+  final PluginInstallState _state;
+
+  @override
+  PluginInstallState build() => _state;
+}
+
+const _pinned = PluginRelease(
+  version: '0.4.0',
+  tag: 'hermes-iris-v0.4.0',
+  sha: '0123456789abcdef0123456789abcdef01234567',
+  repo: 'shreyas-kamat/iris',
+  subdir: 'server/hermes-iris',
+);
 
 /// A fixed "now": an evening, so the greeting is deterministic and the
 /// relative times below have a stable reference.
@@ -618,6 +637,36 @@ void main() {
           overrides: [
             ..._sharedOverrides(backend),
             pluginStatusProvider.overrideWithValue(AsyncData(status)),
+          ],
+          name: name,
+        );
+      });
+    }
+
+    for (final (name, state) in [
+      ('plugin_onboarding', const PluginInstallIdle()),
+      ('plugin_onboarding_installing', const PluginInstalling()),
+      (
+        'plugin_onboarding_failed',
+        const PluginInstallFailed(
+          PluginInstallResult.failure(
+            'Your login cannot install plugins.',
+            showCommand: true,
+          ),
+        ),
+      ),
+    ]) {
+      testWidgets('$name, $mode', (tester) async {
+        final backend = FakeChatBackend();
+        addTearDown(backend.close);
+        await capture(
+          tester,
+          screen: const PluginOnboardingScreen(),
+          isDark: isDark,
+          overrides: [
+            ..._sharedOverrides(backend),
+            pluginReleaseProvider.overrideWithValue(_pinned),
+            pluginInstallProvider.overrideWith(() => _InstallIn(state)),
           ],
           name: name,
         );

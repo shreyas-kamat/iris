@@ -11,13 +11,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/plugin_providers.dart';
 import 'package:iris/app/preferences.dart';
 import 'package:iris/app/providers.dart';
+import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/server_config.dart';
 import 'package:iris/data/net/server_connection.dart';
 import 'package:iris/data/plugin/plugin_installer.dart';
 import 'package:iris/data/plugin/plugin_release.dart';
 import 'package:iris/data/prefs/preferences_store.dart';
+import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/demo/demo_mode.dart';
 import 'package:iris/design/components/controls.dart';
+import 'package:iris/features/plugin/plugin_onboarding_host.dart';
+import 'package:iris/features/plugin/plugin_onboarding_screen.dart';
 import 'package:iris/features/settings/plugin_settings_section.dart';
 
 import '../../support/fake_http.dart';
@@ -95,8 +99,26 @@ void main() {
     );
   }
 
+  /// Taps [label] and waits, in real time, until the install has finished one way or the other.
+  Future<void> tapInstall(WidgetTester tester, String label) async {
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.widgetWithText(IrisButton, label));
+      final watch = Stopwatch()..start();
+      while (watch.elapsed < const Duration(seconds: 5)) {
+        final state = container.read(pluginInstallProvider);
+        if (state is PluginInstallDone || state is PluginInstallFailed) break;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    });
+  }
+
   Future<void> settle(WidgetTester tester) async {
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    // A route pushed by the first answer from a provider needs another frame to appear and to finish.
     await tester.pump(const Duration(milliseconds: 400));
   }
 
@@ -176,10 +198,7 @@ void main() {
       await tester.pumpWidget(section());
       await settle(tester);
 
-      await tester.runAsync(() async {
-        await tester.tap(find.widgetWithText(IrisButton, 'Install'));
-        await Future<void>.delayed(const Duration(milliseconds: 50));
-      });
+      await tapInstall(tester, 'Install');
       await settle(tester);
 
       expect(http.to('/api/dashboard/agent-plugins/install'), hasLength(1));
@@ -213,10 +232,7 @@ void main() {
         await tester.pumpWidget(section());
         await settle(tester);
 
-        await tester.runAsync(() async {
-          await tester.tap(find.widgetWithText(IrisButton, 'Install'));
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-        });
+        await tapInstall(tester, 'Install');
         await settle(tester);
 
         expect(find.text(_release.fallbackCommand), findsOneWidget);
@@ -247,6 +263,175 @@ void main() {
       );
       expect(node.flagsCollection.isButton, isTrue);
       handle.dispose();
+    });
+  });
+
+  group('Onboarding', () {
+    late MemoryPreferencesStore store;
+
+    setUp(() => store = MemoryPreferencesStore());
+
+    /// The real chain: probed, live, plugin absent, so the offer is due.
+    Widget app({
+      Widget? home,
+      PluginInstall Function()? install,
+      double textScale = 1,
+      Size size = const Size(390, 844),
+    }) {
+      final connection = ServerConnection.create(_server, adapter: http);
+      addTearDown(connection.close);
+      return ProviderScope(
+        overrides: [
+          preferencesStoreProvider.overrideWithValue(store),
+          demoModeProvider.overrideWithValue(false),
+          activeServerIdProvider.overrideWith(_FixedServer.new),
+          activeServerProvider.overrideWithValue(_server),
+          activeLinkProvider.overrideWith(
+            (ref) => Stream.value(const LinkState(LinkPhase.live)),
+          ),
+          activeCapabilitiesProvider.overrideWith(
+            (ref) => Stream.value(
+              ServerCapabilities(
+                available: const {},
+                probedAt: DateTime(2026, 11, 13),
+              ),
+            ),
+          ),
+          pluginReleaseProvider.overrideWithValue(_release),
+          pluginInstallerProvider.overrideWithValue(
+            PluginInstaller(connection.client, release: _release),
+          ),
+          pluginReprobeProvider.overrideWithValue(() async {}),
+          if (install != null) pluginInstallProvider.overrideWith(install),
+        ],
+        child: themed(
+          MediaQuery(
+            data: MediaQueryData(
+              size: size,
+              textScaler: TextScaler.linear(textScale),
+              disableAnimations: true,
+            ),
+            child:
+                home ??
+                const PluginOnboardingHost(child: Scaffold(body: Text('Home'))),
+          ),
+        ),
+      );
+    }
+
+    testWidgets(
+      'host pushes the screen once when due, and not again after Not now',
+      (tester) async {
+        await tester.pumpWidget(app());
+        await settle(tester);
+        expect(find.byType(PluginOnboardingScreen), findsOneWidget);
+        expect(find.text('Get more from Iris'), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(IrisButton, 'Not now'));
+        await settle(tester);
+        expect(find.byType(PluginOnboardingScreen), findsNothing);
+        expect(find.text('Home'), findsOneWidget);
+
+        // The offer is not due again, so nothing comes back on later rebuilds.
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.byType(PluginOnboardingScreen), findsNothing);
+      },
+    );
+
+    testWidgets('Not now marks the server as seen and pops', (tester) async {
+      await tester.pumpWidget(app());
+      await settle(tester);
+      await tester.tap(find.widgetWithText(IrisButton, 'Not now'));
+      await settle(tester);
+      expect(store.values[('s', PreferenceKeys.pluginOnboarded)], 'true');
+      expect(find.text('Home'), findsOneWidget);
+    });
+
+    testWidgets('names what is missed without the plugin', (tester) async {
+      await tester.pumpWidget(app());
+      await settle(tester);
+      expect(
+        find.text('Add the Iris plugin to your Hermes server.'),
+        findsOneWidget,
+      );
+      for (final title in [
+        'Generated displays',
+        'Alerts',
+        'Study and templates',
+      ]) {
+        expect(find.text(title), findsOneWidget);
+      }
+    });
+
+    testWidgets('Install shows progress, then Installed v0.4.0 and Continue', (
+      tester,
+    ) async {
+      final slow = _SlowInstall();
+      await tester.pumpWidget(app(install: () => slow));
+      await settle(tester);
+
+      await tester.tap(find.widgetWithText(IrisButton, 'Install on my server'));
+      await tester.pump();
+      expect(slow.calls, 1);
+      expect(find.text('Installing…'), findsOneWidget);
+
+      slow.gate.complete();
+      await settle(tester);
+      expect(find.text('Installed v0.4.0'), findsOneWidget);
+      expect(find.widgetWithText(IrisButton, 'Not now'), findsNothing);
+
+      await tester.tap(find.widgetWithText(IrisButton, 'Continue'));
+      await settle(tester);
+      expect(find.byType(PluginOnboardingScreen), findsNothing);
+      expect(find.text('Home'), findsOneWidget);
+    });
+
+    testWidgets('failure shows the error, Try again and Not now', (
+      tester,
+    ) async {
+      http.on(
+        'POST',
+        '/api/dashboard/agent-plugins/install',
+        (_) => FakeReply.json({'detail': 'nope'}, status: 500),
+      );
+      await tester.pumpWidget(app());
+      await settle(tester);
+
+      await tapInstall(tester, 'Install on my server');
+      await settle(tester);
+
+      expect(find.widgetWithText(IrisButton, 'Try again'), findsOneWidget);
+      expect(find.widgetWithText(IrisButton, 'Not now'), findsOneWidget);
+      expect(find.text('Installed v0.4.0'), findsNothing);
+    });
+
+    testWidgets('the sheet names the source and version', (tester) async {
+      await tester.pumpWidget(app());
+      await settle(tester);
+      await tester.tap(find.text('What does this install?'));
+      await settle(tester);
+      expect(
+        find.textContaining('github.com/shreyas-kamat/iris'),
+        findsWidgets,
+      );
+      expect(find.textContaining('0.4.0'), findsWidgets);
+      expect(find.textContaining('unreviewed source'), findsOneWidget);
+    });
+
+    testWidgets('200% text does not overflow', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        app(
+          home: const PluginOnboardingScreen(),
+          textScale: 2,
+          size: const Size(320, 640),
+        ),
+      );
+      await settle(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PluginOnboardingScreen), findsOneWidget);
     });
   });
 }

@@ -9,6 +9,7 @@ import '../design/components/image_host_scope.dart';
 import '../design/platform/platform_feel.dart';
 import '../design/theme/iris_theme.dart';
 import '../features/chat/conversation_list_screen.dart';
+import '../features/plugin/plugin_onboarding_host.dart';
 import '../features/servers/server_gate.dart';
 import 'device_state.dart';
 import 'push_host.dart';
@@ -79,7 +80,8 @@ class IrisApp extends ConsumerWidget {
           home: ServerGate(
             // Conversations are home; the link status screen opens from the
             // list's header.
-            connected: (context) => const ConversationListScreen(),
+            connected: (context) =>
+                const PluginOnboardingHost(child: ConversationListScreen()),
           ),
         );
       },
