@@ -42,6 +42,7 @@ store_mod = importlib.import_module(f"{_PACKAGE}.genui.store")
 paths = importlib.import_module(f"{_PACKAGE}.genui.paths")
 personal = importlib.import_module(f"{_PACKAGE}.genui.personal")
 feedback = importlib.import_module(f"{_PACKAGE}.genui.feedback")
+devices_mod = importlib.import_module(f"{_PACKAGE}.push.devices")
 router = APIRouter()
 
 
@@ -54,7 +55,7 @@ def _profile_store(profile: str | None):
 
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback", "refine"]
+FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback", "refine", "push"]
 
 
 @router.get("/capabilities")
@@ -198,3 +199,55 @@ def delete_template(template_id: str, profile: str | None = None):
 async def post_feedback(request: Request, profile: str | None = None):
     """Signals about displays the app drew (used, expanded, dismissed, not useful). Best effort on the app's side."""
     return _answer(feedback.record(_profile_store(profile), await _json_body(request)))
+
+
+# ---- push notifications: devices and their settings ------------------------------------------------------------------
+
+
+def _devices(profile: str | None):
+    return devices_mod.Devices(_profile_store(profile).push_dir)
+
+
+def _device_id(device_id: str) -> str:
+    try:
+        return store_mod.safe_component(device_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"device: {e}") from None
+
+
+@router.put("/push/devices/{device_id}")
+async def put_push_device(device_id: str, request: Request, profile: str | None = None):
+    """Registers (or refreshes) one Iris install. The response never carries the APNs token."""
+    body = await _json_body(request)
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    try:
+        _devices(profile).register(
+            _device_id(device_id),
+            body.get("platform"),
+            body.get("apns_token"),
+            body.get("app_version"),
+            body.get("settings"),
+        )
+    except devices_mod.InvalidDevice as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+    return {"ok": True}
+
+
+@router.patch("/push/devices/{device_id}/settings")
+async def patch_push_settings(device_id: str, request: Request, profile: str | None = None):
+    record = _devices(profile).update_settings(_device_id(device_id), await _json_body(request))
+    if record is None:
+        raise HTTPException(status_code=404, detail="no such device")
+    return {"ok": True, "settings": record["settings"]}
+
+
+@router.delete("/push/devices/{device_id}")
+def delete_push_device(device_id: str, profile: str | None = None):
+    return {"ok": True, "deleted": _devices(profile).remove(_device_id(device_id))}
+
+
+@router.get("/push/status")
+def push_status(profile: str | None = None):
+    apns_json = paths.iris_root() / "push" / "apns.json"
+    return {"ok": True, "apns_configured": apns_json.is_file(), "devices": len(_devices(profile).all())}
