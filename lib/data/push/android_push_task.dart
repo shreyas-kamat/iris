@@ -414,7 +414,17 @@ final class IrisServiceTask extends TaskHandler {
     final config = PushTaskConfig.decode(
       await FlutterForegroundTask.getData<String>(key: PushTaskKeys.config),
     );
-    if (config == _config && _client != null) return;
+    if (config == _config && _client != null) {
+      // The app asks for a reload on every start and has just put "connecting" on the notification (it does not know
+      // better yet); say again what is true.
+      if (_holder == 'push' && _state != PushConnection.off) {
+        unawaited(_showState());
+      }
+      FlutterForegroundTask.sendDataToMain({
+        PushTaskMessages.state: _state.name,
+      });
+      return;
+    }
     _stopStream();
     _config = config;
     if (config == null) {
