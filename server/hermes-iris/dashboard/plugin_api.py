@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 _PACKAGE = "hermes_iris"
 _ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +44,7 @@ personal = importlib.import_module(f"{_PACKAGE}.genui.personal")
 feedback = importlib.import_module(f"{_PACKAGE}.genui.feedback")
 devices_mod = importlib.import_module(f"{_PACKAGE}.push.devices")
 active_mod = importlib.import_module(f"{_PACKAGE}.push.active")
+stream_mod = importlib.import_module(f"{_PACKAGE}.push.stream")
 router = APIRouter()
 
 
@@ -256,6 +257,20 @@ def mark_chat_active(session_id: str, profile: str | None = None):
     except store_mod.InvalidName as e:
         raise HTTPException(status_code=400, detail=f"session: {e}") from None
     return {"ok": True}
+
+
+@router.get("/push/stream")
+async def push_stream(device_id: str, after: str | None = None, profile: str | None = None):
+    """Server-Sent Events for one Android device: its notices as they happen, with a short replay after ``after``."""
+    p = _profile_store(profile)
+    device = devices_mod.Devices(p.push_dir).get(_device_id(device_id))
+    if device is None or device.get("platform") != "android":
+        raise HTTPException(status_code=404, detail="no such Android device")
+    return StreamingResponse(
+        stream_mod.frames(p.push_dir, device["device_id"], after),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/push/status")
