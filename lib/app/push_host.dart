@@ -18,6 +18,7 @@ import '../core/logging.dart';
 import '../data/push/android_push_task.dart';
 import '../data/push/foreground_arbiter.dart';
 import '../data/push/foreground_driver.dart';
+import '../data/push/ios_push_channel.dart';
 import '../data/push/push_intents.dart';
 import '../data/push/push_stream_client.dart';
 import '../demo/demo_mode.dart';
@@ -90,7 +91,10 @@ class PushHost {
   /// The arbiter's push notice follows the state the service reports.
   ForegroundArbiter get _arbiter => foregroundArbiter;
 
+  bool get _ios => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
   void start() {
+    if (_ios) return _startIos();
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     _started = true;
     try {
@@ -110,10 +114,41 @@ class PushHost {
     unawaited(_listenForTaps());
   }
 
+  /// iOS: APNs delivers, iOS shows. Iris asks for permission when push is on, keeps the token registered, and tells
+  /// the native side which chat is on screen (`willPresent` hides that one's banner).
+  void _startIos() {
+    final channel = _ref.read(iosPushChannelProvider);
+    if (channel == null) return;
+    _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
+    unawaited(channel.attach());
+    _ref
+      ..listen<PushWanted>(
+        pushWantedProvider,
+        (_, next) => unawaited(_applyIos(channel, next)),
+        fireImmediately: true,
+      )
+      ..listen<String?>(foregroundChatProvider, (_, _) => _sendForeground());
+  }
+
+  Future<void> _applyIos(IosPushChannel channel, PushWanted wanted) async {
+    if (wanted is! PushOn || wanted == _applied) {
+      if (wanted is PushOff) _applied = wanted;
+      return;
+    }
+    _applied = wanted;
+    // The system asks only the first time; after that this just registers with APNs, and the token arrives through
+    // the channel (which registers it with the server).
+    if (!await channel.requestPermission()) {
+      _log.warn('notifications not allowed on this iPhone');
+    }
+    final controller = await _ref.read(pushControllerProvider.future);
+    unawaited(controller?.sync());
+  }
+
   void dispose() {
+    _lifecycle?.dispose();
     if (!_started) return;
     FlutterForegroundTask.removeTaskDataCallback(_onData);
-    _lifecycle?.dispose();
   }
 
   Future<void> _apply(PushWanted wanted) async {
@@ -167,16 +202,24 @@ class PushHost {
   String? get _foreground =>
       _resumed ? _ref.read(foregroundChatProvider) : null;
 
-  void _sendForeground() => FlutterForegroundTask.sendDataToTask({
-    PushTaskMessages.foreground: _foreground,
-  });
+  void _sendForeground() {
+    if (_ios) {
+      unawaited(
+        _ref.read(iosPushChannelProvider)?.setForegroundChat(_foreground),
+      );
+      return;
+    }
+    FlutterForegroundTask.sendDataToTask({
+      PushTaskMessages.foreground: _foreground,
+    });
+  }
 
   void _onLifecycle(AppLifecycleState state) {
     final resumed = state == AppLifecycleState.resumed;
     if (resumed == _resumed) return;
     _resumed = resumed;
     _sendForeground();
-    if (resumed) unawaited(_arbiter.resumed());
+    if (resumed && !_ios) unawaited(_arbiter.resumed());
   }
 
   Future<void> _listenForTaps() async {
@@ -199,24 +242,7 @@ class PushHost {
     }
   }
 
-  /// Opens [tap] once the app has a server and a screen to open it on (a cold start from a notification has neither
-  /// at first).
   void _open(PushTap? tap) {
-    if (tap == null) return;
-    Future<void> attempt(int tries) async {
-      final ready =
-          _ref.read(activeServerProvider) != null &&
-          irisNavigatorKey.currentState != null;
-      if (ready) {
-        await _ref.read(pushRouterProvider).open(tap);
-      } else if (tries < 40) {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-        await attempt(tries + 1);
-      } else {
-        _log.warn('a notification tap found nothing to open');
-      }
-    }
-
-    unawaited(attempt(0));
+    if (tap != null) _ref.read(pushRouterProvider).openWhenReady(tap);
   }
 }

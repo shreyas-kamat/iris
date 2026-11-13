@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/result.dart';
 import '../data/prefs/preferences_store.dart';
+import '../data/push/ios_push_channel.dart';
 import '../data/push/push_api.dart';
 import '../data/push/push_controller.dart';
 import '../data/push/push_models.dart';
@@ -18,6 +19,7 @@ import '../data/push/push_stream_client.dart';
 import 'genui_providers.dart';
 import 'preferences.dart';
 import 'providers.dart';
+import 'push_router.dart';
 
 /// The version reported at registration. It tracks `pubspec.yaml`; no package is added only to read it back.
 const pushAppVersion = '1.0.0';
@@ -143,18 +145,35 @@ final pushApiProvider = FutureProvider<PushApi?>((ref) async {
 });
 
 /// Keeps the server in step with this install. Null with no live server.
-final pushControllerProvider = FutureProvider<PushController?>((ref) async {
-  final api = await ref.watch(pushApiProvider.future);
-  if (api == null) return null;
-  return PushController(
-    api,
-    deviceId: ref.read(pushDeviceIdProvider),
-    platform: pushPlatform,
-    appVersion: pushAppVersion,
-    enabled: () => ref.read(pushEnabledProvider),
-    settings: () => ref.read(pushSettingsProvider),
-  );
-});
+final FutureProvider<PushController?> pushControllerProvider =
+    FutureProvider<PushController?>((ref) async {
+      final api = await ref.watch(pushApiProvider.future);
+      if (api == null) return null;
+      return PushController(
+        api,
+        deviceId: ref.read(pushDeviceIdProvider),
+        platform: pushPlatform,
+        appVersion: pushAppVersion,
+        enabled: () => ref.read(pushEnabledProvider),
+        settings: () => ref.read(pushSettingsProvider),
+        apnsToken: ref.read(iosPushChannelProvider)?.token,
+      );
+    });
+
+/// iOS: the native side of push (permission, APNs token, taps, the chat on screen). Null on other platforms.
+final Provider<IosPushChannel?> iosPushChannelProvider =
+    Provider<IosPushChannel?>((ref) {
+      if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
+      final channel = IosPushChannel(
+        // A new token is registered at once: APNs may rotate it at any launch.
+        onToken: (_) => unawaited(
+          ref.read(pushControllerProvider.future).then((c) => c?.sync()),
+        ),
+        onTap: (tap) => ref.read(pushRouterProvider).openWhenReady(tap),
+      );
+      ref.onDispose(channel.detach);
+      return channel;
+    });
 
 /// The stored id of the chat on screen, or null when none is. A notification for that chat is not shown: the person
 /// is looking at it.

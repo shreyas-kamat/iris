@@ -2,6 +2,8 @@
 /// job. The native side (Tasks 9 and 10) calls [PushRouter.open] with the tap it read from the notification.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,6 +40,26 @@ class PushRouter {
       default:
         return;
     }
+  }
+
+  /// Opens [tap] once the app has a server and a screen to open it on: a cold start from a notification has neither
+  /// at first. Gives up after about ten seconds.
+  void openWhenReady(PushTap tap) {
+    Future<void> attempt(int tries) async {
+      final ready =
+          _ref.read(activeServerProvider) != null &&
+          irisNavigatorKey.currentState != null;
+      if (ready) {
+        await open(tap);
+      } else if (tries < 40) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        await attempt(tries + 1);
+      } else {
+        _log.warn('a notification tap found nothing to open');
+      }
+    }
+
+    unawaited(attempt(0));
   }
 
   Future<void> _openChat(PushTap tap) async {

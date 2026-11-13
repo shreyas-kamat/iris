@@ -99,3 +99,12 @@ Phase 6 adds none: deleting, pinning, branching and the prompts use the existing
 - **No Google:** `flutter pub deps` and `:app:dependencies` (release) show no Firebase or Play services; the only new
   Google-authored artifact is `com.google.code.gson:gson` (a JSON library) via `flutter_local_notifications`.
 
+## Phase 9.2: push notifications (iOS)
+
+- **Capability:** Push Notifications on the `com.iflotech.iris` App ID (Apple developer portal), and the
+  `ios/Runner/Runner.entitlements` file (`aps-environment`, `development` in the repo; Xcode signs App Store and
+  TestFlight builds as `production`). The server's `push/apns.json` `environment` must match the build it sends to.
+- **No background mode** is added: alerts only. Approval buttons (`iris.approval`: Approve once, Deny) need the phone
+  unlocked and open Iris, which answers the approval itself.
+- **Permission prompt:** asked when the person turns notifications on in Settings, not at launch.
+
