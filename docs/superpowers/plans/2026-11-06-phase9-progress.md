@@ -22,7 +22,7 @@ newest last. Models are the minimum; a higher one is fine.
 | P-spec | Brainstorm and design | Opus | done | `57f5882` |
 | P-plan | Implementation plan with segment table | Opus | done | see journal |
 | PS1 | Task 1: live probe (hooks, approval answering) | Opus | done | `7296630` |
-| PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | todo | |
+| PS2 | Tasks 2–5: plugin registry, active chats, events, stream | Sonnet | doing | |
 | PS3 | Task 6: APNs sender and worker | Opus | todo | |
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | todo | |
 | PS5 | Tasks 9–10: Android service, iOS native | Opus | todo | |
@@ -567,3 +567,13 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 ### PS1 — done — 2026-11-13 — Opus 5.5
 - User reran `remove-probe.ps1`: `probe lines left: 0`, dashboard `active`. Server plugin is back to the backup (`/root/iris-init.py.bak` kept); `push_probe.py` and `probe-push.jsonl` deleted. Findings `7296630`, plan amendments `50ccec3`.
 - **segment PS1 complete.** Next: PS2 (Tasks 2–5) on Sonnet.
+
+### PS2 — doing — 2026-11-13 — Sonnet 5.5
+- Running as Sonnet 5.5. Git matches the log (PS1 `7296630`/`50ccec3` in history; HEAD `95eefdb`, clean apart from `store/screenshots/`).
+- Next: Task 2 device registry and settings routes.
+
+### PS2 — Task 2 — done — 2026-11-13 — Sonnet 5.5
+- Commits: ef5b797 feat(push): device registry and notification settings routes
+- Verified: `tests/test_push_devices.py` red first (no module, no `push_dir`), then 13 pass; `server/hermes-iris/.venv/Scripts/python -m pytest` -> 408 pass, 1 skipped.
+- Deviations: (1) `PATCH push/devices/<id>/settings` merges per event onto the stored settings (partial updates keep the rest); `PUT` replaces via `normalize_settings`. (2) `apns_configured` is for now "`<iris root>/push/apns.json` exists"; Task 6 replaces it with `apns.load_config`. (3) Settings JSON shape: `{"reply": {"on","text","mode"}, "approval": {...}, "job": {...}}`.
+- Next: Task 3 active chats, outbox, rendering.
