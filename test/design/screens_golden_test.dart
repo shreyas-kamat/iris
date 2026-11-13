@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/automation_providers.dart';
 import 'package:iris/app/device_state.dart';
 import 'package:iris/app/providers.dart';
+import 'package:iris/app/push_providers.dart';
 import 'package:iris/app/theme_controller.dart';
 import 'package:iris/app/usage.dart';
 import 'package:iris/core/json.dart';
@@ -34,6 +35,7 @@ import 'package:iris/features/chat/connection_card.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
 import 'package:iris/features/profiles/profiles_screen.dart';
+import 'package:iris/features/settings/notifications_settings_screen.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 import 'package:iris/features/settings/usage_settings_screen.dart';
 
@@ -43,6 +45,12 @@ import '../support/fonts.dart';
 
 /// A phone's logical size. The goldens are captured at this size and no other.
 const _phone = Size(390, 844);
+
+/// Notifications switched on, so the three events show.
+class _PushOn extends PushEnabled {
+  @override
+  bool build() => true;
+}
 
 /// A fixed "now": an evening, so the greeting is deterministic and the
 /// relative times below have a stable reference.
@@ -565,6 +573,21 @@ void main() {
           usageSelectionProvider.overrideWith(_ThreeProviders.new),
         ],
         name: 'usage_settings',
+      );
+    });
+
+    testWidgets('notifications settings, $mode', (tester) async {
+      final backend = FakeChatBackend();
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const NotificationsSettingsScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          pushEnabledProvider.overrideWith(_PushOn.new),
+        ],
+        name: 'notifications_settings',
       );
     });
 

@@ -38,6 +38,7 @@ import '../home/link_status_screen.dart';
 import '../profiles/profiles_screen.dart';
 import '../servers/server_switcher.dart';
 import 'genui_settings_section.dart';
+import 'notifications_settings_section.dart';
 import 'usage_settings_screen.dart';
 import 'voice_settings_section.dart';
 
@@ -209,6 +210,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 22),
             const GenUiSettingsSection(),
+            const NotificationsSettingsSection(),
             if (ref.watch(demoModeProvider))
               IrisSettingsGroup(
                 title: 'Demo',

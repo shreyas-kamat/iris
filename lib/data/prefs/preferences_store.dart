@@ -61,6 +61,16 @@ abstract final class PreferenceKeys {
   /// displays on. Absent means off.
   static const genui = 'genui.enabled';
 
+  /// App-wide: this install's random id, as the server's push registry knows it.
+  static const pushDeviceId = 'push.deviceId';
+
+  /// Per `<server>/<profile>`: `true` when the person turned notifications on.
+  /// Absent means off.
+  static const push = 'push.enabled';
+
+  /// Per `<server>/<profile>`: the wording and switches per event, as JSON.
+  static const pushSettings = 'push.settings';
+
   /// Per `<server>/<profile>`: `voiceCalls.<id>` → a JSON list of the voice
   /// calls made in one conversation, oldest first.
   static String voiceCalls(String id) => 'voiceCalls.$id';
