@@ -28,6 +28,9 @@ newest last. Models are the minimum; a higher one is fine.
 | PS5 | Tasks 9â€“10: Android service, iOS native (Swift compile deferred to PS6) | Opus | done | `03e98aa` |
 | PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | doing | |
 | PS7 | Task 12: final review, release, PR | Opus | todo | |
+| IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | todo | |
+| IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | todo | |
+| IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
 | C-plan | Implementation plan with segment table | Opus | todo | |
@@ -643,3 +646,8 @@ written. Reorder 9.2â€“9.6 here if the user changes the order; 9.1 first and 9.7
 - Plugin source (0.3.0 contents, with push) installed on the user's server by me over SSH; dashboard restarted, active, no iris errors. `apns.json` not placed yet (iOS only).
 - User deferred all iOS work. PS6 is now Android only; Task 11 Step 3 and the Swift compile moved to `docs/superpowers/plans/ios-deferred.md` (items I1, I2), run on the Mac with the new `/ios` command (`.claude/commands/ios.md`).
 - User asked for two things before the Android device pass: (1) a post-login onboarding screen that installs the Iris plugin in one click and shows what is missed without it; (2) a Settings row that installs/shows version/offers updates. Not in the Phase 9 plan: needs its own spec (brainstorm) before code. PS6 stays `doing`, paused.
+
+### Plugin installer — spec and plan — 2026-11-13 — Sonnet 5.5
+- Spec `a7086fd` (approved by the user), plan `docs/superpowers/plans/2026-11-13-plugin-installer.md`. Extra work the user asked for inside 9.2 on `feat/push`: onboarding screen plus Settings row that installs/updates the hermes-iris plugin through Hermes's own `/api/dashboard/agent-plugins/install` (pinned release SHA, `force`).
+- Order: IN1, IN2, then PS6 (Android only), PS7 (release, tag), then IN3 (live reinstall, needs the tag and the user's yes). PS6 stays `doing`, paused.
+- Next: IN1, Task 1.
