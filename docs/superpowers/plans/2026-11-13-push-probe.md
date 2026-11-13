@@ -75,4 +75,5 @@ carry `expires_at = raised + 300 s`.
 
 Hermes's Python 3.14.7 runtime has `httpx` 0.28.1, `cryptography` 50.0.1 and `pyjwt` 2.13.0 once
 `hermes_bootstrap` loads; **`h2` is not installed**. System `curl` 8.5.0 has HTTP/2 (nghttp2). APNs needs HTTP/2, so
-Task 6 needs the user's call: system `curl` or installing `h2`.
+Task 6 needs the user's call: system `curl` or installing `h2`. **User's call (2026-11-13): system `curl`.**
+Nothing is installed; Task 6 is amended to match.
