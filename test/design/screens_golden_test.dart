@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/automation_providers.dart';
 import 'package:iris/app/device_state.dart';
+import 'package:iris/app/plugin_providers.dart';
 import 'package:iris/app/providers.dart';
 import 'package:iris/app/push_providers.dart';
 import 'package:iris/app/theme_controller.dart';
@@ -26,6 +27,7 @@ import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/server_config.dart';
+import 'package:iris/data/plugin/plugin_installer.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/palette.dart';
@@ -36,6 +38,7 @@ import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
 import 'package:iris/features/profiles/profiles_screen.dart';
 import 'package:iris/features/settings/notifications_settings_screen.dart';
+import 'package:iris/features/settings/plugin_settings_section.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 import 'package:iris/features/settings/usage_settings_screen.dart';
 
@@ -590,6 +593,36 @@ void main() {
         name: 'notifications_settings',
       );
     });
+
+    for (final (name, status) in [
+      ('plugin_settings', const PluginAbsent()),
+      (
+        'plugin_settings_update',
+        const PluginInstalled('0.3.0', updateTo: '0.4.0'),
+      ),
+    ]) {
+      testWidgets('$name, $mode', (tester) async {
+        final backend = FakeChatBackend();
+        addTearDown(backend.close);
+        await capture(
+          tester,
+          screen: Scaffold(
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: const PluginSettingsSection(),
+              ),
+            ),
+          ),
+          isDark: isDark,
+          overrides: [
+            ..._sharedOverrides(backend),
+            pluginStatusProvider.overrideWithValue(AsyncData(status)),
+          ],
+          name: name,
+        );
+      });
+    }
 
     testWidgets('home with pinned and live chats, $mode', (tester) async {
       final backend = FakeChatBackend()
