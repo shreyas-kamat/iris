@@ -638,3 +638,8 @@ written. Reorder 9.2â€“9.6 here if the user changes the order; 9.1 first and 9.7
 - Running as Sonnet 5.5. Git matches the log (PS5 `03e98aa`/`81781ee` in history; HEAD `81781ee`, clean apart from `store/screenshots/`).
 - Waiting on the user for Task 11 prerequisites (plugin 0.4.0 on the server with `apns.json` and key, Moto G45 connected, Mac for the deferred `flutter build ios --no-codesign`).
 - Next: Step 1 (install plugin, `GET push/status`), with the iOS Swift compile on the Mac.
+
+### PS6 — scope change — 2026-11-13 — Sonnet 5.5
+- Plugin source (0.3.0 contents, with push) installed on the user's server by me over SSH; dashboard restarted, active, no iris errors. `apns.json` not placed yet (iOS only).
+- User deferred all iOS work. PS6 is now Android only; Task 11 Step 3 and the Swift compile moved to `docs/superpowers/plans/ios-deferred.md` (items I1, I2), run on the Mac with the new `/ios` command (`.claude/commands/ios.md`).
+- User asked for two things before the Android device pass: (1) a post-login onboarding screen that installs the Iris plugin in one click and shows what is missed without it; (2) a Settings row that installs/shows version/offers updates. Not in the Phase 9 plan: needs its own spec (brainstorm) before code. PS6 stays `doing`, paused.
