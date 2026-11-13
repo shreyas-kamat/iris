@@ -43,6 +43,7 @@ paths = importlib.import_module(f"{_PACKAGE}.genui.paths")
 personal = importlib.import_module(f"{_PACKAGE}.genui.personal")
 feedback = importlib.import_module(f"{_PACKAGE}.genui.feedback")
 devices_mod = importlib.import_module(f"{_PACKAGE}.push.devices")
+active_mod = importlib.import_module(f"{_PACKAGE}.push.active")
 router = APIRouter()
 
 
@@ -245,6 +246,16 @@ async def patch_push_settings(device_id: str, request: Request, profile: str | N
 @router.delete("/push/devices/{device_id}")
 def delete_push_device(device_id: str, profile: str | None = None):
     return {"ok": True, "deleted": _devices(profile).remove(_device_id(device_id))}
+
+
+@router.post("/push/active/{session_id}")
+def mark_chat_active(session_id: str, profile: str | None = None):
+    """Iris calls this when the person sends to a chat: the next finished turn there is worth a notification."""
+    try:
+        active_mod.mark(_profile_store(profile).push_dir, session_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"session: {e}") from None
+    return {"ok": True}
 
 
 @router.get("/push/status")
