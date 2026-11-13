@@ -696,3 +696,7 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Pass (live, after the fix): approval notice appeared with the phone locked and the chat off screen; Approve once from the notice, then the notice left the shade (`dumpsys notification` shows no `approval-*` tag, only the system's own `ranker_group` summary). The reply notice (`reply-...6146c8`) arrived after it.
 - Pass: a cron job notice (`job-cron_...`) is showing on `iris_job`.
 - Still to run: open chat not notified (partly seen), airplane mode 2 min then reconnect replay, a voice call during push, screenshots.
+
+### PS6 - doing - 2026-11-14 04:00 - Sonnet 5.5
+- The user deferred the rest of the Android device pass. Not run yet, and not passed: open chat not notified (clean run), airplane mode 2 min then reconnect replay, voice call during push, Step 4 screenshots.
+- PS6 stays `doing`, not `done`. Resume with `/phase9` on the Moto G45 (serial ZN4226ZPW5, debug APK from `276e0dc` installed), run those four, then log `segment PS6 complete`. PS7 waits for that.
