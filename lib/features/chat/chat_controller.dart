@@ -17,6 +17,7 @@ import '../../data/chat/chat_event.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/chat/connection_models.dart';
 import '../../data/genui/genui_parser.dart';
+import '../../data/push/push_intents.dart';
 import '../../data/rpc/rpc_frame.dart';
 import 'chat_state.dart';
 import 'links.dart';
@@ -1083,6 +1084,70 @@ final class ChatController extends ValueNotifier<ChatState> {
             .withError('Could not send the answer: ${describe(failure)}'),
       );
     }
+  }
+
+  /// Applies what a tap on a notification asked, once the chat is open: the Approve once or Deny button answers the
+  /// approval that is waiting here, and the transcript says what happened. A tap without a button, or on anything but
+  /// an approval, does nothing more than open the chat.
+  ///
+  /// The notification may be old. Iris asks the gateway what is waiting now and never answers what is not there.
+  Future<void> applyPushAction(PushTap tap) async {
+    final choice = tap.action;
+    if (choice == null || tap.kind != 'approval') return;
+    if (!await ensureLive()) return;
+    final runtimeId = _runtimeId;
+    if (runtimeId == null || _disposed) return;
+    final waiting = await _backend.pendingApprovals(runtimeId);
+    if (_disposed) return;
+    switch (waiting) {
+      case Err(:final failure):
+        _update(value.withError(describe(failure)));
+      case Ok(value: final pending):
+        if (pending.isEmpty) {
+          _update(value.withNotice('That approval is no longer waiting.'));
+          return;
+        }
+        final request = _pickApproval(pending, tap.command);
+        final result = await _backend.resolveApproval(request, choice);
+        if (_disposed) return;
+        switch (result) {
+          case Err(:final failure):
+            _update(
+              value.withError(
+                'Could not send the answer: ${describe(failure)}',
+              ),
+            );
+          case Ok(value: final resolved):
+            _update(
+              value
+                  .withoutApproval(request)
+                  .withNotice(
+                    !resolved
+                        ? 'That approval was already answered.'
+                        : choice == 'once'
+                        ? 'Approved once.'
+                        : 'Denied.',
+                  ),
+            );
+        }
+    }
+  }
+
+  /// The waiting approval a notification meant: the one whose command it showed (the notification may have cut the
+  /// command short), else the oldest.
+  static ApprovalRequest _pickApproval(
+    List<ApprovalRequest> pending,
+    String? shown,
+  ) {
+    final wanted = shown?.replaceAll('…', '').trim();
+    if (wanted != null && wanted.isNotEmpty) {
+      for (final request in pending) {
+        if (request.command == wanted || request.command.startsWith(wanted)) {
+          return request;
+        }
+      }
+    }
+    return pending.first;
   }
 
   /// Answers one [question] of [request].

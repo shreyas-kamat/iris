@@ -154,3 +154,21 @@ final pushControllerProvider = FutureProvider<PushController?>((ref) async {
     settings: () => ref.read(pushSettingsProvider),
   );
 });
+
+/// The stored id of the chat on screen, or null when none is. A notification for that chat is not shown: the person
+/// is looking at it.
+final foregroundChatProvider = NotifierProvider<ForegroundChat, String?>(
+  ForegroundChat.new,
+);
+
+class ForegroundChat extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void enter(String storedId) => state = storedId;
+
+  /// Clears the mark only if it is still [storedId], so a chat opened over another does not lose its own.
+  void leave(String storedId) {
+    if (state == storedId) state = null;
+  }
+}

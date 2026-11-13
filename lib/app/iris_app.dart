@@ -11,6 +11,7 @@ import '../design/theme/iris_theme.dart';
 import '../features/chat/conversation_list_screen.dart';
 import '../features/servers/server_gate.dart';
 import 'device_state.dart';
+import 'push_router.dart';
 import 'theme_controller.dart';
 
 class IrisApp extends ConsumerWidget {
@@ -46,6 +47,8 @@ class IrisApp extends ConsumerWidget {
 
         return MaterialApp(
           title: 'Iris',
+          // For a tap on a notification, which opens a screen from outside any widget.
+          navigatorKey: irisNavigatorKey,
           debugShowCheckedModeBanner: false,
           theme: theme.materialTheme,
           // Applied once at the root so no individual list has to remember to

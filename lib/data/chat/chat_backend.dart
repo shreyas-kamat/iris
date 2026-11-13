@@ -185,6 +185,14 @@ abstract interface class ChatBackend {
 
   Future<Result<void>> answerApproval(ApprovalRequest request, String choice);
 
+  /// The approvals waiting in the live session [runtimeId], oldest first. A reconnect does not re-send the ask, so
+  /// this is how Iris finds what a notification was about.
+  Future<Result<List<ApprovalRequest>>> pendingApprovals(String runtimeId);
+
+  /// Like [answerApproval], but says whether the gateway still had the ask waiting: false when it was answered
+  /// somewhere else first.
+  Future<Result<bool>> resolveApproval(ApprovalRequest request, String choice);
+
   Future<Result<void>> answerClarify(
     ClarifyRequest request,
     ClarifyQuestion question,
@@ -842,6 +850,12 @@ final class DashboardChat
   Future<Result<void>> answerApproval(
     ApprovalRequest request,
     String choice,
+  ) async => (await resolveApproval(request, choice)).map((_) {});
+
+  @override
+  Future<Result<bool>> resolveApproval(
+    ApprovalRequest request,
+    String choice,
   ) async => (await _session.call(
     'approval.respond',
     params: {
@@ -849,7 +863,21 @@ final class DashboardChat
       'session_id': request.sessionId,
       'request_id': ?request.queueId,
     },
-  )).map((_) {});
+  )).map((json) => (json['resolved'].intOrNull ?? 1) > 0);
+
+  @override
+  Future<Result<List<ApprovalRequest>>> pendingApprovals(
+    String runtimeId,
+  ) async =>
+      (await _session.call(
+        'approval.pending',
+        params: {'session_id': runtimeId},
+      )).map(
+        (json) => [
+          for (final row in json['approvals'].list)
+            ?ChatEvent.parseApproval(row, runtimeId),
+        ],
+      );
 
   @override
   Future<Result<void>> answerClarify(
