@@ -26,7 +26,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS3 | Task 6: APNs sender and worker | Opus | done | `7e9aaa0` |
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | done | `1a0c28d` |
 | PS5 | Tasks 9–10: Android service, iOS native (Swift compile deferred to PS6) | Opus | done | `03e98aa` |
-| PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | todo | |
+| PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | doing | |
 | PS7 | Task 12: final review, release, PR | Opus | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
@@ -633,3 +633,8 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 ### PS5 — done (Swift compile deferred) — 2026-11-13 — Opus 5.5
 - The user deferred the Mac build ("Defer mac to later"). Task 10 Step 4's Swift compile moves to PS6, which needs the Mac and the iPhone anyway. **Deviation:** PS5 is closed with `ios/Runner/AppDelegate.swift` (IrisPushPlugin), `Runner.entitlements` and the `project.pbxproj` entries **not yet compiled**. PS6 starts on the Mac with `flutter pub get && (cd ios && pod install) && flutter build ios --no-codesign`; a Swift error found there is fixed in PS6 before the device pass.
 - **segment PS5 complete.** Next: PS6 (Sonnet), Task 11 device pass on the Moto G45 and the iPhone, starting with the deferred iOS compile.
+
+### PS6 — doing — 2026-11-13 — Sonnet 5.5
+- Running as Sonnet 5.5. Git matches the log (PS5 `03e98aa`/`81781ee` in history; HEAD `81781ee`, clean apart from `store/screenshots/`).
+- Waiting on the user for Task 11 prerequisites (plugin 0.4.0 on the server with `apns.json` and key, Moto G45 connected, Mac for the deferred `flutter build ios --no-codesign`).
+- Next: Step 1 (install plugin, `GET push/status`), with the iOS Swift compile on the Mac.
