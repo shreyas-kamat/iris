@@ -29,7 +29,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | doing | |
 | PS7 | Task 12: final review, release, PR | Opus | todo | |
 | IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
-| IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | todo | |
+| IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | doing | |
 | IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
@@ -658,3 +658,14 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) Worked on `feat/push` with this log as the ledger, no worktree or sdd scripts (run book rules). (2) Added seams the plan did not name: `pluginReleaseProvider` and `pluginReprobeProvider` (tests pin a release and count re-probes). (3) A 200 with an `error` field arrives as a rejected failure from `ApiClient`; the installer treats a rejected failure without a status as "show the command". (4) `PluginRelease.current.sha` is empty until Task 5, so `released` is false and onboarding stays hidden. (5) The plugin.yaml guard test checks the release version is not lower than the plugin's (the plugin is still 0.3.0).
 - Decisions for later tasks: `pluginStatusProvider` is loading until the first probe, `PluginAbsent` when the plugin is not confirmed, `PluginInstalled(version, updateTo)` otherwise (`unknown` version offers the update). `pluginInstallProvider` states: `PluginInstallIdle/Installing/Failed(result)/Done(result)`; success also marks the offer seen. `PluginInstallResult` has `ok, error, showCommand, installedVersion, recheckFailed`.
 - segment IN1 complete. Next: IN2 (Sonnet), Task 3 Settings section.
+
+### IN2 - doing - 2026-11-13 - Sonnet 5.5
+- Running as Sonnet 5.5. Git matches the log (IN1 fdc3839 in history; HEAD f58f99c, clean apart from store/screenshots/).
+- Next: Task 3 Settings section.
+
+### IN2 - Task 3 - done - 2026-11-13 - Sonnet 5.5
+- Commits: a60129a feat(plugin): Settings row to install and update the plugin
+- Verified: tests red first (module missing), then `flutter test test/features/plugin/plugin_ui_test.dart` 8 pass; `flutter test --exclude-tags live` -> all pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos only. New goldens `screen_plugin_settings{,_update}_{light,dark}` opened and looked at (absent dark, update light).
+- Deviations: (1) The group shows only once the status provider has data (hidden while the probe is pending, offline, or in the demo), not with a "Checking..." row: that row appeared in four existing Settings goldens (no live session in tests) and would sit there forever offline. (2) Rows: "Iris plugin" (value Not installed / version), then "Add it to your server" + Install, or "Update available" + "Update to X", or "Up to date". (3) The panel's failure view offers "Copy command" only when the release has a pinned sha (else the command would have no ref) plus "Try again". (4) Two extra goldens: the update state.
+- Decisions for later tasks: `PluginInstallPanel(state:, release:, onRetry:)` in `lib/features/plugin/plugin_install_panel.dart` renders installing / done / failed; Task 4 reuses it. Tests override `pluginStatusProvider`, `pluginInstallerProvider` (real installer on FakeHttp) and `pluginInstallProvider` (a slow fake notifier).
+- Next: Task 4 onboarding screen and host.
