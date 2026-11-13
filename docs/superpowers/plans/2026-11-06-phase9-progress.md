@@ -681,3 +681,11 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Resumed with the Moto G45 connected (adb serial in the user's shell only). Debug arm64 APK installed over the old data; signed in, plugin 0.3.0 on the server, Notifications group shown.
 - Defect found on the phone and fixed test-first: `decodeSse` crashed on a real HTTP body (`Utf8Decoder` is not a `StreamTransformer<Uint8List,String>`), so the stream never ran although the notification said connected. Tests had used `Stream<List<int>>`. Fix `7929db1` (`.cast<List<int>>()`), new Uint8List test. After reinstall: foreground service up (type remoteMessaging), notification "Iris is connected", no Dart errors.
 - Next: Step 2 checks from "A reply" on: long request, lock, reply notice; then approval, job, open chat suppressed, airplane mode, call.
+
+### PS6 - doing - 2026-11-14 00:35 - Sonnet 5.5
+- Android Step 2 so far, on the Moto G45 (debug arm64 APK, plugin 0.3.0 on the server):
+  - Pass: notifications switch registers; foreground service up (types 0x200 = remoteMessaging); "Iris is connected" after the decode fix; no Dart errors.
+  - Pass: reply notice arrived with the phone locked and the chat off screen: channel `iris_reply`, title = the user's words ("Attention!"), no body in "Only my text" mode, visibility private, default importance.
+  - Defect 2 fixed (`7c3255b`): every app start put "Iris is connecting" on the live notification (the host's `need()` with the app-side state `off`), and the service returned early on an unchanged `reload` without re-posting. The service now re-announces its state. Deviation: not test-first, the task handler only runs inside the service isolate and has no unit seam; checked on the phone instead (stays "connected" across an app start and a relaunch).
+- In flight: an approval prompt (`rm -rf` of a nonexistent /tmp dir) was sent from a new chat and the phone locked; no `iris_approval` notice after 3.5 min. The phone was locked when I came back, so I could not see the chat. Not yet known whether the model is still thinking, asked nothing, or the approval event did not reach the stream.
+- Next: user unlocks; read the chat state; then approval, job, open-chat suppression, airplane mode, call.
