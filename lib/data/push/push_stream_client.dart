@@ -66,7 +66,9 @@ Stream<SseFrame> decodeSse(Stream<List<int>> bytes) {
   String? event;
   final data = <String>[];
   var comment = false;
+  // A real HTTP body is a Stream<Uint8List>; `cast` makes its runtime type Stream<List<int>>, which utf8.decoder needs.
   return bytes
+      .cast<List<int>>()
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .transform(

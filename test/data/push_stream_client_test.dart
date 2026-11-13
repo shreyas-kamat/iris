@@ -4,6 +4,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/data/push/push_models.dart';
@@ -67,6 +68,14 @@ final class _Rig {
 
 void main() {
   group('decodeSse', () {
+    test('reads a real HTTP body, a stream of Uint8List', () async {
+      final body = Stream<Uint8List>.fromIterable([
+        Uint8List.fromList(utf8.encode('id: 1\nevent: notice\ndata: x\n\n')),
+      ]);
+      final frames = await decodeSse(body).toList();
+      expect(frames, hasLength(1));
+    });
+
     test('joins multi-line data, keeps the id and the event name', () async {
       final frames = await decodeSse(
         _bytes(['id: 7\nevent: notice\ndata: one\ndata: two\n\n']),
