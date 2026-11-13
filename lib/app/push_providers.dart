@@ -14,6 +14,7 @@ import '../data/prefs/preferences_store.dart';
 import '../data/push/push_api.dart';
 import '../data/push/push_controller.dart';
 import '../data/push/push_models.dart';
+import '../data/push/push_stream_client.dart';
 import 'genui_providers.dart';
 import 'preferences.dart';
 import 'providers.dart';
@@ -171,4 +172,17 @@ class ForegroundChat extends Notifier<String?> {
   void leave(String storedId) {
     if (state == storedId) state = null;
   }
+}
+
+/// The Android push connection's state, as the service reports it. [PushConnection.off] on iOS and while push is off.
+final pushConnectionProvider =
+    NotifierProvider<PushConnectionState, PushConnection>(
+      PushConnectionState.new,
+    );
+
+class PushConnectionState extends Notifier<PushConnection> {
+  @override
+  PushConnection build() => PushConnection.off;
+
+  void set(PushConnection value) => state = value;
 }

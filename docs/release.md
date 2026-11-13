@@ -87,3 +87,15 @@ Phase 6 adds none: deleting, pinning, branching and the prompts use the existing
 - Still to check on a device (Phase 8 Task 18): earpiece routing, echo cancellation during playback, the iOS
   audio session after playback setup, and `flutter_webrtc` with the audio route for GPT-Live.
 
+## Phase 9.2: push notifications (Android)
+
+- **Android permissions added:** `FOREGROUND_SERVICE_REMOTE_MESSAGING` (with notifications on, the shared foreground
+  service holds Iris's own connection to the server; no Google services), `VIBRATE` (from
+  `flutter_local_notifications`). `RECEIVE_BOOT_COMPLETED` is back: with notifications on, the connection restarts
+  after a reboot or an app update. A call alone still never restarts. The service's types are now
+  `microphone|remoteMessaging`, and it no longer stops with the app's task.
+- **Play Console:** the foreground-service declaration needs `remoteMessaging` alongside `microphone`, with what the
+  user sees ("Iris is connected", shown only while notifications are on) and a short video of turning it on.
+- **No Google:** `flutter pub deps` and `:app:dependencies` (release) show no Firebase or Play services; the only new
+  Google-authored artifact is `com.google.code.gson:gson` (a JSON library) via `flutter_local_notifications`.
+

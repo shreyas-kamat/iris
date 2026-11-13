@@ -146,3 +146,54 @@ final class PushSettings {
   @override
   int get hashCode => Object.hashAll(PushEvent.values.map(of));
 }
+
+/// One notification as the server rendered it for this device (the Android stream's `notice` frame). In
+/// [PushMode.text] the server leaves [body] out, so nothing about the event is on the phone.
+final class PushNotice {
+  const PushNotice({
+    required this.eventId,
+    required this.kind,
+    required this.sessionId,
+    this.title,
+    this.body,
+    this.category,
+    this.collapse,
+  });
+
+  final String eventId;
+
+  /// `reply`, `approval`, `job`, `approval_done` (withdraws an approval's notification) or `test`.
+  final String kind;
+
+  /// The stored chat id, or a scheduled run's `cron_<job id>_<date>_<time>`.
+  final String sessionId;
+
+  /// The person's own words.
+  final String? title;
+  final String? body;
+  final String? category;
+
+  /// Notices with the same collapse id replace one another.
+  final String? collapse;
+
+  static String? _text(Object? value) =>
+      value is String && value.isNotEmpty ? value : null;
+
+  /// Null when [json] lacks an id, a kind or a session.
+  static PushNotice? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final eventId = _text(json['event_id']);
+    final kind = _text(json['kind']);
+    final session = _text(json['session_id']);
+    if (eventId == null || kind == null || session == null) return null;
+    return PushNotice(
+      eventId: eventId,
+      kind: kind,
+      sessionId: session,
+      title: _text(json['title']),
+      body: _text(json['body']),
+      category: _text(json['category']),
+      collapse: _text(json['collapse']),
+    );
+  }
+}

@@ -11,6 +11,7 @@ import '../design/theme/iris_theme.dart';
 import '../features/chat/conversation_list_screen.dart';
 import '../features/servers/server_gate.dart';
 import 'device_state.dart';
+import 'push_host.dart';
 import 'push_router.dart';
 import 'theme_controller.dart';
 
@@ -20,6 +21,8 @@ class IrisApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preference = ref.watch(themeControllerProvider);
+    // Android push: the service's connection follows the person's switch; taps open their chat.
+    ref.watch(pushHostProvider);
 
     return Builder(
       builder: (context) {

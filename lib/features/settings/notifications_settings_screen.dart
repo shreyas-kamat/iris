@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/push_providers.dart';
 import '../../data/push/push_models.dart';
+import '../../data/push/push_stream_client.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/segmented.dart';
 import '../../design/components/settings_list.dart';
@@ -21,6 +22,14 @@ import '../../design/platform/adaptive.dart';
 import '../../design/platform/iris_scaffold.dart';
 import '../../design/theme/iris_theme.dart';
 import '../../design/tokens/metrics.dart';
+
+/// The Android service's connection, in Settings' words.
+String _connectionLabel(PushConnection state) => switch (state) {
+  PushConnection.connected => 'Connected',
+  PushConnection.connecting => 'Connecting…',
+  PushConnection.unreachable => "Can't reach it",
+  PushConnection.off => '—',
+};
 
 extension on PushEvent {
   String get title => switch (this) {
@@ -126,13 +135,14 @@ class NotificationsSettingsScreen extends ConsumerWidget {
               ],
               if (defaultTargetPlatform != TargetPlatform.iOS) ...[
                 const SizedBox(height: 22),
-                const IrisSettingsGroup(
+                IrisSettingsGroup(
                   title: 'Connection',
                   children: [
-                    // Task 9 supplies the live state; until then there is none to show.
                     IrisSettingsRow(
                       label: 'Connection to your server',
-                      value: '—',
+                      value: _connectionLabel(
+                        ref.watch(pushConnectionProvider),
+                      ),
                     ),
                   ],
                 ),

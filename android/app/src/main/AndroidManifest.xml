@@ -4,18 +4,22 @@
          not only in debug and profile. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <!-- A voice call keeps going with the screen off: a microphone-type
-         foreground service with the call's notification and its buttons. -->
+    <!-- One foreground service, shared: a voice call keeps going with the
+         screen off (microphone type, the call's notification and buttons),
+         and with notifications on Iris holds its connection to the server
+         (remoteMessaging type, a quiet "Iris is connected" notification). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- Speaker, earpiece and Bluetooth headsets for a call. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <!-- The service plugin asks for this to restart after a reboot, which a
-         call never wants. -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove"/>
+    <!-- With notifications on, the connection comes back after a reboot or an
+         app update (the service plugin's receivers). A call never restarts:
+         it does not ask for that. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="Iris"
         android:name="${applicationName}"
@@ -45,12 +49,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- The voice call's foreground service (flutter_foreground_task; the
-             name is the plugin's and must not change). -->
+        <!-- The shared foreground service (flutter_foreground_task; the name is
+             the plugin's and must not change). Not stopWithTask: push outlives
+             the app's task; a call-only service is stopped by its own isolate
+             when the app goes (MainActivity.onDestroy). -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="microphone"
-            android:stopWithTask="true"
+            android:foregroundServiceType="microphone|remoteMessaging"
+            android:stopWithTask="false"
             android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
