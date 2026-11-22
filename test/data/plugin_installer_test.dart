@@ -78,6 +78,10 @@ void main() {
       }
     });
 
+    test('this build pins a released commit', () {
+      expect(PluginRelease.current.released, isTrue);
+    });
+
     test('is never behind the plugin in this repository', () {
       final yaml = File('server/hermes-iris/plugin.yaml').readAsStringSync();
       final version = RegExp(

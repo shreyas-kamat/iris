@@ -13,12 +13,12 @@ final class PluginRelease {
     required this.subdir,
   });
 
-  /// What this build installs. The full commit behind `hermes-iris-v0.4.0` is filled in when that tag is cut (plan
-  /// Task 5); until then [released] is false and nothing installs.
+  /// What this build installs: the commit behind the annotated tag `hermes-iris-v0.4.0`
+  /// (`git rev-parse hermes-iris-v0.4.0^{commit}`).
   static const current = PluginRelease(
     version: '0.4.0',
     tag: 'hermes-iris-v0.4.0',
-    sha: '',
+    sha: 'fbb076d55a8a796ce8d47b11581d19ebe7483cde',
     repo: 'shreyas-kamat/iris',
     subdir: 'server/hermes-iris',
   );
