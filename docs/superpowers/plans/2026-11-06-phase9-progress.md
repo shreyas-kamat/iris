@@ -30,7 +30,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS7 | Task 12: final review, release, PR | Opus | done | `fbb076d` |
 | IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
 | IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | done | `3b0e344` |
-| IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
+| IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | doing | `05daea1` |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
 | C-plan | Implementation plan with segment table | Opus | todo | |
@@ -742,3 +742,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 ### PS7 — Task 12 Step 4 — done — 2026-11-23 — Opus 5.5
 - User said yes. Tagged `hermes-iris-v0.4.0` (annotated) at `fbb076d55a8a796ce8d47b11581d19ebe7483cde`, pushed `feat/push` and the tag, opened PR #43 (base `feat/genui`, stacked on #42). Nothing merged.
 - segment PS7 complete. Next: IN3 (Sonnet), plugin installer Task 5: set `PluginRelease.current.sha` to `fbb076d55a8a796ce8d47b11581d19ebe7483cde`, then the live reinstall on the user's server (needs the user's yes).
+
+### IN3 - Task 5 Step 1 - done; Step 2 waits for the user - 2026-11-23 - Sonnet 5.5
+- Running as Sonnet 5.5. Git matches the log (PS7 `fbb076d` in history; HEAD `5c474b3`, clean apart from the untracked Phase 10-15 planning files and `store/screenshots/`).
+- Commits: 05daea1 feat(plugin): pin the hermes-iris 0.4.0 release commit
+- Step 1: `PluginRelease.current.sha` = `fbb076d55a8a796ce8d47b11581d19ebe7483cde` (`git rev-parse hermes-iris-v0.4.0^{commit}`). New test `this build pins a released commit` failed first, then passed.
+- Verified: `flutter test test/data/plugin_installer_test.dart` 19 pass; `flutter test --exclude-tags live` -> 1,946 pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos only. Regenerated Windows plugin files reverted.
+- Next: Step 2 needs the user's yes: install a build with the pinned sha on the Moto G45 (connected, ZN4226ZPW5), then Settings, Iris plugin, Update against their server (the plugin there is 0.3.0). Check Hermes reports ok, capabilities read 0.4.0, `~/.hermes/plugins/iris` replaced with no second plugin dir, `~/.hermes/iris/default` untouched, push and displays still work; note any consent or scan gate. Step 3 only if the route or login is refused.
