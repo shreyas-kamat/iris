@@ -13,6 +13,7 @@ import '../../data/chat/attachment.dart';
 import '../../data/chat/chat_backend.dart';
 import '../../data/chat/chat_models.dart';
 import '../../data/genui/signals.dart';
+import '../../data/push/push_intents.dart';
 import '../../design/components/controls.dart';
 import '../../design/components/iris_orb.dart';
 import '../../design/components/media_image.dart';
@@ -43,6 +44,7 @@ import 'connection_card.dart';
 import 'context_sheet.dart';
 import 'conversation_actions.dart';
 import 'decision_cards.dart';
+import 'foreground_chat_marker.dart';
 import 'login_card.dart';
 import 'message_menu.dart';
 import 'model_sheet.dart';
@@ -104,6 +106,7 @@ class ChatScreen extends StatefulWidget {
     this.menu,
     this.shareMarkdown,
     this.signals,
+    this.pushTap,
     super.key,
   });
 
@@ -135,6 +138,10 @@ class ChatScreen extends StatefulWidget {
 
   /// Where signals about generated displays go; null where nothing learns from them.
   final SignalReporter? signals;
+
+  /// The notification that opened this chat, when one did. Its button (Approve once, Deny) is applied once the chat is
+  /// open.
+  final PushTap? pushTap;
 
   /// The stored conversation to open; null starts a new one.
   final String? conversationId;
@@ -199,7 +206,13 @@ class _ChatScreenState extends State<ChatScreen> {
     _chat.onPromptReturned = _prefill;
     _text.addListener(_watchForSlash);
     _text.addListener(_clearKitOnTyping);
-    unawaited(_chat.open());
+    unawaited(_openAndApplyTap());
+  }
+
+  Future<void> _openAndApplyTap() async {
+    await _chat.open();
+    if (!mounted) return;
+    if (widget.pushTap case final tap?) await _chat.applyPushAction(tap);
   }
 
   @override
@@ -727,130 +740,133 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ChatState>(
     valueListenable: _chat,
-    builder: (context, state, _) => IrisScaffold(
-      header: _ChatHeader(
-        title: state.title ?? 'New conversation',
-        turn: state.turn,
-        connecting: state.phase == ChatPhase.loading,
-        branch: widget.branch,
-        onOpenParent: widget.branch == null ? null : _openParent,
-        onMenu: () => unawaited(_openMenu(state)),
-      ),
-      body: _body(context, state),
-      footer: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // One decision at a time, arriving on the standard curve and
-          // collapsing its height when answered, so the composer glides
-          // rather than jumping.
-          IrisAnimatedSize(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedSwitcher(
-              duration: context.reduceMotion
-                  ? Duration.zero
-                  : IrisDurations.normal,
-              switchInCurve: IrisCurves.standard,
-              switchOutCurve: IrisCurves.exit,
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween(
-                    begin: const Offset(0, .08),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
+    builder: (context, state, _) => ForegroundChatMarker(
+      storedId: _chat.conversationId,
+      child: IrisScaffold(
+        header: _ChatHeader(
+          title: state.title ?? 'New conversation',
+          turn: state.turn,
+          connecting: state.phase == ChatPhase.loading,
+          branch: widget.branch,
+          onOpenParent: widget.branch == null ? null : _openParent,
+          onMenu: () => unawaited(_openMenu(state)),
+        ),
+        body: _body(context, state),
+        footer: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // One decision at a time, arriving on the standard curve and
+            // collapsing its height when answered, so the composer glides
+            // rather than jumping.
+            IrisAnimatedSize(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedSwitcher(
+                duration: context.reduceMotion
+                    ? Duration.zero
+                    : IrisDurations.normal,
+                switchInCurve: IrisCurves.standard,
+                switchOutCurve: IrisCurves.exit,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween(
+                      begin: const Offset(0, .08),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: _decision(state),
+              ),
+            ),
+            if (_missed)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.window.gutter,
+                  IrisSpace.sm,
+                  context.window.gutter,
+                  0,
+                ),
+                child: _MissedNote(
+                  onTryAgain: () => unawaited(_startDictation()),
                 ),
               ),
-              child: _decision(state),
-            ),
-          ),
-          if (_missed)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.window.gutter,
-                IrisSpace.sm,
-                context.window.gutter,
-                0,
+            if ((state.context?.percent ?? 0) >= 95)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.window.gutter,
+                  IrisSpace.sm,
+                  context.window.gutter,
+                  0,
+                ),
+                child: ContextStrip(
+                  onBranch: () => unawaited(_branch(summarise: true)),
+                ),
               ),
-              child: _MissedNote(
-                onTryAgain: () => unawaited(_startDictation()),
-              ),
-            ),
-          if ((state.context?.percent ?? 0) >= 95)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.window.gutter,
-                IrisSpace.sm,
-                context.window.gutter,
-                0,
-              ),
-              child: ContextStrip(
-                onBranch: () => unawaited(_branch(summarise: true)),
-              ),
-            ),
-          IrisAnimatedSize(
-            alignment: Alignment.bottomCenter,
-            child: state.queue.isEmpty
-                ? const SizedBox.shrink()
-                : Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      context.window.gutter,
-                      IrisSpace.sm,
-                      context.window.gutter,
-                      0,
+            IrisAnimatedSize(
+              alignment: Alignment.bottomCenter,
+              child: state.queue.isEmpty
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        context.window.gutter,
+                        IrisSpace.sm,
+                        context.window.gutter,
+                        0,
+                      ),
+                      child: QueueTray(
+                        items: state.queue,
+                        paused: state.queuePaused,
+                        onRemove: _chat.removeQueued,
+                        onSendNext: () => unawaited(_chat.sendNextQueued()),
+                        onClear: _chat.clearQueue,
+                      ),
                     ),
-                    child: QueueTray(
-                      items: state.queue,
-                      paused: state.queuePaused,
-                      onRemove: _chat.removeQueued,
-                      onSendNext: () => unawaited(_chat.sendNextQueued()),
-                      onClear: _chat.clearQueue,
+            ),
+            _kitDock(context, state),
+            Composer(
+              controller: _text,
+              running: state.running,
+              busyMode: state.busyMode,
+              enabled: state.phase == ChatPhase.ready,
+              commands: state.commands,
+              model: state.model == null
+                  ? null
+                  : state.effort == null
+                  ? state.model
+                  : '${state.model} · ${state.effort!.wire}',
+              onModel: () => unawaited(showModelPicker(context, _chat)),
+              contextUsage: state.context,
+              attachments: _draft,
+              onAttach: (source) => unawaited(_attach(source)),
+              onRemoveAttachment: (i) => setState(() => _draft.removeAt(i)),
+              recording: _recording,
+              level: _recording == null ? null : _recorder.level,
+              transcribing: _transcribing,
+              onMic: () => unawaited(_startDictation()),
+              maxRecording: _maxRecording,
+              voiceMode: widget.voice?.capabilities.voiceMode ?? false,
+              onVoice: widget.voice?.capabilities.voiceMode ?? false
+                  ? () => unawaited(_startCall())
+                  : null,
+              onStopRecording: () => unawaited(_stopDictation()),
+              onCancelRecording: () => unawaited(_cancelDictation()),
+              onContext: state.context == null
+                  ? null
+                  : () => unawaited(
+                      showContextSheet(
+                        context,
+                        state.context!,
+                        model: state.model,
+                      ),
                     ),
-                  ),
-          ),
-          _kitDock(context, state),
-          Composer(
-            controller: _text,
-            running: state.running,
-            busyMode: state.busyMode,
-            enabled: state.phase == ChatPhase.ready,
-            commands: state.commands,
-            model: state.model == null
-                ? null
-                : state.effort == null
-                ? state.model
-                : '${state.model} · ${state.effort!.wire}',
-            onModel: () => unawaited(showModelPicker(context, _chat)),
-            contextUsage: state.context,
-            attachments: _draft,
-            onAttach: (source) => unawaited(_attach(source)),
-            onRemoveAttachment: (i) => setState(() => _draft.removeAt(i)),
-            recording: _recording,
-            level: _recording == null ? null : _recorder.level,
-            transcribing: _transcribing,
-            onMic: () => unawaited(_startDictation()),
-            maxRecording: _maxRecording,
-            voiceMode: widget.voice?.capabilities.voiceMode ?? false,
-            onVoice: widget.voice?.capabilities.voiceMode ?? false
-                ? () => unawaited(_startCall())
-                : null,
-            onStopRecording: () => unawaited(_stopDictation()),
-            onCancelRecording: () => unawaited(_cancelDictation()),
-            onContext: state.context == null
-                ? null
-                : () => unawaited(
-                    showContextSheet(
-                      context,
-                      state.context!,
-                      model: state.model,
-                    ),
-                  ),
-            state: agentStateFor(state.turn),
-            onSend: () => unawaited(_send()),
-            onStop: () => unawaited(_chat.stop()),
-          ),
-        ],
+              state: agentStateFor(state.turn),
+              onSend: () => unawaited(_send()),
+              onStop: () => unawaited(_chat.stop()),
+            ),
+          ],
+        ),
       ),
     ),
   );

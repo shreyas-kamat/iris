@@ -21,15 +21,48 @@ Check it is up (the dashboard login or Cloudflare Access headers are needed; plu
 
 ```sh
 curl -s https://<server>/api/plugins/iris/capabilities
-# {"version":"0.3.0","openui":"1.0","library_ids":[...],"features":[...]}
+# {"version":"0.4.1","openui":"1.0","library_ids":[...],"features":[...]}
 ```
 
 Hermes imports `dashboard/plugin_api.py` only when the plugin is in `plugins.enabled`.
+
+**Named profiles:** each Hermes profile has its own config. The plugin's hooks (push events, generated displays) run
+only for chats in a profile whose `plugins.enabled` lists `iris`. Add `iris` to that list in the `config.yaml` of every
+profile Iris is used with, or replies there send no notification.
 
 ## Upgrade
 
 Repeat the `rsync` and restart `hermes-dashboard`. The store (`~/.hermes/iris/`) is never touched by an upgrade.
 Compare `/capabilities` `version` with `plugin.yaml` afterwards.
+
+## Push notifications for iPhones (APNs)
+
+Android needs nothing here: Iris holds `GET push/stream` open. iPhones get notifications from Apple, which this server
+calls directly (no relay), so it needs an APNs key once:
+
+1. In the Apple developer portal, Certificates, Identifiers & Profiles -> Keys, create a key with **Apple Push
+   Notifications service (APNs)** enabled. Download `AuthKey_<KEY ID>.p8` (Apple lets you download it once) and note
+   the key id and your team id (Membership details).
+2. On the server, put the key beside a config file and make both private to the user the dashboard runs as:
+
+   ```sh
+   mkdir -p ~/.hermes/iris/push && cd ~/.hermes/iris/push
+   cp /path/to/AuthKey_ABC123DEFG.p8 .
+   cat > apns.json <<'JSON'
+   {"team_id": "TEAM123456", "key_id": "ABC123DEFG", "bundle_id": "com.iflotech.iris",
+    "key_path": "AuthKey_ABC123DEFG.p8", "environment": "production"}
+   JSON
+   chmod 600 apns.json AuthKey_ABC123DEFG.p8
+   ```
+
+   `environment` is `sandbox` for an Iris build run from Xcode, `production` for TestFlight and App Store builds.
+   `key_path` is relative to this directory (or absolute). A key file that is not mode 0600 is refused.
+3. Restart `hermes-dashboard`. `GET push/status` should say `"apns_configured": true` (it also needs `curl` on the
+   PATH: the server sends with `curl --http2`). `POST push/test/<device id>` sends one test notification to a
+   registered iPhone and answers `{"ok", "result"}`.
+
+The sender is a thread in the dashboard process; it reads new events once a second, skips any older than 10 minutes,
+and remembers where it got to in `<profile>/push/apns.cursor`. Failures are logged by status and Apple's reason only.
 
 ## Remove
 
@@ -43,7 +76,7 @@ Leave `~/.hermes/iris/` in place if the person may reinstall: it holds their pro
 
 ```sh
 cd server/hermes-iris
-python -m venv .venv && .venv/Scripts/python -m pip install fastapi httpx pytest pyyaml   # Scripts -> bin on Linux
+python -m venv .venv && .venv/Scripts/python -m pip install fastapi httpx pytest pyyaml cryptography   # Scripts -> bin on Linux
 .venv/Scripts/python -m pytest
 ```
 
@@ -54,11 +87,13 @@ dashboard routes can run in different processes, so they share state only throug
 ## Layout
 
 ```
-plugin.yaml  __init__.py  pyproject.toml
+plugin.yaml  __init__.py  pytest.ini
 dashboard/{manifest.json,plugin_api.py,dist/index.js}   routes under /api/plugins/iris/
 genui/    store (files), templates, surfaces (iris_ui), tool, guards, context, flags, skill, catalog, paths,
           personal (profile, templates and proposed changes), personal_tools, feedback (the app's signals),
           usage (one row per turn)
+push/     devices (registry and settings), active (chats awaiting a reply), outbox (events), render (what a device
+          may see), hooks (capture), stream (Android SSE), apns (iPhone sender), worker (APNs delivery thread)
 openui/   Python port of the OpenUI Lang lexer, parser, validator and prompt generator (validation only)
 catalog/  v1.library.json: the component library, exported from `lib/features/genui/render/iris_library.dart` (refresh: `IRIS_WRITE_CATALOG=1 flutter test test/features/genui/iris_library_test.dart`)
 skills/iris-genui/   SKILL.md, references/library.md (generated), references/patterns.md (every program is tested)

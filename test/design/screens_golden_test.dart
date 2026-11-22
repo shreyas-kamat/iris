@@ -13,7 +13,9 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iris/app/automation_providers.dart';
 import 'package:iris/app/device_state.dart';
+import 'package:iris/app/plugin_providers.dart';
 import 'package:iris/app/providers.dart';
+import 'package:iris/app/push_providers.dart';
 import 'package:iris/app/theme_controller.dart';
 import 'package:iris/app/usage.dart';
 import 'package:iris/core/json.dart';
@@ -25,6 +27,8 @@ import 'package:iris/data/chat/chat_models.dart';
 import 'package:iris/data/chat/connection_models.dart';
 import 'package:iris/data/net/capabilities.dart';
 import 'package:iris/data/net/server_config.dart';
+import 'package:iris/data/plugin/plugin_installer.dart';
+import 'package:iris/data/plugin/plugin_release.dart';
 import 'package:iris/data/rpc/dashboard_session.dart';
 import 'package:iris/design/theme/iris_theme.dart';
 import 'package:iris/design/tokens/palette.dart';
@@ -33,7 +37,10 @@ import 'package:iris/features/chat/chat_screen.dart';
 import 'package:iris/features/chat/connection_card.dart';
 import 'package:iris/features/chat/conversation_list_screen.dart';
 import 'package:iris/features/chat/conversation_search.dart';
+import 'package:iris/features/plugin/plugin_onboarding_screen.dart';
 import 'package:iris/features/profiles/profiles_screen.dart';
+import 'package:iris/features/settings/notifications_settings_screen.dart';
+import 'package:iris/features/settings/plugin_settings_section.dart';
 import 'package:iris/features/settings/settings_screen.dart';
 import 'package:iris/features/settings/usage_settings_screen.dart';
 
@@ -43,6 +50,29 @@ import '../support/fonts.dart';
 
 /// A phone's logical size. The goldens are captured at this size and no other.
 const _phone = Size(390, 844);
+
+/// Notifications switched on, so the three events show.
+class _PushOn extends PushEnabled {
+  @override
+  bool build() => true;
+}
+
+/// An install in a fixed state, so the onboarding screen can be drawn mid-install or after a failure.
+class _InstallIn extends PluginInstall {
+  _InstallIn(this._state);
+  final PluginInstallState _state;
+
+  @override
+  PluginInstallState build() => _state;
+}
+
+const _pinned = PluginRelease(
+  version: '0.4.0',
+  tag: 'hermes-iris-v0.4.0',
+  sha: '0123456789abcdef0123456789abcdef01234567',
+  repo: 'shreyas-kamat/iris',
+  subdir: 'server/hermes-iris',
+);
 
 /// A fixed "now": an evening, so the greeting is deterministic and the
 /// relative times below have a stable reference.
@@ -567,6 +597,81 @@ void main() {
         name: 'usage_settings',
       );
     });
+
+    testWidgets('notifications settings, $mode', (tester) async {
+      final backend = FakeChatBackend();
+      addTearDown(backend.close);
+      await capture(
+        tester,
+        screen: const NotificationsSettingsScreen(),
+        isDark: isDark,
+        overrides: [
+          ..._sharedOverrides(backend),
+          pushEnabledProvider.overrideWith(_PushOn.new),
+        ],
+        name: 'notifications_settings',
+      );
+    });
+
+    for (final (name, status) in [
+      ('plugin_settings', const PluginAbsent()),
+      (
+        'plugin_settings_update',
+        const PluginInstalled('0.3.0', updateTo: '0.4.0'),
+      ),
+    ]) {
+      testWidgets('$name, $mode', (tester) async {
+        final backend = FakeChatBackend();
+        addTearDown(backend.close);
+        await capture(
+          tester,
+          screen: Scaffold(
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: const PluginSettingsSection(),
+              ),
+            ),
+          ),
+          isDark: isDark,
+          overrides: [
+            ..._sharedOverrides(backend),
+            pluginStatusProvider.overrideWithValue(AsyncData(status)),
+          ],
+          name: name,
+        );
+      });
+    }
+
+    for (final (name, state) in [
+      ('plugin_onboarding', const PluginInstallIdle()),
+      ('plugin_onboarding_installing', const PluginInstalling()),
+      (
+        'plugin_onboarding_failed',
+        const PluginInstallFailed(
+          PluginInstallResult.failure(
+            'Your login cannot install plugins.',
+            showCommand: true,
+          ),
+        ),
+      ),
+    ]) {
+      testWidgets('$name, $mode', (tester) async {
+        final backend = FakeChatBackend();
+        addTearDown(backend.close);
+        await capture(
+          tester,
+          screen: const PluginOnboardingScreen(),
+          isDark: isDark,
+          overrides: [
+            ..._sharedOverrides(backend),
+            pluginReleaseProvider.overrideWithValue(_pinned),
+            pluginInstallProvider.overrideWith(() => _InstallIn(state)),
+          ],
+          name: name,
+        );
+      });
+    }
 
     testWidgets('home with pinned and live chats, $mode', (tester) async {
       final backend = FakeChatBackend()

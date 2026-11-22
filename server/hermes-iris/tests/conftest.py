@@ -28,6 +28,9 @@ def _install_fake_hermes_constants() -> None:
 
 _install_fake_hermes_constants()
 
+# Importing dashboard/plugin_api.py would start the real APNs worker thread.
+os.environ["HERMES_IRIS_PUSH_WORKER"] = "0"
+
 
 def load_package(name: str = "hermes_iris"):
     """Load the plugin directory as a package, the way Hermes's plugin loader does."""
@@ -64,6 +67,33 @@ def hermes_home(tmp_path, monkeypatch) -> Path:
 @pytest.fixture
 def plugin(hermes_home):
     return load_package()
+
+
+APNS_TEAM = "TEAM123456"
+APNS_KEY_ID = "KEY1234567"
+
+
+@pytest.fixture
+def apns_key(hermes_home):
+    """A fresh P-256 key written the way Apple hands it out (a PKCS#8 ``.p8``), plus ``apns.json`` beside it.
+    Returns the private key so a test can verify signatures with its public half."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    push = hermes_home / "iris" / "push"
+    push.mkdir(parents=True)
+    p8 = push / f"AuthKey_{APNS_KEY_ID}.p8"
+    p8.write_bytes(
+        key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    )
+    os.chmod(p8, 0o600)
+    (push / "apns.json").write_text(
+        '{"team_id": "%s", "key_id": "%s", "bundle_id": "com.iflotech.iris", "key_path": "%s",'
+        ' "environment": "sandbox"}' % (APNS_TEAM, APNS_KEY_ID, p8.name),
+        "utf-8",
+    )
+    return key
 
 
 @pytest.fixture

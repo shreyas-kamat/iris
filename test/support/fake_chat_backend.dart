@@ -279,6 +279,34 @@ final class FakeChatBackend implements ChatBackend, SurfaceBackend {
     return answerResult;
   }
 
+  /// What the gateway lists as waiting for [pendingApprovals], oldest first.
+  List<ApprovalRequest> pendingApprovalList = [];
+
+  /// Set to make [pendingApprovals] fail.
+  IrisFailure? pendingFailure;
+
+  /// What [resolveApproval] reports: false is "someone else answered first".
+  bool resolvedResult = true;
+
+  /// Every `resolveApproval`, as `<queue id>:<choice>`.
+  final resolved = <String>[];
+
+  @override
+  Future<Result<List<ApprovalRequest>>> pendingApprovals(
+    String runtimeId,
+  ) async => pendingFailure != null
+      ? Err(pendingFailure!)
+      : Ok(List.of(pendingApprovalList));
+
+  @override
+  Future<Result<bool>> resolveApproval(
+    ApprovalRequest request,
+    String choice,
+  ) async {
+    resolved.add('${request.queueId}:$choice');
+    return answerResult.map((_) => resolvedResult);
+  }
+
   @override
   Future<Result<void>> answerClarify(
     ClarifyRequest request,

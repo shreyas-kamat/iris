@@ -1,6 +1,7 @@
 /// Keeping a call alive with the screen off: on Android a microphone-type
 /// foreground service with the call's notification (D1) and its Mute and End
-/// buttons. iOS keeps the call going with the `audio` background mode and
+/// buttons. The service is shared with push (see `ForegroundArbiter`); its
+/// isolate is `startIrisServiceTask`, which passes the buttons back here. iOS keeps the call going with the `audio` background mode and
 /// shows its own microphone indicator, so the service does nothing there.
 library;
 
@@ -9,7 +10,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
-import '../../core/logging.dart';
+import '../../data/push/foreground_arbiter.dart';
+import '../../data/push/foreground_driver.dart';
 import 'voice_call.dart';
 
 enum CallAction { mute, unmute, end }
@@ -78,17 +80,13 @@ String _clock(Duration d) {
   return '${d.inMinutes}:$seconds';
 }
 
-/// The Android foreground service, through `flutter_foreground_task`.
+/// The Android foreground service, shared with push through the [ForegroundArbiter]: while the call runs, its
+/// notification, buttons and microphone type are the service's; when it ends, push (if on) keeps the service.
 final class ForegroundCallService implements CallService {
-  ForegroundCallService();
+  ForegroundCallService({ForegroundArbiter? arbiter})
+    : _arbiter = arbiter ?? foregroundArbiter;
 
-  static const _log = IrisLog('voice.service');
-  static const _serviceId = 4417;
-
-  /// The notification permission is asked once, on the first call; a
-  /// refusal only hides the notification, the call goes on.
-  static bool _askedNotifications = false;
-
+  final ForegroundArbiter _arbiter;
   final _actions = StreamController<CallAction>.broadcast();
   bool _running = false;
 
@@ -101,64 +99,23 @@ final class ForegroundCallService implements CallService {
   Future<void> start(CallNotice notice) async {
     if (!_android || _running) return;
     FlutterForegroundTask.initCommunicationPort();
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'iris_calls',
-        channelName: 'Voice calls',
-        channelDescription: 'Shown while you are talking with Iris.',
-        onlyAlertOnce: true,
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(
-        showNotification: false,
-      ),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.nothing(),
-        stopWithTask: true,
-      ),
-    );
-    if (!_askedNotifications) {
-      _askedNotifications = true;
-      try {
-        final permission =
-            await FlutterForegroundTask.checkNotificationPermission();
-        if (permission != NotificationPermission.granted) {
-          await FlutterForegroundTask.requestNotificationPermission();
-        }
-      } on Object catch (error) {
-        _log.warn('notification permission', data: {'error': '$error'});
-      }
-    }
     FlutterForegroundTask.addTaskDataCallback(_onData);
-    final result = await FlutterForegroundTask.startService(
-      serviceId: _serviceId,
-      serviceTypes: [ForegroundServiceTypes.microphone],
-      notificationTitle: notice.title,
-      notificationText: notice.text,
-      notificationButtons: _buttons(muted: notice.muted),
-      callback: startCallTask,
-    );
-    _running = result is ServiceRequestSuccess;
-    if (result case ServiceRequestFailure(:final error)) {
-      _log.warn('call service did not start', data: {'error': '$error'});
-    }
+    _running = await _arbiter.need(ServiceOwner.call, _service(notice));
   }
 
   @override
   Future<void> update(CallNotice notice) async {
     if (!_running) return;
-    await FlutterForegroundTask.updateService(
-      notificationTitle: notice.title,
-      notificationText: notice.text,
-      notificationButtons: _buttons(muted: notice.muted),
-    );
+    await _arbiter.need(ServiceOwner.call, _service(notice));
   }
 
   @override
   Future<void> stop() async {
+    if (!_android) return;
     FlutterForegroundTask.removeTaskDataCallback(_onData);
     if (!_running) return;
     _running = false;
-    await FlutterForegroundTask.stopService();
+    await _arbiter.release(ServiceOwner.call);
   }
 
   void _onData(Object data) {
@@ -171,33 +128,15 @@ final class ForegroundCallService implements CallService {
     if (action != null && !_actions.isClosed) _actions.add(action);
   }
 
-  static List<NotificationButton> _buttons({required bool muted}) => [
-    NotificationButton(
-      id: muted ? 'unmute' : 'mute',
-      text: muted ? 'Unmute' : 'Mute',
-    ),
-    const NotificationButton(id: 'end', text: 'End'),
-  ];
-}
-
-/// The service's own isolate: it only passes the buttons back to the app.
-@pragma('vm:entry-point')
-void startCallTask() => FlutterForegroundTask.setTaskHandler(_CallTask());
-
-final class _CallTask extends TaskHandler {
-  @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
-
-  @override
-  void onRepeatEvent(DateTime timestamp) {}
-
-  @override
-  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
-
-  @override
-  void onNotificationButtonPressed(String id) =>
-      FlutterForegroundTask.sendDataToMain(id);
-
-  @override
-  void onNotificationPressed() => FlutterForegroundTask.launchApp();
+  static ServiceNotice _service(CallNotice notice) => ServiceNotice(
+    title: notice.title,
+    text: notice.text,
+    buttons: [
+      ServiceButton(
+        notice.muted ? 'unmute' : 'mute',
+        notice.muted ? 'Unmute' : 'Mute',
+      ),
+      const ServiceButton('end', 'End'),
+    ],
+  );
 }

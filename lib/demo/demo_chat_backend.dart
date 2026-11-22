@@ -151,6 +151,20 @@ final class DemoChatBackend implements ChatBackend {
   }
 
   @override
+  Future<Result<List<ApprovalRequest>>> pendingApprovals(
+    String runtimeId,
+  ) async => const Ok([]);
+
+  @override
+  Future<Result<bool>> resolveApproval(
+    ApprovalRequest request,
+    String choice,
+  ) async {
+    _world.answerApproval(request, choice);
+    return const Ok(true);
+  }
+
+  @override
   Future<Result<void>> answerClarify(
     ClarifyRequest request,
     ClarifyQuestion question,

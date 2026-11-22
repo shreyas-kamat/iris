@@ -119,6 +119,11 @@ class ProfileStore:
     def _file(self, *parts: str) -> Path:
         return self.dir.joinpath(*parts)
 
+    @property
+    def push_dir(self) -> Path:
+        """Where push notifications keep this profile's devices, active chats and outbox."""
+        return self._file("push")
+
     # -- profile.json ------------------------------------------------------------------------------------------
 
     def get_profile(self) -> dict[str, Any] | None:

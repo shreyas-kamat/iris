@@ -23,6 +23,8 @@ import '../data/net/capabilities.dart';
 import '../data/net/credentials.dart';
 import '../data/net/server_config.dart';
 import '../data/prefs/preferences_store.dart';
+import '../data/push/push_api.dart';
+import '../data/push/push_controller.dart';
 import '../data/repositories/server_repository.dart';
 import '../data/rpc/dashboard_session.dart';
 import '../data/rpc/rpc_frame.dart';
@@ -30,6 +32,7 @@ import '../demo/demo_chat_backend.dart';
 import '../demo/demo_mode.dart';
 import 'genui_providers.dart';
 import 'preferences.dart';
+import 'push_providers.dart';
 
 /// The on-disk database.
 ///
@@ -217,6 +220,15 @@ final activeChatProvider = FutureProvider<ChatBackend?>((ref) async {
     genUi: GenUiController(
       DashboardGenUiApi(connection.client, profile: profile),
       enabled: () => ref.read(genUiActiveProvider),
+    ),
+    // Read at each send, so the switch in Settings applies to the next message.
+    push: PushController(
+      DashboardPushApi(connection.client, profile: profile),
+      deviceId: ref.read(pushDeviceIdProvider),
+      platform: pushPlatform,
+      appVersion: pushAppVersion,
+      enabled: () => ref.read(pushEnabledProvider),
+      settings: () => ref.read(pushSettingsProvider),
     ),
   );
   ref.onDispose(() => unawaited(chat.dispose()));

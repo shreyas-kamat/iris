@@ -9,8 +9,11 @@ import '../design/components/image_host_scope.dart';
 import '../design/platform/platform_feel.dart';
 import '../design/theme/iris_theme.dart';
 import '../features/chat/conversation_list_screen.dart';
+import '../features/plugin/plugin_onboarding_host.dart';
 import '../features/servers/server_gate.dart';
 import 'device_state.dart';
+import 'push_host.dart';
+import 'push_router.dart';
 import 'theme_controller.dart';
 
 class IrisApp extends ConsumerWidget {
@@ -19,6 +22,8 @@ class IrisApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preference = ref.watch(themeControllerProvider);
+    // Android push: the service's connection follows the person's switch; taps open their chat.
+    ref.watch(pushHostProvider);
 
     return Builder(
       builder: (context) {
@@ -46,6 +51,8 @@ class IrisApp extends ConsumerWidget {
 
         return MaterialApp(
           title: 'Iris',
+          // For a tap on a notification, which opens a screen from outside any widget.
+          navigatorKey: irisNavigatorKey,
           debugShowCheckedModeBanner: false,
           theme: theme.materialTheme,
           // Applied once at the root so no individual list has to remember to
@@ -73,7 +80,8 @@ class IrisApp extends ConsumerWidget {
           home: ServerGate(
             // Conversations are home; the link status screen opens from the
             // list's header.
-            connected: (context) => const ConversationListScreen(),
+            connected: (context) =>
+                const PluginOnboardingHost(child: ConversationListScreen()),
           ),
         );
       },

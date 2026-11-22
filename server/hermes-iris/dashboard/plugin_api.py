@@ -8,11 +8,12 @@ in Phase 0.2), so none checks credentials, and every one takes ``?profile=``.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 _PACKAGE = "hermes_iris"
 _ROOT = Path(__file__).resolve().parent.parent
@@ -42,7 +43,16 @@ store_mod = importlib.import_module(f"{_PACKAGE}.genui.store")
 paths = importlib.import_module(f"{_PACKAGE}.genui.paths")
 personal = importlib.import_module(f"{_PACKAGE}.genui.personal")
 feedback = importlib.import_module(f"{_PACKAGE}.genui.feedback")
+devices_mod = importlib.import_module(f"{_PACKAGE}.push.devices")
+active_mod = importlib.import_module(f"{_PACKAGE}.push.active")
+stream_mod = importlib.import_module(f"{_PACKAGE}.push.stream")
+apns_mod = importlib.import_module(f"{_PACKAGE}.push.apns")
+worker_mod = importlib.import_module(f"{_PACKAGE}.push.worker")
 router = APIRouter()
+
+# The APNs sender runs in this (dashboard) process, once. Tests turn it off with HERMES_IRIS_PUSH_WORKER=0.
+if os.environ.get("HERMES_IRIS_PUSH_WORKER", "1") != "0":
+    worker_mod.start(paths.iris_root())
 
 
 def _profile_store(profile: str | None):
@@ -54,7 +64,7 @@ def _profile_store(profile: str | None):
 
 
 #: Names of the features this build offers; Iris reads them to decide what to show. Appended to as tasks land.
-FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback", "refine"]
+FEATURES: list[str] = ["capabilities", "session-flag", "surfaces", "profile", "templates", "feedback", "refine", "push"]
 
 
 @router.get("/capabilities")
@@ -198,3 +208,95 @@ def delete_template(template_id: str, profile: str | None = None):
 async def post_feedback(request: Request, profile: str | None = None):
     """Signals about displays the app drew (used, expanded, dismissed, not useful). Best effort on the app's side."""
     return _answer(feedback.record(_profile_store(profile), await _json_body(request)))
+
+
+# ---- push notifications: devices and their settings ------------------------------------------------------------------
+
+
+def _devices(profile: str | None):
+    return devices_mod.Devices(_profile_store(profile).push_dir)
+
+
+def _device_id(device_id: str) -> str:
+    try:
+        return store_mod.safe_component(device_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"device: {e}") from None
+
+
+@router.put("/push/devices/{device_id}")
+async def put_push_device(device_id: str, request: Request, profile: str | None = None):
+    """Registers (or refreshes) one Iris install. The response never carries the APNs token."""
+    body = await _json_body(request)
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+    try:
+        _devices(profile).register(
+            _device_id(device_id),
+            body.get("platform"),
+            body.get("apns_token"),
+            body.get("app_version"),
+            body.get("settings"),
+        )
+    except devices_mod.InvalidDevice as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+    return {"ok": True}
+
+
+@router.patch("/push/devices/{device_id}/settings")
+async def patch_push_settings(device_id: str, request: Request, profile: str | None = None):
+    record = _devices(profile).update_settings(_device_id(device_id), await _json_body(request))
+    if record is None:
+        raise HTTPException(status_code=404, detail="no such device")
+    return {"ok": True, "settings": record["settings"]}
+
+
+@router.delete("/push/devices/{device_id}")
+def delete_push_device(device_id: str, profile: str | None = None):
+    return {"ok": True, "deleted": _devices(profile).remove(_device_id(device_id))}
+
+
+@router.post("/push/active/{session_id}")
+def mark_chat_active(session_id: str, profile: str | None = None):
+    """Iris calls this when the person sends to a chat: the next finished turn there is worth a notification."""
+    try:
+        active_mod.mark(_profile_store(profile).push_dir, session_id)
+    except store_mod.InvalidName as e:
+        raise HTTPException(status_code=400, detail=f"session: {e}") from None
+    return {"ok": True}
+
+
+@router.get("/push/stream")
+async def push_stream(device_id: str, after: str | None = None, profile: str | None = None):
+    """Server-Sent Events for one Android device: its notices as they happen, with a short replay after ``after``."""
+    p = _profile_store(profile)
+    device = devices_mod.Devices(p.push_dir).get(_device_id(device_id))
+    if device is None or device.get("platform") != "android":
+        raise HTTPException(status_code=404, detail="no such Android device")
+    return StreamingResponse(
+        stream_mod.frames(p.push_dir, device["device_id"], after),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/push/status")
+def push_status(profile: str | None = None):
+    configured = apns_mod.load_config(paths.iris_root()) is not None and apns_mod.available()
+    return {"ok": True, "apns_configured": configured, "devices": len(_devices(profile).all())}
+
+
+@router.post("/push/test/{device_id}")
+def push_test(device_id: str, profile: str | None = None):
+    """Sends one test notification, titled with the device's own reply text, to a registered iPhone."""
+    device = _devices(profile).get(_device_id(device_id))
+    if device is None or device.get("platform") != "ios" or not device.get("apns_token"):
+        raise HTTPException(status_code=404, detail="no such iOS device")
+    cfg = apns_mod.load_config(paths.iris_root())
+    if cfg is None:
+        raise HTTPException(status_code=503, detail="APNs is not configured on this server")
+    text = ((device.get("settings") or {}).get("reply") or {}).get("text") or devices_mod.DEFAULT_TEXT
+    notice = {"event_id": "test", "kind": "test", "session_id": None, "title": text,
+              "body": "Test notification from Iris", "category": None, "collapse": "test"}
+    result = apns_mod.send(cfg, device["apns_token"], notice)
+    return {"ok": result == "ok", "result": result}

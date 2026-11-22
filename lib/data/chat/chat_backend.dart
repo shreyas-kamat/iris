@@ -18,6 +18,7 @@ import '../../core/result.dart';
 import '../genui/genui_api.dart';
 import '../genui/genui_controller.dart';
 import '../genui/genui_models.dart';
+import '../push/push_controller.dart';
 import '../rpc/dashboard_session.dart';
 import '../rpc/rpc_frame.dart';
 import 'attachment.dart';
@@ -184,6 +185,14 @@ abstract interface class ChatBackend {
 
   Future<Result<void>> answerApproval(ApprovalRequest request, String choice);
 
+  /// The approvals waiting in the live session [runtimeId], oldest first. A reconnect does not re-send the ask, so
+  /// this is how Iris finds what a notification was about.
+  Future<Result<List<ApprovalRequest>>> pendingApprovals(String runtimeId);
+
+  /// Like [answerApproval], but says whether the gateway still had the ask waiting: false when it was answered
+  /// somewhere else first.
+  Future<Result<bool>> resolveApproval(ApprovalRequest request, String choice);
+
   Future<Result<void>> answerClarify(
     ClarifyRequest request,
     ClarifyQuestion question,
@@ -261,7 +270,9 @@ final class DashboardChat
     this._session, {
     this.profile = 'default',
     GenUiController? genUi,
+    PushController? push,
   }) : _genUi = genUi,
+       _push = push,
        _live = _session.state.phase == LinkPhase.live,
        _everLive = _session.state.phase == LinkPhase.live {
     _linkSubscription = _session.states.listen(_onLink);
@@ -299,6 +310,13 @@ final class DashboardChat
 
   /// Turns generated displays on for each conversation this backend attaches to; null leaves them off.
   final GenUiController? _genUi;
+
+  /// Tells the server which chat the person just sent to, so its next finished turn can notify; null leaves it out.
+  final PushController? _push;
+
+  /// The stored id of each live conversation, by its runtime id: a send names the runtime one, the server's push
+  /// hooks only know the stored one.
+  final _storedByRuntime = <String, String>{};
 
   @override
   Future<Uint8List?> loadMediaImage(String path) async {
@@ -548,7 +566,10 @@ final class DashboardChat
       );
     });
     // Idempotent, and a reconnect resumes again, so every attach re-flags.
-    if (resumed.isOk) await _genUi?.flag(storedId);
+    if (resumed case Ok(:final value)) {
+      _storedByRuntime[value.runtimeId] = storedId;
+      await _genUi?.flag(storedId);
+    }
     return resumed;
   }
 
@@ -573,6 +594,18 @@ final class DashboardChat
     String runtimeId,
     String text, {
     bool queued = false,
+    VoiceSubmit? voice,
+  }) async {
+    if (_storedByRuntime[runtimeId] case final stored?) {
+      unawaited(_push?.markActive(stored));
+    }
+    return _submit(runtimeId, text, queued: queued, voice: voice);
+  }
+
+  Future<Result<SubmitOutcome>> _submit(
+    String runtimeId,
+    String text, {
+    required bool queued,
     VoiceSubmit? voice,
   }) async => (await _session.call(
     'prompt.submit',
@@ -743,14 +776,11 @@ final class DashboardChat
             ),
           );
         }
-        return Ok(
-          NewConversation(
-            runtimeId: runtimeId,
-            storedId:
-                HistoryParser.firstText(json, const ['stored_session_id']) ??
-                runtimeId,
-          ),
-        );
+        final storedId =
+            HistoryParser.firstText(json, const ['stored_session_id']) ??
+            runtimeId;
+        _storedByRuntime[runtimeId] = storedId;
+        return Ok(NewConversation(runtimeId: runtimeId, storedId: storedId));
     }
   }
 
@@ -820,6 +850,12 @@ final class DashboardChat
   Future<Result<void>> answerApproval(
     ApprovalRequest request,
     String choice,
+  ) async => (await resolveApproval(request, choice)).map((_) {});
+
+  @override
+  Future<Result<bool>> resolveApproval(
+    ApprovalRequest request,
+    String choice,
   ) async => (await _session.call(
     'approval.respond',
     params: {
@@ -827,7 +863,21 @@ final class DashboardChat
       'session_id': request.sessionId,
       'request_id': ?request.queueId,
     },
-  )).map((_) {});
+  )).map((json) => (json['resolved'].intOrNull ?? 1) > 0);
+
+  @override
+  Future<Result<List<ApprovalRequest>>> pendingApprovals(
+    String runtimeId,
+  ) async =>
+      (await _session.call(
+        'approval.pending',
+        params: {'session_id': runtimeId},
+      )).map(
+        (json) => [
+          for (final row in json['approvals'].list)
+            ?ChatEvent.parseApproval(row, runtimeId),
+        ],
+      );
 
   @override
   Future<Result<void>> answerClarify(

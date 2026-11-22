@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-__version__ = "0.3.0"
+__version__ = "0.4.1"
 
 #: The OpenUI Lang version this plugin validates against.
 OPENUI_VERSION = "1.0"
@@ -16,9 +16,23 @@ OPENUI_VERSION = "1.0"
 _log = logging.getLogger("hermes_iris")
 
 
+def _on_post_llm_call(**kw) -> None:
+    """One ``post_llm_call`` callable for both jobs (usage log, push reply preview); each is guarded on its own."""
+    from .genui import usage
+    from .push import hooks as push_hooks
+
+    for hook in (usage.on_post_llm_call, push_hooks.on_post_llm_call):
+        try:
+            hook(**kw)
+        except Exception:  # noqa: BLE001 - a hook must never break a turn, nor stop the next one
+            _log.debug("hermes-iris: post_llm_call hook failed", exc_info=True)
+    return None
+
+
 def register(ctx) -> None:
     """Called by Hermes when the plugin is enabled. Tools, hooks and the skill are registered here as they land."""
     from .genui import context, guards, personal_tools, skill, tool, usage
+    from .push import hooks as push_hooks
 
     ctx.register_tool(name="iris_ui", toolset="iris", schema=tool.SCHEMA, handler=tool.handle_iris_ui)
     for schema, handler in personal_tools.TOOLS:
@@ -26,7 +40,10 @@ def register(ctx) -> None:
     ctx.register_hook("pre_llm_call", context.on_pre_llm_call)
     ctx.register_hook("pre_tool_call", guards.on_pre_tool_call)
     ctx.register_hook("transform_tool_result", guards.on_transform_tool_result)
-    ctx.register_hook("post_llm_call", usage.on_post_llm_call)
+    ctx.register_hook("post_llm_call", _on_post_llm_call)
+    ctx.register_hook("on_session_end", push_hooks.on_session_end)
+    ctx.register_hook("pre_approval_request", push_hooks.on_pre_approval_request)
+    ctx.register_hook("post_approval_response", push_hooks.on_post_approval_response)
     for name, directory, description in (
         (skill.SKILL_NAME, skill.SKILL_DIR, skill.SKILL_DESCRIPTION),
         (skill.STUDY_SKILL_NAME, skill.STUDY_SKILL_DIR, skill.STUDY_SKILL_DESCRIPTION),
