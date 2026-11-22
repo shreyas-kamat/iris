@@ -30,7 +30,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS7 | Task 12: final review, release, PR | Opus | done | `fbb076d` |
 | IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
 | IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | done | `3b0e344` |
-| IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | doing | `05daea1` |
+| IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | done | `f81cba8` |
 | 9.3 | **Offline cache and paging** (`feat/offline-cache`) | | | |
 | C-spec | Brainstorm and design | Opus | todo | |
 | C-plan | Implementation plan with segment table | Opus | todo | |
@@ -773,3 +773,11 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Also still open: the failure panel offers the fallback command only for 404, 405 and status-less rejections; and Android shows no command on a timeout.
 - Plugin 0.4.0 tag stays on GitHub and is superseded. The app pins 0.4.1.
 - Next: the user decides whether to fix defects 1 and 2 test-first inside IN3 (recommended) or log them as follow-ups; then write `segment IN3 complete`.
+
+### IN3 - Task 5 - done - 2026-11-23 - Sonnet 5.5
+- Commits: 8767a65 and 1b59c0c (plugin 0.4.1 without `pyproject.toml`, tag `hermes-iris-v0.4.1`, pushed); ee58701 pin 0.4.1; f81cba8 fix(plugin): keep waiting after a proxy timeout and ask for a dashboard restart when the old version is still reported
+- Verified: both defects red first (new members missing), then green: `flutter test` on the installer, providers and plugin UI tests; `flutter test --exclude-tags live` -> 1,954 pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos only. Live: Update on the Moto G45 took the server from 0.3.0 to 0.4.1 (see the entry above); the two fixes are not re-run live (the server is already on 0.4.1; they are covered by fake-server tests).
+- Fixes: (1) a 504, 524 or timeout from the install request is not a failure: the panel says "Still installing on your server. This can take a few minutes." and the app asks the server for its version every 5 s for up to 4 minutes (`PluginInstaller.finishPending`), then shows the result; Try again is not offered meanwhile. (2) If the server still reports a version older than the release after the install (or after the wait), the panel says "Installed, but your server still reports X. Restart the Hermes dashboard on your server to load Y."
+- Deviations: the fallback command is still shown only for 404, 405 and status-less rejections (not changed; not needed for this path).
+- Decisions for later: an installed update needs a dashboard restart to be live (the plugin's routes load once per process); push on iOS and per-profile enablement are as in PS7's notes. PR #43 carries all of this; nothing merged.
+- segment IN3 complete. Next: 9.3 C-spec (Opus), brainstorm and design for offline cache and paging, on a new branch `feat/offline-cache`.
