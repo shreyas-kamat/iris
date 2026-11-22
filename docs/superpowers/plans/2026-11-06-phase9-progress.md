@@ -27,7 +27,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | done | `1a0c28d` |
 | PS5 | Tasks 9–10: Android service, iOS native (Swift compile deferred to PS6) | Opus | done | `03e98aa` |
 | PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | done (Android; iOS not run) | `276e0dc` |
-| PS7 | Task 12: final review, release, PR | Opus | doing (Step 4: user) | `fbb076d` |
+| PS7 | Task 12: final review, release, PR | Opus | done | `fbb076d` |
 | IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
 | IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | done | `3b0e344` |
 | IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
@@ -738,3 +738,7 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Open items, not defects: (1) iOS Swift compile and device pass not run (`ios-deferred.md` I1, I2). (2) A notification tapped after switching the active server or profile opens the chat on the active one (push follows the active profile). (3) Outbox ids come from `time_ns` in two processes, so an append racing within microseconds could be skipped by a cursor (documented trim race likewise). (4) Text mode with one approval waiting answers it even if it is not the one notified (the notice carries no request id).
 - Deviations: the log's 11 Windows-1252 dash bytes were re-encoded as UTF-8.
 - Next: Step 4 needs the user: tag `hermes-iris-v0.4.0`, push `feat/push`, open the PR (base `feat/genui`, or `main` after #42 merges). Then IN3 (fill `PluginRelease.current.sha` from the tag, live reinstall).
+
+### PS7 — Task 12 Step 4 — done — 2026-11-23 — Opus 5.5
+- User said yes. Tagged `hermes-iris-v0.4.0` (annotated) at `fbb076d55a8a796ce8d47b11581d19ebe7483cde`, pushed `feat/push` and the tag, opened PR #43 (base `feat/genui`, stacked on #42). Nothing merged.
+- segment PS7 complete. Next: IN3 (Sonnet), plugin installer Task 5: set `PluginRelease.current.sha` to `fbb076d55a8a796ce8d47b11581d19ebe7483cde`, then the live reinstall on the user's server (needs the user's yes).
