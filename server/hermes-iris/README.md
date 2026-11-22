@@ -21,7 +21,7 @@ Check it is up (the dashboard login or Cloudflare Access headers are needed; plu
 
 ```sh
 curl -s https://<server>/api/plugins/iris/capabilities
-# {"version":"0.4.0","openui":"1.0","library_ids":[...],"features":[...]}
+# {"version":"0.4.1","openui":"1.0","library_ids":[...],"features":[...]}
 ```
 
 Hermes imports `dashboard/plugin_api.py` only when the plugin is in `plugins.enabled`.
@@ -87,7 +87,7 @@ dashboard routes can run in different processes, so they share state only throug
 ## Layout
 
 ```
-plugin.yaml  __init__.py  pyproject.toml
+plugin.yaml  __init__.py  pytest.ini
 dashboard/{manifest.json,plugin_api.py,dist/index.js}   routes under /api/plugins/iris/
 genui/    store (files), templates, surfaces (iris_ui), tool, guards, context, flags, skill, catalog, paths,
           personal (profile, templates and proposed changes), personal_tools, feedback (the app's signals),

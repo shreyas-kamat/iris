@@ -45,7 +45,7 @@ All notable changes to Iris are recorded here. The format follows
 - Create, rename, edit the SOUL of, and delete profiles (Settings → Profiles).
 - Search across every profile from home, with results grouped by profile.
 - "Always load images from this host" in the image card's long-press menu.
-- Notifications (off by default; Settings > Notifications, with `hermes-iris` plugin 0.4.0 on your server): a reply
+- Notifications (off by default; Settings > Notifications, with `hermes-iris` plugin 0.4.1 on your server): a reply
   in a chat you sent to, an approval Hermes is waiting on, and a finished scheduled job. Each shows your own words,
   with or without what happened, as you choose per kind. Android keeps its own connection to your server (no Google
   services) with a quiet "Iris is connected" notification; iPhones get them from Apple, sent by your server directly.

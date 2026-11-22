@@ -1,15 +1,8 @@
 import json
-import re
 
 import yaml
 
 from conftest import ROOT
-
-
-def _pyproject_version() -> str:
-    m = re.search(r'^version\s*=\s*"([^"]+)"', (ROOT / "pyproject.toml").read_text("utf-8"), re.M)
-    assert m
-    return m.group(1)
 
 
 def test_capabilities(client, plugin):
@@ -30,9 +23,16 @@ def test_versions_agree(plugin):
     manifest = json.loads((ROOT / "dashboard" / "manifest.json").read_text("utf-8"))
     meta = yaml.safe_load((ROOT / "plugin.yaml").read_text("utf-8"))
     assert meta["name"] == "iris" == manifest["name"]
-    assert meta["version"] == manifest["version"] == plugin.__version__ == _pyproject_version()
+    assert meta["version"] == manifest["version"] == plugin.__version__
     assert manifest["api"] == "plugin_api.py"
     assert (ROOT / "dashboard" / manifest["entry"]).is_file()
+
+
+def test_no_pyproject_in_the_plugin_directory():
+    # Hermes treats any pyproject.toml as "declares Python dependencies" and refuses a forced, non-interactive
+    # reinstall (what the app's Update does). The plugin has no runtime dependencies, so it must not ship one.
+    assert not (ROOT / "pyproject.toml").exists()
+    assert not (ROOT / "requirements.txt").exists()
 
 
 def test_register_runs_against_a_bare_context(plugin):
