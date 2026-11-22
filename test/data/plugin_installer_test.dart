@@ -45,13 +45,21 @@ void main() {
 
   setUp(() => http = FakeHttp());
 
-  PluginInstaller installer([PluginRelease release = _release]) {
+  PluginInstaller installer([
+    PluginRelease release = _release,
+    int checks = 3,
+  ]) {
     final connection = ServerConnection.create(
       const ServerConfig(id: 's', baseUrl: 'https://h.example', label: 'S'),
       adapter: http,
     );
     addTearDown(connection.close);
-    return PluginInstaller(connection.client, release: release);
+    return PluginInstaller(
+      connection.client,
+      release: release,
+      pollChecks: checks,
+      wait: (_) async {},
+    );
   }
 
   group('PluginRelease', () {
@@ -92,6 +100,73 @@ void main() {
         compareVersions(PluginRelease.current.version, version),
         greaterThanOrEqualTo(0),
       );
+    });
+  });
+
+  group('a slow install', () {
+    test(
+      'a gateway timeout means it may still be running, not failed',
+      () async {
+        for (final status in [504, 524]) {
+          http.on(
+            'POST',
+            _installPath,
+            (_) => FakeReply.html('timeout', status: status),
+          );
+          final result = await installer().install();
+          expect(result.ok, isFalse, reason: '$status');
+          expect(result.inProgress, isTrue, reason: '$status');
+          expect(result.showCommand, isFalse, reason: '$status');
+        }
+      },
+    );
+
+    test('a plain server error is still a failure', () async {
+      http.on(
+        'POST',
+        _installPath,
+        (_) => FakeReply.json({'detail': 'git failed'}, status: 500),
+      );
+      final result = await installer().install();
+      expect(result.inProgress, isFalse);
+    });
+
+    test(
+      'finishing waits until the server reports the pinned version',
+      () async {
+        final seen = <String>['0.3.0', '0.3.0', '0.4.0'];
+        http.on('GET', _capsPath, (_) => _caps(seen.removeAt(0)));
+
+        final result = await installer().finishPending();
+
+        expect(result.ok, isTrue);
+        expect(result.installedVersion, '0.4.0');
+        expect(result.staleVersion, isNull);
+        expect(http.to(_capsPath), hasLength(3));
+      },
+    );
+
+    test('finishing gives up and names the version still reported', () async {
+      http.on('GET', _capsPath, (_) => _caps('0.3.0'));
+
+      final result = await installer().finishPending();
+
+      expect(result.ok, isTrue);
+      expect(result.staleVersion, '0.3.0');
+      expect(http.to(_capsPath), hasLength(3));
+    });
+
+    test('an install that went through but the server still reports the old '
+        'plugin asks for a restart', () async {
+      http
+        ..on('POST', _installPath, (_) => FakeReply.json({'ok': true}))
+        ..on('GET', _capsPath, (_) => _caps('0.3.0'));
+
+      final result = await installer().install();
+
+      expect(result.ok, isTrue);
+      expect(result.installedVersion, '0.3.0');
+      expect(result.staleVersion, '0.3.0');
     });
   });
 

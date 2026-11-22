@@ -81,7 +81,12 @@ void main() {
         ),
         pluginReleaseProvider.overrideWithValue(release ?? _release()),
         pluginInstallerProvider.overrideWithValue(
-          PluginInstaller(connection.client, release: release ?? _release()),
+          PluginInstaller(
+            connection.client,
+            release: release ?? _release(),
+            pollChecks: 2,
+            wait: (_) async {},
+          ),
         ),
         pluginReprobeProvider.overrideWithValue(() async => reprobes++),
       ],
@@ -201,6 +206,36 @@ void main() {
       expect(state, isA<PluginInstallDone>());
       expect((state as PluginInstallDone).result.installedVersion, '0.4.0');
       expect(reprobes, 1);
+      expect(container.read(pluginOnboardedProvider), isTrue);
+    });
+
+    test('a gateway timeout keeps installing until the server shows the '
+        'version', () async {
+      final versions = <String>['0.3.0', '0.4.0'];
+      http
+        ..on(
+          'POST',
+          '/api/dashboard/agent-plugins/install',
+          (_) => FakeReply.html('timeout', status: 524),
+        )
+        ..on(
+          'GET',
+          '/api/plugins/iris/capabilities',
+          (_) => FakeReply.json({
+            'version': versions.removeAt(0),
+            'features': <String>[],
+            'library_ids': <String>[],
+          }),
+        );
+      final container = containerOf();
+
+      await container.read(pluginInstallProvider.notifier).install();
+
+      final state = container.read(pluginInstallProvider);
+      expect(state, isA<PluginInstallDone>());
+      expect((state as PluginInstallDone).result.installedVersion, '0.4.0');
+      expect(state.result.staleVersion, isNull);
+      expect(http.to('/api/dashboard/agent-plugins/install'), hasLength(1));
       expect(container.read(pluginOnboardedProvider), isTrue);
     });
 

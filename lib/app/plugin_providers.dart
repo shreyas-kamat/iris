@@ -124,7 +124,10 @@ final class PluginInstallIdle extends PluginInstallState {
 }
 
 final class PluginInstalling extends PluginInstallState {
-  const PluginInstalling();
+  const PluginInstalling({this.stillRunning = false});
+
+  /// A proxy timed out; the server is still installing and the app is waiting for it.
+  final bool stillRunning;
 }
 
 final class PluginInstallFailed extends PluginInstallState {
@@ -152,8 +155,13 @@ class PluginInstall extends Notifier<PluginInstallState> {
     final installer = ref.read(pluginInstallerProvider);
     if (installer == null) return;
     state = const PluginInstalling();
-    final result = await installer.install();
+    var result = await installer.install();
     if (!ref.mounted) return;
+    if (result.inProgress) {
+      state = const PluginInstalling(stillRunning: true);
+      result = await installer.finishPending();
+      if (!ref.mounted) return;
+    }
     if (!result.ok) {
       state = PluginInstallFailed(result);
       return;

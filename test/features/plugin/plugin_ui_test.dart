@@ -63,6 +63,16 @@ final class _SlowInstall extends PluginInstall {
   }
 }
 
+/// An install notifier already in [shown], to look at what the panel says in each state.
+final class _ShownInstall extends PluginInstall {
+  _ShownInstall(this.shown);
+
+  final PluginInstallState shown;
+
+  @override
+  PluginInstallState build() => shown;
+}
+
 void main() {
   late FakeHttp http;
 
@@ -174,6 +184,47 @@ void main() {
       slow.gate.complete();
       await settle(tester);
       expect(find.text('Installed version 0.4.0'), findsOneWidget);
+    });
+
+    testWidgets('a slow install says it is still running', (tester) async {
+      await tester.pumpWidget(
+        section(
+          install: () =>
+              _ShownInstall(const PluginInstalling(stillRunning: true)),
+        ),
+      );
+      await settle(tester);
+      expect(
+        find.text(
+          'Still installing on your server. This can take a few minutes.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an old version after the install asks for a restart', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        section(
+          install: () => _ShownInstall(
+            const PluginInstallDone(
+              PluginInstallResult.success(
+                installedVersion: '0.3.0',
+                staleVersion: '0.3.0',
+              ),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      expect(
+        find.text(
+          'Installed, but your server still reports 0.3.0. Restart the '
+          'Hermes dashboard on your server to load 0.4.0.',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('a successful install posts the pinned release', (

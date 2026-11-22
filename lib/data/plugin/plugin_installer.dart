@@ -33,14 +33,28 @@ final class PluginInstallResult {
   const PluginInstallResult.success({
     this.installedVersion,
     this.recheckFailed = false,
+    this.staleVersion,
   }) : ok = true,
        error = null,
-       showCommand = false;
+       showCommand = false,
+       inProgress = false;
 
   const PluginInstallResult.failure(this.error, {this.showCommand = false})
     : ok = false,
       installedVersion = null,
-      recheckFailed = false;
+      recheckFailed = false,
+      staleVersion = null,
+      inProgress = false;
+
+  /// A proxy gave up waiting (Cloudflare cuts a request at 120 s) but Hermes may still be installing: not a failure.
+  const PluginInstallResult.stillRunning()
+    : ok = false,
+      error = null,
+      showCommand = false,
+      installedVersion = null,
+      recheckFailed = false,
+      staleVersion = null,
+      inProgress = true;
 
   final bool ok;
   final String? error;
@@ -53,13 +67,31 @@ final class PluginInstallResult {
 
   /// The install went through but the check afterwards got no answer.
   final bool recheckFailed;
+
+  /// The server still reports this older version after the install: the running dashboard has not loaded the new
+  /// plugin yet and needs a restart. Null when it reports the release (or something newer), or could not be read.
+  final String? staleVersion;
+
+  /// The request timed out at a proxy; the install may still be running on the server.
+  final bool inProgress;
 }
 
 final class PluginInstaller {
-  PluginInstaller(this._client, {this.release = PluginRelease.current});
+  PluginInstaller(
+    this._client, {
+    this.release = PluginRelease.current,
+    this.pollChecks = 48,
+    this.pollEvery = const Duration(seconds: 5),
+    Future<void> Function(Duration)? wait,
+  }) : _wait = wait ?? Future<void>.delayed;
 
   final ApiClient _client;
   final PluginRelease release;
+
+  /// How many times [finishPending] asks the server, and how long it waits between asks (about four minutes).
+  final int pollChecks;
+  final Duration pollEvery;
+  final Future<void> Function(Duration) _wait;
 
   static const _installPath = '/api/dashboard/agent-plugins/install';
 
@@ -92,6 +124,9 @@ final class PluginInstaller {
     );
     switch (response) {
       case Err(:final failure):
+        if (_gatewayTimeout(failure)) {
+          return const PluginInstallResult.stillRunning();
+        }
         return _fromFailure(failure);
       case Ok(:final value):
         if (value['ok'].boolOrNull == false) {
@@ -101,13 +136,43 @@ final class PluginInstaller {
           );
         }
     }
+    final version = await _readVersion();
+    return _success(version);
+  }
+
+  /// Hermes installs for about three minutes (it prepares its whole Python environment when it enables a plugin),
+  /// longer than a proxy waits. After a timeout, ask the server until it shows the release or the checks run out.
+  Future<PluginInstallResult> finishPending() async {
+    String? version;
+    for (var i = 0; i < pollChecks; i++) {
+      version = await _readVersion();
+      if (version != null && compareVersions(version, release.version) >= 0) {
+        break;
+      }
+      if (i < pollChecks - 1) await _wait(pollEvery);
+    }
+    return _success(version);
+  }
+
+  Future<String?> _readVersion() async {
     final read = await DashboardGenUiApi(_client).capabilities();
-    final version = read.valueOrNull?.version;
+    return read.valueOrNull?.version;
+  }
+
+  PluginInstallResult _success(String? version) {
+    final stale =
+        version != null && compareVersions(version, release.version) < 0;
     return PluginInstallResult.success(
       installedVersion: version,
       recheckFailed: version == null,
+      staleVersion: stale ? version : null,
     );
   }
+
+  static bool _gatewayTimeout(IrisFailure failure) =>
+      failure.kind == FailureKind.timeout ||
+      failure.statusCode == 504 ||
+      failure.statusCode == 524;
 
   PluginInstallResult _fromFailure(IrisFailure failure) {
     final status = failure.statusCode;

@@ -34,12 +34,17 @@ class PluginInstallPanel extends StatelessWidget {
     final type = context.type;
     return switch (state) {
       PluginInstallIdle() => const SizedBox.shrink(),
-      PluginInstalling() => Text(
-        'Installing…',
+      PluginInstalling(:final stillRunning) => Text(
+        stillRunning
+            ? 'Still installing on your server. This can take a few minutes.'
+            : 'Installing…',
         style: type.caption.copyWith(color: palette.inkMuted),
       ),
       PluginInstallDone(:final result) => Text(
-        result.installedVersion == null
+        result.staleVersion != null
+            ? 'Installed, but your server still reports ${result.staleVersion}. '
+                  'Restart the Hermes dashboard on your server to load ${release.version}.'
+            : result.installedVersion == null
             ? 'Installed'
             : 'Installed version ${result.installedVersion}',
         style: type.caption.copyWith(color: palette.inkMuted),
