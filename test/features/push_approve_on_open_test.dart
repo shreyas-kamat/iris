@@ -109,25 +109,48 @@ void main() {
     expect(backend.resolved, ['q2:once']);
   });
 
-  test('two pending and no matching command: the oldest', () async {
+  test(
+    'the shown command is gone and another waits: nothing is answered',
+    () async {
+      // The notified approval was answered elsewhere; a different one is waiting now. Approving it would approve a
+      // command the person never saw.
+      backend.pendingApprovalList = [_approval('q2', 'rm -rf build')];
+      await openAndApply(_tap('once', command: 'ls -la'));
+
+      expect(backend.resolved, isEmpty);
+      expect(notices(), contains('That approval is no longer waiting.'));
+      expect(chat.value.approvals.map((a) => a.queueId), ['q2']);
+    },
+  );
+
+  test('two pending and no matching command: nothing is answered', () async {
     backend.pendingApprovalList = [
       _approval('q1', 'ls -la'),
       _approval('q2', 'rm -rf build'),
     ];
     await openAndApply(_tap('once', command: 'something else'));
 
-    expect(backend.resolved, ['q1:once']);
+    expect(backend.resolved, isEmpty);
+    expect(chat.value.approvals.map((a) => a.queueId), ['q1', 'q2']);
   });
 
-  test('two pending and the notification named none: the oldest', () async {
-    backend.pendingApprovalList = [
-      _approval('q1', 'ls -la'),
-      _approval('q2', 'rm -rf build'),
-    ];
-    await openAndApply(_tap('once'));
+  test(
+    'two pending and the notification named none: nothing is answered',
+    () async {
+      backend.pendingApprovalList = [
+        _approval('q1', 'ls -la'),
+        _approval('q2', 'rm -rf build'),
+      ];
+      await openAndApply(_tap('once'));
 
-    expect(backend.resolved, ['q1:once']);
-  });
+      expect(backend.resolved, isEmpty);
+      expect(
+        notices(),
+        contains('More than one approval is waiting. Choose one here.'),
+      );
+      expect(chat.value.approvals.map((a) => a.queueId), ['q1', 'q2']);
+    },
+  );
 
   test('a tap without an action only opens the chat', () async {
     backend.pendingApprovalList = [_approval('q1', 'rm -rf build')];

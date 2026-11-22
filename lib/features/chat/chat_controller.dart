@@ -1103,11 +1103,22 @@ final class ChatController extends ValueNotifier<ChatState> {
       case Err(:final failure):
         _update(value.withError(describe(failure)));
       case Ok(value: final pending):
-        if (pending.isEmpty) {
-          _update(value.withNotice('That approval is no longer waiting.'));
+        final request = _pickApproval(pending, tap.command);
+        if (request == null) {
+          // Never answer an approval the person did not see: show what is waiting and let them choose here.
+          var next = value;
+          for (final waiting in pending) {
+            next = next.withApproval(waiting);
+          }
+          _update(
+            next.withNotice(
+              pending.length > 1 && tap.command == null
+                  ? 'More than one approval is waiting. Choose one here.'
+                  : 'That approval is no longer waiting.',
+            ),
+          );
           return;
         }
-        final request = _pickApproval(pending, tap.command);
         final result = await _backend.resolveApproval(request, choice);
         if (_disposed) return;
         switch (result) {
@@ -1133,21 +1144,23 @@ final class ChatController extends ValueNotifier<ChatState> {
     }
   }
 
-  /// The waiting approval a notification meant: the one whose command it showed (the notification may have cut the
-  /// command short), else the oldest.
-  static ApprovalRequest _pickApproval(
+  /// The waiting approval a notification meant, or null when that is not certain. With the command shown (the
+  /// notification may have cut it short), only an approval with that command. With none shown (the person chose
+  /// "only my text"), only when exactly one is waiting.
+  static ApprovalRequest? _pickApproval(
     List<ApprovalRequest> pending,
     String? shown,
   ) {
     final wanted = shown?.replaceAll('…', '').trim();
-    if (wanted != null && wanted.isNotEmpty) {
-      for (final request in pending) {
-        if (request.command == wanted || request.command.startsWith(wanted)) {
-          return request;
-        }
+    if (wanted == null || wanted.isEmpty) {
+      return pending.length == 1 ? pending.single : null;
+    }
+    for (final request in pending) {
+      if (request.command == wanted || request.command.startsWith(wanted)) {
+        return request;
       }
     }
-    return pending.first;
+    return null;
   }
 
   /// Answers one [question] of [request].
