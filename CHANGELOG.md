@@ -45,8 +45,16 @@ All notable changes to Iris are recorded here. The format follows
 - Create, rename, edit the SOUL of, and delete profiles (Settings → Profiles).
 - Search across every profile from home, with results grouped by profile.
 - "Always load images from this host" in the image card's long-press menu.
+- Notifications (off by default; Settings > Notifications, with `hermes-iris` plugin 0.4.0 on your server): a reply
+  in a chat you sent to, an approval Hermes is waiting on, and a finished scheduled job. Each shows your own words,
+  with or without what happened, as you choose per kind. Android keeps its own connection to your server (no Google
+  services) with a quiet "Iris is connected" notification; iPhones get them from Apple, sent by your server directly.
+  Approve once and Deny open Iris after unlocking and answer there; the chat on screen is never notified.
+- Settings and a one-time screen after sign-in install or update the `hermes-iris` plugin on your server.
 
 ### Changed
+- The Android voice call and notifications share one foreground service; it now restarts after a reboot only when
+  notifications are on.
 - The Android release now also declares `RECORD_AUDIO`, used only for dictation.
 - Transcript text is no longer selectable in place: long-press a message for Copy or Select text.
 - sudo, secret, failed-turn, rename, archive, context, usage, attachment and dictation surfaces follow the

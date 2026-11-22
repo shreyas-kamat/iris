@@ -107,4 +107,8 @@ Phase 6 adds none: deleting, pinning, branching and the prompts use the existing
 - **No background mode** is added: alerts only. Approval buttons (`iris.approval`: Approve once, Deny) need the phone
   unlocked and open Iris, which answers the approval itself.
 - **Permission prompt:** asked when the person turns notifications on in Settings, not at launch.
+- **Not yet verified:** the Swift side (`IrisPushPlugin` in `AppDelegate.swift`) has not been compiled, and the iOS
+  device pass has not run (`docs/superpowers/plans/ios-deferred.md`, items I1 and I2). Do not ship an iOS build with
+  push until both are done.
+- **Server:** push works per Hermes profile; `iris` must be in each profile's `plugins.enabled` (plugin README).
 

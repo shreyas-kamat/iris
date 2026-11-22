@@ -21,10 +21,14 @@ Check it is up (the dashboard login or Cloudflare Access headers are needed; plu
 
 ```sh
 curl -s https://<server>/api/plugins/iris/capabilities
-# {"version":"0.3.0","openui":"1.0","library_ids":[...],"features":[...]}
+# {"version":"0.4.0","openui":"1.0","library_ids":[...],"features":[...]}
 ```
 
 Hermes imports `dashboard/plugin_api.py` only when the plugin is in `plugins.enabled`.
+
+**Named profiles:** each Hermes profile has its own config. The plugin's hooks (push events, generated displays) run
+only for chats in a profile whose `plugins.enabled` lists `iris`. Add `iris` to that list in the `config.yaml` of every
+profile Iris is used with, or replies there send no notification.
 
 ## Upgrade
 
