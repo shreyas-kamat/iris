@@ -13,12 +13,12 @@ final class PluginRelease {
     required this.subdir,
   });
 
-  /// What this build installs: the commit behind the annotated tag `hermes-iris-v0.4.0`
-  /// (`git rev-parse hermes-iris-v0.4.0^{commit}`).
+  /// What this build installs: the commit behind the annotated tag `hermes-iris-v0.4.1`
+  /// (`git rev-parse hermes-iris-v0.4.1^{commit}`).
   static const current = PluginRelease(
-    version: '0.4.0',
-    tag: 'hermes-iris-v0.4.0',
-    sha: 'fbb076d55a8a796ce8d47b11581d19ebe7483cde',
+    version: '0.4.1',
+    tag: 'hermes-iris-v0.4.1',
+    sha: '8767a65ce9fba5ae6be39e145f43330cd9e78373',
     repo: 'shreyas-kamat/iris',
     subdir: 'server/hermes-iris',
   );
