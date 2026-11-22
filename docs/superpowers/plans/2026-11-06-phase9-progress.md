@@ -757,3 +757,10 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Second finding: the failure panel showed the message but no copyable command (the route answered with an HTTP status, not a 200 `ok: false`, and the installer only offers the command for 404, 405 or a status-less rejection). Review Focus 5 expects the command; the plan's own test `a server error shows its message, without the command` pins the opposite for server errors. Not changed yet.
 - Options for the user: (A) move `pyproject.toml` out of the plugin dir (the plugin has no runtime deps; it is only used for the test extras), release 0.4.1, re-pin, retest; (B) keep it and tell users to run the fallback with `--yes-deps` by hand; (C) both.
 - Next: the user's choice. Step 3 (fallback command by hand, which also needs `--yes-deps` or a TTY) is not run.
+
+### IN3 - Task 5 - doing (option A chosen) - 2026-11-23 - Sonnet 5.5
+- User chose A: drop `pyproject.toml` from the plugin and release 0.4.1.
+- Commits: 1b59c0c and 8767a65 (plugin: `pyproject.toml` replaced by `pytest.ini`, version 0.4.1 in `plugin.yaml`, `manifest.json`, `__init__.py`, README; changelog line); then the app pin commit `feat(plugin): pin the hermes-iris 0.4.1 release commit`. Local annotated tag `hermes-iris-v0.4.1` at `8767a65ce9fba5ae6be39e145f43330cd9e78373`. NOT pushed. `hermes-iris-v0.4.0` stays pushed but is superseded (it cannot be updated through Hermes).
+- Verified: new test `test_no_pyproject_in_the_plugin_directory` failed first; plugin `pytest` -> 522 pass, 3 skipped; `flutter test --exclude-tags live` -> 1,946 pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos.
+- Not changed (not part of A): the failure panel still shows the fallback command only for 404, 405 and status-less rejections.
+- Next: the user's yes to push `feat/push` and the tag `hermes-iris-v0.4.1` (Hermes fetches the commit from GitHub, so the live retest needs it), then rebuild, install on the Moto G45, tap Update.
