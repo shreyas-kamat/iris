@@ -27,7 +27,7 @@ newest last. Models are the minimum; a higher one is fine.
 | PS4 | Tasks 7–8: app settings, active marking, tap and approve-on-open | Sonnet | done | `1a0c28d` |
 | PS5 | Tasks 9–10: Android service, iOS native (Swift compile deferred to PS6) | Opus | done | `03e98aa` |
 | PS6 | Task 11: device pass (Moto G45, iPhone) | Sonnet | done (Android; iOS not run) | `276e0dc` |
-| PS7 | Task 12: final review, release, PR | Opus | todo | |
+| PS7 | Task 12: final review, release, PR | Opus | doing (Step 4: user) | `fbb076d` |
 | IN1 | Plugin installer, Tasks 1-2 (`2026-11-13-plugin-installer.md`; runs before PS6) | Sonnet | done | `fdc3839` |
 | IN2 | Plugin installer, Tasks 3-4: Settings row, onboarding screen | Sonnet | done | `3b0e344` |
 | IN3 | Plugin installer, Task 5: live reinstall (after PS7's release) | Sonnet | todo | |
@@ -642,17 +642,17 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Waiting on the user for Task 11 prerequisites (plugin 0.4.0 on the server with `apns.json` and key, Moto G45 connected, Mac for the deferred `flutter build ios --no-codesign`).
 - Next: Step 1 (install plugin, `GET push/status`), with the iOS Swift compile on the Mac.
 
-### PS6 � scope change � 2026-11-13 � Sonnet 5.5
+### PS6 — scope change — 2026-11-13 — Sonnet 5.5
 - Plugin source (0.3.0 contents, with push) installed on the user's server by me over SSH; dashboard restarted, active, no iris errors. `apns.json` not placed yet (iOS only).
 - User deferred all iOS work. PS6 is now Android only; Task 11 Step 3 and the Swift compile moved to `docs/superpowers/plans/ios-deferred.md` (items I1, I2), run on the Mac with the new `/ios` command (`.claude/commands/ios.md`).
 - User asked for two things before the Android device pass: (1) a post-login onboarding screen that installs the Iris plugin in one click and shows what is missed without it; (2) a Settings row that installs/shows version/offers updates. Not in the Phase 9 plan: needs its own spec (brainstorm) before code. PS6 stays `doing`, paused.
 
-### Plugin installer � spec and plan � 2026-11-13 � Sonnet 5.5
+### Plugin installer — spec and plan — 2026-11-13 — Sonnet 5.5
 - Spec `a7086fd` (approved by the user), plan `docs/superpowers/plans/2026-11-13-plugin-installer.md`. Extra work the user asked for inside 9.2 on `feat/push`: onboarding screen plus Settings row that installs/updates the hermes-iris plugin through Hermes's own `/api/dashboard/agent-plugins/install` (pinned release SHA, `force`).
 - Order: IN1, IN2, then PS6 (Android only), PS7 (release, tag), then IN3 (live reinstall, needs the tag and the user's yes). PS6 stays `doing`, paused.
 - Next: IN1, Task 1.
 
-### IN1 � Tasks 1-2 � done � 2026-11-13 � Sonnet 5.5
+### IN1 — Tasks 1-2 — done — 2026-11-13 — Sonnet 5.5
 - Commits: fe97dd1 pinned release and installer; fdc3839 install state, onboarding flag and status providers
 - Verified: tests red first (missing modules), then `flutter test test/data/plugin_installer_test.dart` 18 pass and `test/app/plugin_providers_test.dart` 12 pass; `flutter test --exclude-tags live` -> 1,917 pass, 4 skipped; `flutter analyze lib test` -> the 3 old infos only (after fixing my import order).
 - Deviations: (1) Worked on `feat/push` with this log as the ledger, no worktree or sdd scripts (run book rules). (2) Added seams the plan did not name: `pluginReleaseProvider` and `pluginReprobeProvider` (tests pin a release and count re-probes). (3) A 200 with an `error` field arrives as a rejected failure from `ApiClient`; the installer treats a rejected failure without a status as "show the command". (4) `PluginRelease.current.sha` is empty until Task 5, so `released` is false and onboarding stays hidden. (5) The plugin.yaml guard test checks the release version is not lower than the plugin's (the plugin is still 0.3.0).
@@ -723,3 +723,18 @@ written. Reorder 9.2–9.6 here if the user changes the order; 9.1 first and 9.7
 - Deviations: (1) Toolchain: the user's Flutter SDK had moved to the `main` channel on 2026-11-22 (3.51 pre-release), which cannot build this project (Gradle 8.14 / AGP 8.11.1 rejected, then an AGP DSL error). With the user's yes, I switched the SDK back to `stable` (3.41.6, the revision used for the earlier builds). Files the new tool auto-edited (`analysis_options.yaml`, `android/gradle.properties`, `pubspec.lock`, windows plugin files) were reverted. (2) Step 3 (iOS) was not run: no iPhone or Mac here. iOS Swift compile and the iOS list remain unverified. (3) Screenshots are Iris screens only (reply chat, Notifications settings) in `docs/superpowers/plans/2026-11-13-push-device/`; the notification shade was not captured because it shows other apps' content. The notice facts above come from `dumpsys notification`.
 - Decisions for later tasks: PS7's review should list "iOS device pass not run" as an open item and the per-profile plugin enablement in the release notes / README. Flutter must stay on `stable` for this repo until Gradle/AGP are upgraded.
 - segment PS6 complete (Android). Next: PS7 (Opus), Task 12: final review, release, PR.
+
+### PS7 — doing — 2026-11-23 — Opus 5.5
+- Running as Opus 5.5. Git matches the log (PS6 `276e0dc` in history; HEAD `ebf586c`, clean apart from `store/screenshots/` and the untracked Phase 10–15 planning files from 2026-11-17).
+- The log had 11 Windows-1252 dash bytes in the 2026-11-13 entries; re-encoded as UTF-8 (text unchanged).
+- Next: Task 12 Step 1, review the whole branch inline.
+
+### PS7 — Task 12 Steps 1–3 — done; Step 4 waits for the user — 2026-11-23 — Opus 5.5
+- Commits: 8f65a3d fix(push): never answer an approval the notification did not show; fbb076d chore(release): hermes-iris 0.4.0 with push notifications
+- Review (inline, `feat/genui...HEAD`, 45 commits, 107 files; PR base is `feat/genui` because PR #42 is still open). Security checks held: the APNs key is read only to sign, must be mode 0600, and never logged; the provider JWT, device token and body go to curl on stdin (`-K -`), and curl's stderr is not logged; config values are quoted and line breaks refused; the token is validated as hex and never returned by any route. In `text` mode the server leaves out preview, command and job name per device (`render.py`), so APNs and SSE carry only ids. The outbox and device files are 0600. Hooks never raise and log nothing but types. Android keeps no secrets in the service's stored data (the login stays in the keystore), the notification is `private` on the lock screen, and the approval buttons open the app after unlock. Logs hold status codes and error types only.
+- Defect found and fixed test-first: `ChatController._pickApproval` fell back to the oldest waiting approval when the notification's command matched none, so Approve once could approve a different command the person never saw (Review Focus 3). It now answers only a matching command, or, with no command shown, the single waiting approval. Otherwise it shows the waiting approvals as cards with a notice. Three new tests failed before the fix (two old "the oldest" tests were replaced) and pass after.
+- Verified: `flutter test --exclude-tags live` -> 1,945 pass, 4 skipped; plugin `pytest` -> 521 pass, 3 skipped (after the bump too); `flutter analyze lib test` -> the 3 pre-existing infos only; `test/data/plugin_installer_test.dart` 18 pass.
+- Step 3: plugin 0.4.0 in `plugin.yaml`, `pyproject.toml`, `__init__.__version__`, `dashboard/manifest.json` and the README; the changelog entry is in the repo-root `CHANGELOG.md` (the plugin has no changelog of its own). The Play `remoteMessaging` note was already in `docs/release.md` (PS5); added there: iOS not compiled or device-tested (do not ship iOS push before I1/I2), and per-profile enablement. README: enable `iris` in each Hermes profile's `plugins.enabled`.
+- Open items, not defects: (1) iOS Swift compile and device pass not run (`ios-deferred.md` I1, I2). (2) A notification tapped after switching the active server or profile opens the chat on the active one (push follows the active profile). (3) Outbox ids come from `time_ns` in two processes, so an append racing within microseconds could be skipped by a cursor (documented trim race likewise). (4) Text mode with one approval waiting answers it even if it is not the one notified (the notice carries no request id).
+- Deviations: the log's 11 Windows-1252 dash bytes were re-encoded as UTF-8.
+- Next: Step 4 needs the user: tag `hermes-iris-v0.4.0`, push `feat/push`, open the PR (base `feat/genui`, or `main` after #42 merges). Then IN3 (fill `PluginRelease.current.sha` from the tag, live reinstall).
